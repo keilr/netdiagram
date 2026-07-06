@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>netdiagram — YAML network schematics</title>
+<script><!--INJECT:JSYAML--></script>
+<script><!--INJECT:ELK--></script>
+<script><!--INJECT:EDITOR--></script>
+<style>
+  :root{
+    --ink:#24344d;          /* blueprint ink */
+    --paper:#fafbf7;        /* schematic paper */
+    --grid:#e3e8de;
+    --slate:#1e2530;        /* editor bg */
+    --slate-2:#161c25;
+    --editor-text:#d7dee8;
+    --accent:#b45309;
+    --err:#c0392b;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace;
+    background:var(--slate-2);color:var(--editor-text);
+    display:flex;flex-direction:column;height:100vh;overflow:hidden;
+  }
+  header{
+    display:flex;align-items:center;gap:14px;
+    padding:10px 16px;background:var(--slate-2);
+    border-bottom:1px solid #2c3542;flex-shrink:0;
+  }
+  header h1{font-size:13px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:#8fa3bf}
+  header h1 b{color:#e8eef6;font-weight:700}
+  header .spacer{flex:1}
+  button{
+    font:inherit;font-size:12px;padding:6px 14px;cursor:pointer;
+    background:transparent;color:#aebbcc;border:1px solid #3a4556;border-radius:4px;
+    letter-spacing:.04em;
+  }
+  button:hover{border-color:#5b6b82;color:#e8eef6}
+  button:focus-visible{outline:2px solid #2563eb;outline-offset:2px}
+  button.primary{background:#e8eef6;color:var(--slate-2);border-color:#e8eef6;font-weight:600}
+  button.primary:hover{background:#fff}
+  select{
+    font:inherit;font-size:12px;padding:6px 10px;cursor:pointer;
+    background:var(--slate);color:#aebbcc;border:1px solid #3a4556;border-radius:4px;
+  }
+  select:hover{border-color:#5b6b82;color:#e8eef6}
+  select:focus-visible{outline:2px solid #2563eb;outline-offset:2px}
+  main{flex:1;display:flex;min-height:0}
+  #editor-pane{
+    width:38%;min-width:300px;display:flex;flex-direction:column;
+    border-right:1px solid #2c3542;background:var(--slate);
+  }
+  #editor{
+    flex:1;overflow:hidden;min-height:0;
+  }
+  #editor .cm-editor{height:100%}
+  #status{
+    flex-shrink:0;padding:7px 14px;font-size:11.5px;line-height:1.5;
+    border-top:1px solid #2c3542;color:#7d8da3;min-height:32px;
+  }
+  #status.error{color:#ff9d8f;background:#2a1a18}
+  #right-pane{flex:1;display:flex;flex-direction:column;min-height:0;min-width:0}
+  #view-tabs{display:flex;flex-shrink:0;background:var(--slate-2);border-bottom:1px solid #2c3542}
+  .tab-btn{border:0;border-radius:0;border-bottom:2px solid transparent;padding:8px 20px;font-size:12px;
+    background:transparent;color:#6b7a8f;letter-spacing:.04em;cursor:pointer}
+  .tab-btn:hover{color:#aebbcc;border-color:transparent}
+  .tab-btn.active{color:#e8eef6;border-bottom-color:var(--accent)}
+  #canvas-pane{flex:1;overflow:auto;background:var(--paper);position:relative}
+  #canvas-pane svg{display:block}
+  #canvas-pane .edge{cursor:pointer}
+  #canvas-pane .edge-lbl{cursor:pointer}
+  #canvas-pane .edge,#canvas-pane .edge-lbl{transition:opacity .15s}
+  #canvas-pane .edge-lo{opacity:.12}
+  #connections-pane{flex:1;overflow:auto;background:var(--paper);color:var(--ink);font-size:12px}
+  .conn-toolbar{display:flex;align-items:center;justify-content:space-between;
+    padding:12px 16px 10px;border-bottom:1px solid #dde3d7;position:sticky;top:0;
+    background:var(--paper);z-index:1}
+  .conn-toolbar h2{font-size:11px;font-weight:700;letter-spacing:1.4px;text-transform:uppercase;color:#7a8798;display:flex;align-items:baseline;gap:10px}
+  .conn-excl{font-size:10.5px;font-weight:400;letter-spacing:0;text-transform:none;color:#b0bbc8}
+  .conn-table{border-collapse:collapse;width:100%}
+  .conn-table th,.conn-table td{padding:8px 14px;text-align:left;border-bottom:1px solid #dde3d7;white-space:nowrap}
+  .conn-table th{background:#f0f2ec;font-size:10px;letter-spacing:1.2px;text-transform:uppercase;
+    color:#7a8798;font-weight:700;border-bottom:2px solid #c4ccc5;position:sticky;top:49px;z-index:1}
+  .conn-table tbody tr:hover{background:#f3f5ef}
+  .conn-n{color:#b0bbc8;font-size:10.5px;text-align:right;width:28px;user-select:none}
+  .conn-dir{text-align:center;color:#5b6874;font-size:13px;padding-left:6px;padding-right:6px}
+  .conn-addr{color:#7a8798;font-size:11px}
+  .conn-proto{font-size:11px;color:#4b5866;font-weight:600}
+  .conn-port{color:#3f5e8c;font-weight:600}
+  .conn-label{color:#9aa6b4;font-size:11px}
+  .conn-dash{color:#c4ccc5}
+  .conn-empty{padding:32px 20px;color:#7a8798;font-style:italic}
+  @media (max-width:760px){
+    main{flex-direction:column}
+    #editor-pane{width:100%;height:45%;border-right:0;border-bottom:1px solid #2c3542}
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1><b>netdiagram</b> · yaml → schematic</h1>
+  <div class="spacer"></div>
+  <select id="sel-example" aria-label="Load example"></select>
+  <button id="btn-example">Reset</button>
+  <button id="btn-download" class="primary">Download SVG</button>
+</header>
+<main>
+  <div id="editor-pane">
+    <div id="editor" aria-label="YAML source"></div>
+    <div id="status">Ready.</div>
+  </div>
+  <div id="right-pane">
+    <div id="view-tabs">
+      <button class="tab-btn active" data-pane="canvas-pane">Diagram</button>
+      <button class="tab-btn" data-pane="connections-pane">Connections</button>
+    </div>
+    <div id="canvas-pane" aria-label="Rendered diagram"></div>
+    <div id="connections-pane" hidden></div>
+  </div>
+</main>
+
+<script><!--INJECT:APP--></script>
+</body>
+</html>

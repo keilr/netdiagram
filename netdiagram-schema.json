@@ -1,0 +1,209 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "netdiagram-schema.json",
+  "title": "netdiagram",
+  "description": "Network diagram YAML specification",
+  "type": "object",
+  "required": ["nodes"],
+  "additionalProperties": false,
+  "properties": {
+    "diagram": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string",
+          "description": "Option: title shown in the drafting-block at the bottom of the SVG"
+        },
+        "direction": {
+          "type": "string",
+          "enum": ["right", "down"],
+          "default": "right",
+          "description": "Option: layout direction — right (left→right) or down (top→bottom)"
+        }
+      },
+      "additionalProperties": {
+        "type": ["string", "number", "boolean"],
+        "description": "Any additional scalar key is an attribute, rendered as a row in the drafting title block (e.g. author, revision, site)"
+      }
+    },
+    "nodes": {
+      "type": "array",
+      "description": "Network nodes (devices, hosts, services)",
+      "items": { "$ref": "#/$defs/node" }
+    },
+    "groups": {
+      "type": "array",
+      "description": "Zones, VLANs, subnets, or other logical boundaries",
+      "items": { "$ref": "#/$defs/group" }
+    },
+    "links": {
+      "type": "array",
+      "description": "Connections between nodes and/or groups",
+      "items": { "$ref": "#/$defs/link" }
+    }
+  },
+  "$defs": {
+    "node": {
+      "type": "object",
+      "required": ["id"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier — must be unique across all nodes and groups"
+        },
+        "label": {
+          "type": "string",
+          "description": "Display name; defaults to id when omitted"
+        },
+        "type": {
+          "type": "string",
+          "description": "Device type — picks the glyph and shows as a badge. Canonical values and common aliases are accepted.",
+          "anyOf": [
+            {
+              "enum": [
+                "router", "rtr", "gateway", "gw",
+                "switch", "sw", "l2", "l3",
+                "firewall", "fw", "waf", "ips",
+                "server", "host", "vm", "app", "web",
+                "db", "database", "sql",
+                "lb", "loadbalancer", "load-balancer", "proxy",
+                "cloud",
+                "internet", "inet", "wan",
+                "user", "client", "workstation", "admin",
+                "wifi", "ap", "wireless",
+                "siem", "log", "monitor", "monitoring",
+                "storage", "nas", "san", "backup"
+              ]
+            },
+            { "type": "string" }
+          ]
+        },
+        "icon": {
+          "type": "string",
+          "description": "Explicit glyph override — accepts the same values as type"
+        },
+        "ip": {
+          "description": "Single IP address rendered as 'ip: <value>' on the node",
+          "oneOf": [
+            { "type": "string" },
+            { "type": "number" }
+          ]
+        },
+        "ips": {
+          "description": "One or more IP addresses — each rendered as 'ip: <value>' on the node",
+          "oneOf": [
+            { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+            { "type": "string" }
+          ]
+        },
+        "addr": {
+          "description": "Alias for ip/ips",
+          "oneOf": [
+            { "type": "string" },
+            { "type": "array", "items": { "type": "string" }, "minItems": 1 }
+          ]
+        },
+        "os": {
+          "type": "string",
+          "description": "Operating system; rendered as 'os: <value>' on the node"
+        },
+        "hw": {
+          "type": "string",
+          "description": "Hardware class — controls border style and VM/BM/CT badge",
+          "enum": [
+            "vm", "virtual", "guest",
+            "metal", "baremetal", "bare-metal", "bm", "physical",
+            "container", "ct", "docker", "pod", "lxc", "oci"
+          ]
+        },
+        "hardware": {
+          "type": "string",
+          "description": "Alias for hw",
+          "enum": [
+            "vm", "virtual", "guest",
+            "metal", "baremetal", "bare-metal", "bm", "physical",
+            "container", "ct", "docker", "pod", "lxc", "oci"
+          ]
+        }
+      },
+      "additionalProperties": {
+        "type": ["string", "number", "boolean"],
+        "description": "Any additional scalar key is rendered as 'key: value' on the node"
+      }
+    },
+    "group": {
+      "type": "object",
+      "required": ["id"],
+      "additionalProperties": {
+        "type": ["string", "number", "boolean"],
+        "description": "Any additional scalar key is rendered as 'key: value' in the group header"
+      },
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier — must be unique across all nodes and groups"
+        },
+        "label": {
+          "type": "string",
+          "description": "Display name shown in the group header"
+        },
+        "class": {
+          "type": "string",
+          "enum": ["zone", "vlan", "subnet", "cloud", "onprem", "trust"],
+          "description": "Visual style: zone (orange), vlan (teal), subnet (blue), cloud (purple dashed), onprem (grey), trust (red dashed)"
+        },
+        "cidr": {
+          "type": "string",
+          "description": "CIDR notation shown in the group header (e.g. 10.0.0.0/24)"
+        },
+        "nodes": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Node ids that belong directly to this group; each node may belong to at most one group"
+        },
+        "groups": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/group" },
+          "description": "Nested child groups"
+        }
+      }
+    },
+    "link": {
+      "type": "object",
+      "required": ["from", "to"],
+      "additionalProperties": false,
+      "properties": {
+        "from": {
+          "type": "string",
+          "description": "Source node or group id"
+        },
+        "to": {
+          "type": "string",
+          "description": "Target node or group id"
+        },
+        "label": {
+          "type": "string",
+          "description": "Display text shown on the edge in the diagram; links sharing the same label are drawn in the same colour"
+        },
+        "protocol": {
+          "type": "string",
+          "description": "Network protocol (e.g. tcp, udp, icmp, vrrp, any)",
+          "examples": ["tcp", "udp", "icmp", "vrrp", "any"]
+        },
+        "port": {
+          "oneOf": [
+            { "type": "integer", "minimum": 1, "maximum": 65535 },
+            { "type": "string", "description": "Port number or range (e.g. 8080-8090)" }
+          ],
+          "description": "Destination port number or range"
+        },
+        "direction": {
+          "type": "string",
+          "enum": ["forward", "both", "bidirectional", "none"],
+          "default": "forward",
+          "description": "Arrowhead placement: forward (→), both (↔), or none (—)"
+        }
+      }
+    }
+  }
+}

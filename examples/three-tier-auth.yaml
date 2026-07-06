@@ -1,0 +1,91 @@
+# Simple 3-tier application: auth proxy at the edge, web / app / data tiers.
+# All user traffic passes the oauth2 proxy, which validates sessions against
+# an external IdP before anything reaches the web tier.
+diagram:
+  title: 3-tier app + auth proxy
+  direction: down
+
+nodes:
+  - id: users
+    label: Users
+    type: user
+  - id: idp
+    label: Identity Provider
+    type: cloud
+  - id: authproxy
+    label: oauth2-proxy
+    type: lb
+    ip: 192.0.2.10
+    os: linux
+    hw: container
+  - id: web1
+    label: web-01
+    type: web
+    ip: 10.1.10.11
+    os: linux
+    hw: vm
+  - id: web2
+    label: web-02
+    type: web
+    ip: 10.1.10.12
+    os: linux
+    hw: vm
+  - id: app1
+    label: app-01
+    type: server
+    ip: 10.1.20.11
+    os: linux
+    hw: container
+  - id: app2
+    label: app-02
+    type: server
+    ip: 10.1.20.12
+    os: linux
+    hw: container
+  - id: db1
+    label: pg-primary
+    type: db
+    ip: 10.1.30.11
+    os: linux
+    hw: metal
+  - id: db2
+    label: pg-replica
+    type: db
+    ip: 10.1.30.12
+    os: linux
+    hw: metal
+
+groups:
+  - id: edge
+    label: Edge
+    class: zone
+    cidr: 192.0.2.0/24
+    nodes: [authproxy]
+  - id: web
+    label: Web tier
+    class: subnet
+    cidr: 10.1.10.0/24
+    nodes: [web1, web2]
+  - id: app
+    label: App tier
+    class: subnet
+    cidr: 10.1.20.0/24
+    nodes: [app1, app2]
+  - id: data
+    label: Data tier
+    class: trust
+    cidr: 10.1.30.0/24
+    nodes: [db1, db2]
+  - id: ext
+    label: Cloud — IdP
+    class: cloud
+    nodes: [idp]
+
+links:
+  - {from: users,     to: authproxy, label: https, protocol: tcp, port: 443}
+  - {from: authproxy, to: idp,       label: oidc,  protocol: tcp, port: 443}
+  - {from: authproxy, to: web1,      label: https, protocol: tcp, port: 8443}
+  - {from: authproxy, to: web2,      label: https, protocol: tcp, port: 8443}
+  - {from: web,       to: app,       label: api,   protocol: tcp, port: 8080}
+  - {from: app,       to: db1,       label: pgsql, protocol: tcp, port: 5432}
+  - {from: db1,       to: db2,       label: repl,  protocol: tcp, port: 5432, direction: both}

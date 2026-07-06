@@ -1,0 +1,119 @@
+# netdiagram — describe the network, get a schematic.
+# diagram: options title + direction control rendering;
+#          any other scalar key is an attribute shown in the title block
+# nodes:  id, label, type/icon, ip|ips, os, hw: vm|metal|container
+#         any other scalar key is rendered as "key: value" on the node
+# groups: class: zone|vlan|subnet|cloud|onprem|trust, cidr
+#         any other scalar key is rendered as "key: value" in the group header
+# links:  from/to can be node OR group ids
+#         label (optional) shown on edge; links sharing the same label share a color
+#         protocol: tcp|udp|icmp|vrrp|any   port: number or range
+#         direction: forward (default) | both | none
+diagram:
+  title: HQ edge & core
+  direction: down
+  author: remy
+  revision: "1.2"
+
+nodes:
+  - id: inet
+    label: Internet
+    type: internet
+  - id: fw1
+    label: Edge FW A
+    type: firewall
+    ip: 203.0.113.1
+    os: bsd
+    hw: metal
+  - id: fw2
+    label: Edge FW B
+    type: firewall
+    ip: 203.0.113.2
+    os: bsd
+    hw: metal
+  - id: waf
+    label: WAF
+    type: lb
+    hw: vm
+  - id: web1
+    label: web-01
+    type: server
+    ip: 10.0.10.11
+    os: linux
+    hw: vm
+  - id: core
+    label: Core Switch
+    type: switch
+    hw: metal
+  - id: app1
+    label: app-01
+    type: server
+    ip: 10.0.20.11
+    os: linux
+    hw: vm
+  - id: api1
+    label: api-01
+    type: server
+    ip: 10.0.20.12
+    os: linux
+    hw: container
+  - id: db1
+    label: pg-primary
+    type: db
+    ips: [10.0.20.21, 10.0.99.21]
+    os: linux
+    hw: metal
+  - id: mgmt
+    label: Mgmt Station
+    type: user
+    ip: 10.0.99.5
+    os: windows
+  - id: siem
+    label: SIEM
+    type: siem
+
+groups:
+  - id: onprem
+    label: On-prem — HQ
+    class: onprem
+    nodes: [fw1, fw2]
+    groups:
+      - id: dmz
+        label: DMZ (VLAN 10)
+        class: zone
+        cidr: 10.0.10.0/24
+        nodes: [waf, web1]
+      - id: lan
+        label: Server LAN (VLAN 20)
+        class: trust
+        cidr: 10.0.20.0/24
+        owner: netops
+        nodes: [core, app1, api1, db1]
+      - id: oob
+        label: Mgmt (VLAN 99)
+        class: vlan
+        cidr: 10.0.99.0/24
+        nodes: [mgmt]
+  - id: cloud
+    label: Cloud — logging
+    class: cloud
+    nodes: [siem]
+
+links:
+  - {from: inet,  to: fw1,  label: HTTPS,   protocol: tcp,  port: 443}
+  - {from: inet,  to: fw2,  label: HTTPS,   protocol: tcp,  port: 443}
+  - {from: fw1,   to: fw2,  label: vrrp,    protocol: vrrp, direction: both}
+  - {from: fw1,   to: waf,                  protocol: tcp,  port: 443}
+  - {from: waf,   to: web1,                 protocol: tcp,  port: 8443}
+  - {from: fw1,   to: core,                 protocol: any}
+  - {from: fw2,   to: core,                 protocol: any}
+  - {from: core,  to: app1,                 protocol: tcp,  port: 8080}
+  - {from: core,  to: api1,                 protocol: tcp,  port: 8080}
+  - {from: web1,  to: app1,                 protocol: tcp,  port: 8443}
+  - {from: app1,  to: db1,  label: pgsql,   protocol: tcp,  port: 5432, direction: both}
+  - {from: api1,  to: db1,  label: pgsql,   protocol: tcp,  port: 5432}
+  - {from: oob,   to: lan,  label: ssh,     protocol: tcp,  port: 22}
+  - {from: oob,   to: fw1,  label: ssh,     protocol: tcp,  port: 22}
+  - {from: dmz,   to: siem, label: syslog,  protocol: udp,  port: 514}
+  - {from: lan,   to: siem, label: syslog,  protocol: udp,  port: 514}
+  - {from: web1,  to: db1,  label: blocked, direction: none}

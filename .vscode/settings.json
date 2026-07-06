@@ -1,0 +1,12 @@
+{
+  "yaml.schemas": {
+    "./netdiagram-schema.json": [
+      "examples/*.yaml",
+      "*.netdiagram.yaml",
+      "netdiagram.yaml"
+    ]
+  },
+  "liveServer.settings.root": "/dist",
+  "liveServer.settings.file": "netdiagram.html",
+  "liveServer.settings.donotShowInfoMsg": true
+}
