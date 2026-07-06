@@ -128,5 +128,7 @@ autocomplete in sync when the format changes.
 
 ## License notes
 
-Project code is MIT. The build embeds js-yaml (MIT) and elkjs (EPL-2.0) into
-`dist/netdiagram.html`; keep the attribution comments the build script emits.
+Project code is MIT. The build embeds js-yaml (MIT), elkjs (EPL-2.0), and
+CodeMirror + codemirror-json-schema (MIT) into `dist/netdiagram.html`; keep
+the attribution comments the build script emits. EPL-2.0 requires telling
+recipients where elkjs source lives — the README license section does that.

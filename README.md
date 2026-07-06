@@ -111,5 +111,7 @@ sharp edges (ELK coordinate spaces, safe code inlining, etc.).
 ## License
 
 MIT for project code. The built `dist/netdiagram.html` embeds
-[js-yaml](https://github.com/nodeca/js-yaml) (MIT) and
-[elkjs](https://github.com/kieler/elkjs) (EPL-2.0).
+[js-yaml](https://github.com/nodeca/js-yaml) (MIT),
+[elkjs](https://github.com/kieler/elkjs) (EPL-2.0),
+[CodeMirror](https://codemirror.net/) (MIT) and
+[codemirror-json-schema](https://github.com/acao/codemirror-json-schema) (MIT).
