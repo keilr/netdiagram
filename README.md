@@ -48,7 +48,9 @@ npm run build          # -> dist/netdiagram.html
 ```
 
 Open `dist/netdiagram.html` in a browser. The left pane is a YAML editor with
-live validation; the right pane renders as you type.
+live validation and schema-aware autocomplete — keys, enum values (`type: f…`
+→ `firewall`), and node/group ids for link endpoints; the right pane renders
+as you type.
 
 ## Schema
 

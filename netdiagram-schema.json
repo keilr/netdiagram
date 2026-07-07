@@ -110,7 +110,8 @@
         },
         "os": {
           "type": "string",
-          "description": "Operating system; rendered as 'os: <value>' on the node"
+          "description": "Operating system; rendered as 'os: <value>' on the node",
+          "examples": ["linux", "windows", "bsd"]
         },
         "tags": {
           "description": "Informational labels shown as neutral pills in the node's top-right corner (each pill shows the tag text, max two pills per row). Tags never affect styling — glyph and border style come from type/icon.",

@@ -147,6 +147,50 @@ test("validation: node in two groups", () =>
     "nodes:\n  - {id: a}\ngroups:\n  - {id: g1, nodes: [a]}\n  - {id: g2, nodes: [a]}",
     'is in both'));
 
+// ---------- editor value completion ----------
+test("editor: value completion offers enum values and document ids", () => {
+  // bundle src/editor.js like the build does (its deps are ESM-only)
+  const code = require("esbuild").buildSync({
+    stdin: {
+      contents: [
+        'globalThis.window = globalThis;',
+        'const { EditorState } = require("@codemirror/state");',
+        'const { yaml } = require("@codemirror/lang-yaml");',
+        'const { CompletionContext } = require("@codemirror/autocomplete");',
+        'const { valueCompletion } = require("./src/editor.js");',
+        'module.exports = { EditorState, yaml, CompletionContext, valueCompletion };',
+      ].join("\n"),
+      resolveDir: root,
+    },
+    bundle: true, write: false, platform: "node", format: "cjs",
+  }).outputFiles[0].text;
+  const mod = { exports: {} };
+  new Function("module", "exports", "require", code)(mod, mod.exports, require);
+  const { EditorState, yaml, CompletionContext, valueCompletion } = mod.exports;
+
+  const schema = JSON.parse(fs.readFileSync(path.join(root, "netdiagram-schema.json"), "utf8"));
+  const source = valueCompletion(schema);
+  const labelsAt = (doc) => {
+    const state = EditorState.create({ doc, extensions: [yaml()] });
+    const res = source(new CompletionContext(state, doc.length, false));
+    return res ? res.options.map((o) => o.label) : null;
+  };
+
+  assert.ok(labelsAt("nodes:\n  - id: fw1\n    type: f").includes("firewall"),
+    "'type: f' offers firewall");
+  assert.ok(labelsAt("groups:\n  - id: g\n    class: z").includes("zone"),
+    "'class: z' offers zone");
+  assert.ok(labelsAt("links:\n  - {from: a, to: b, protocol: t").includes("tcp"),
+    "protocol offers tcp (flow style)");
+  assert.deepStrictEqual(labelsAt("nodes:\n  - id: fw1\n  - id: web1\nlinks:\n  - from: "),
+    ["fw1", "web1"], "link endpoints complete against document ids");
+  assert.deepStrictEqual(
+    labelsAt("nodes:\n  - id: n1\ngroups:\n  - id: g\n    nodes: [x, "),
+    ["n1"], "group member list offers node ids only (not group ids)");
+  assert.strictEqual(labelsAt("nodes:\n  - id: a\n    label: Edge"), null,
+    "free-form keys get no value suggestions");
+});
+
 // ---------- dist boot (jsdom) ----------
 test("dist/netdiagram.html boots and renders in jsdom", async () => {
   const { JSDOM } = require("jsdom");

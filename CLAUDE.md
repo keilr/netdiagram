@@ -30,6 +30,11 @@ src/netdiagram.js   Core library (browser + node). Pure pipeline:
 src/app.js          Browser-only wire-up: textarea editor, debounced render,
                     SVG download, example reset. Expects globals ELK, jsyaml,
                     EXAMPLE (injected at build time).
+src/editor.js       CodeMirror 6 setup (bundled separately by esbuild):
+                    YAML mode + json-schema lint/hover/key-completion, plus
+                    valueCompletion() — value hints the library doesn't do:
+                    enums/examples read from the JSON schema, document ids
+                    for link endpoints and group member lists.
 src/template.html   Page shell + CSS with <!--INJECT:JSYAML-->, <!--INJECT:ELK-->,
                     <!--INJECT:APP--> placeholders.
 scripts/build.js    Vendors js-yaml + elkjs via esbuild, injects everything into
@@ -88,8 +93,9 @@ Link color: shared-label palette color if the link has a label, else default
 ink. The app (`src/app.js`) also renders a Connections tab: a firewall-rule
 table derived from links, excluding pairs whose endpoints share the same
 immediate group ("same zone" needs no rule). `netdiagram-schema.json` is the
-JSON Schema for this format — keep it, this section, and the editor
-autocomplete in sync when the format changes.
+JSON Schema for this format — keep it and this section in sync when the
+format changes (the editor autocomplete derives its key AND value
+suggestions from the schema, so it follows automatically).
 
 ## Gotchas — read before touching build or layout code
 
