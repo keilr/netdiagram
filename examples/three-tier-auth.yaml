@@ -78,7 +78,7 @@ groups:
     class: cloud
     nodes: [idp]
 
-links:
+connections:
   - {from: users,     to: authproxy, label: https, protocol: tcp, port: 443}
   - {from: authproxy, to: idp,       label: oidc,  protocol: tcp, port: 443}
   - {from: authproxy, to: web1,      label: https, protocol: tcp, port: 8443}

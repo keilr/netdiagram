@@ -10,21 +10,21 @@ let lastSpec = null;   // last successfully rendered spec (the SVG on screen)
 /* ---------------- connections table ---------------- */
 function renderConnections(spec){
   const { doc, nodeMap, groupMap, claimed } = spec;
-  const links = doc.links || [];
+  const connections = doc.connections || [];
 
   /* A node's zone is its immediate parent group id (undefined if top-level).
    * A group endpoint is its own zone.
-   * Links where both ends share the same zone need no firewall rule. */
+   * Connections where both ends share the same zone need no firewall rule. */
   function zoneOf(id){
     if (nodeMap.has(id)) return claimed.get(id);  // undefined = top-level / no group
     if (groupMap.has(id)) return id;              // group is its own zone boundary
     return undefined;
   }
-  const filtered = links.filter(l => {
+  const filtered = connections.filter(l => {
     const fz = zoneOf(String(l.from)), tz = zoneOf(String(l.to));
     return fz === undefined || tz === undefined || fz !== tz;
   });
-  const excluded = links.length - filtered.length;
+  const excluded = connections.length - filtered.length;
 
   if (!filtered.length){
     connEl.innerHTML = '<p class="conn-empty">All connections are within the same zone — no firewall rules needed.</p>';
@@ -111,9 +111,9 @@ async function render(text){
     lastSpec = spec;
     canvasEl.innerHTML = renderSVG(spec, layout);
     renderConnections(spec);
-    const n = spec.nodeMap.size, g = spec.groupMap.size, l = (spec.doc.links||[]).length;
+    const n = spec.nodeMap.size, g = spec.groupMap.size, c = (spec.doc.connections||[]).length;
     statusEl.className = '';
-    statusEl.textContent = `OK — ${n} nodes · ${g} groups · ${l} links`;
+    statusEl.textContent = `OK — ${n} nodes · ${g} groups · ${c} connections`;
   }catch(err){
     if (seq !== renderSeq) return;
     statusEl.className = 'error';

@@ -4,7 +4,7 @@ Guidance for Claude Code (and humans) working in this repository.
 
 ## What this is
 
-**netdiagram** turns a YAML description of a network (nodes, groups/zones, links)
+**netdiagram** turns a YAML description of a network (nodes, groups/zones, connections)
 into a blueprint-style SVG schematic. The deliverable is `dist/netdiagram.html` —
 a single, fully self-contained HTML file (editor + live renderer + vendored
 libraries) that works offline with no CDN and no server.
@@ -26,7 +26,7 @@ src/netdiagram.js   Core library (browser + node). Pure pipeline:
                     parseSpec(yamlText) -> {doc, nodeMap, groupMap, claimed}
                     buildElk(spec)      -> ELK graph JSON (layout is caller's job)
                     renderSVG(spec, layout) -> SVG string
-                    Also: LINK_STYLES, GROUP_STYLES, GLYPHS, LABEL_PALETTE.
+                    Also: CONNECTION_STYLES, GROUP_STYLES, GLYPHS, LABEL_PALETTE.
 src/app.js          Browser-only wire-up: textarea editor, debounced render,
                     SVG download, example reset. Expects globals ELK, jsyaml,
                     EXAMPLE (injected at build time).
@@ -34,11 +34,14 @@ src/editor.js       CodeMirror 6 setup (bundled separately by esbuild):
                     YAML mode + json-schema lint/hover/key-completion, plus
                     valueCompletion() — value hints the library doesn't do:
                     enums/examples read from the JSON schema, document ids
-                    for link endpoints and group member lists.
+                    for connection endpoints and group member lists.
 src/template.html   Page shell + CSS with <!--INJECT:JSYAML-->, <!--INJECT:ELK-->,
                     <!--INJECT:APP--> placeholders.
 scripts/build.js    Vendors js-yaml + elkjs via esbuild, injects everything into
                     the template, writes dist/netdiagram.html.
+scripts/render.js   CLI: node scripts/render.js in.yaml [out.svg] [--watch] —
+                    same pipeline in node, for external-editor workflows
+                    (VS Code tasks in .vscode/tasks.json call it).
 examples/*.yaml     All examples are injected into the app at build time
                     (EXAMPLES array; picker in the header). hq-edge-core.yaml
                     is the default on load and the one tests assert against.
@@ -81,7 +84,7 @@ groups:
                            # an info box in the group's bottom-right corner
                            # (bottom padding grows with the box — see
                            # groupHeader() in src/netdiagram.js)
-links:
+connections:               # renamed from links: (parseSpec errors on the old key)
   - from/to: node OR group id
     label: str             # shown on edge; equal labels share a palette color
     protocol: str          # tcp|udp|… — shown in the Connections table
@@ -89,10 +92,10 @@ links:
     direction: forward|both|none
 ```
 
-Link color: shared-label palette color if the link has a label, else default
-ink. The app (`src/app.js`) also renders a Connections tab: a firewall-rule
-table derived from links, excluding pairs whose endpoints share the same
-immediate group ("same zone" needs no rule). `netdiagram-schema.json` is the
+Connection color: shared-label palette color if the connection has a label,
+else default ink. The app (`src/app.js`) also renders a Connections tab: a
+firewall-rule table derived from the connections, excluding pairs whose
+endpoints share the same immediate group ("same zone" needs no rule). `netdiagram-schema.json` is the
 JSON Schema for this format — keep it and this section in sync when the
 format changes (the editor autocomplete derives its key AND value
 suggestions from the schema, so it follows automatically).
@@ -115,12 +118,13 @@ suggestions from the schema, so it follows automatically).
 5. **ELK layout options are per hierarchy level.** Spacing set on the root does
    not apply inside groups — the shared `ELK_SPACING` object is spread into the
    root options AND into every `elkGroup()`. Tune spacing there, not inline.
-6. **Group-to-group links work** (ELK routes to the compound-node boundary),
-   but a link from a child group to its own **ancestor** renders awkwardly.
+6. **Group-to-group connections work** (ELK routes to the compound-node
+   boundary), but a connection from a child group to its own **ancestor**
+   renders awkwardly.
    Prefer sibling-to-sibling or group-to-external-node in examples.
-7. **Edge order = link order.** ELK edge ids are `e<index>` into `doc.links`;
-   `renderSVG` maps styles/labels back via that index. Don't reorder or filter
-   edges in `buildElk` without updating the mapping.
+7. **Edge order = connection order.** ELK edge ids are `e<index>` into
+   `doc.connections`; `renderSVG` maps styles/labels back via that index.
+   Don't reorder or filter edges in `buildElk` without updating the mapping.
 8. **Node text metrics** use canvas `measureText` with a monospace stack and
    fall back to `length * 7.8` when canvas is unavailable (node/jsdom).
    `nodeMetrics()` / `groupHeader()` are the single source of truth for box

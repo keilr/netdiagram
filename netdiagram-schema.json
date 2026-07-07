@@ -36,10 +36,10 @@
       "description": "Zones, VLANs, subnets, or other logical boundaries",
       "items": { "$ref": "#/$defs/group" }
     },
-    "links": {
+    "connections": {
       "type": "array",
       "description": "Connections between nodes and/or groups",
-      "items": { "$ref": "#/$defs/link" }
+      "items": { "$ref": "#/$defs/connection" }
     }
   },
   "$defs": {
@@ -149,7 +149,7 @@
         },
         "cidr": {
           "type": "string",
-          "description": "CIDR notation shown in the info box in the group's lower-right corner (e.g. 10.0.0.0/24)"
+          "description": "CIDR notation rendered as 'cidr: <value>' in the info box in the group's lower-right corner (e.g. 10.0.0.0/24)"
         },
         "nodes": {
           "type": "array",
@@ -163,7 +163,7 @@
         }
       }
     },
-    "link": {
+    "connection": {
       "type": "object",
       "required": ["from", "to"],
       "additionalProperties": false,
@@ -178,7 +178,7 @@
         },
         "label": {
           "type": "string",
-          "description": "Display text shown on the edge in the diagram; links sharing the same label are drawn in the same colour"
+          "description": "Display text shown on the edge in the diagram; connections sharing the same label are drawn in the same colour"
         },
         "protocol": {
           "type": "string",

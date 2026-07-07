@@ -25,6 +25,28 @@
         "reveal": "always",
         "panel": "dedicated"
       }
+    },
+    {
+      "label": "Render current YAML to SVG",
+      "type": "shell",
+      "command": "node scripts/render.js ${file}",
+      "group": "build",
+      "presentation": {
+        "reveal": "silent",
+        "panel": "shared",
+        "close": true
+      }
+    },
+    {
+      "label": "Render current YAML to SVG (watch)",
+      "type": "shell",
+      "command": "node scripts/render.js ${file} --watch",
+      "isBackground": true,
+      "group": "build",
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      }
     }
   ]
 }

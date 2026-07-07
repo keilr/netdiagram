@@ -12,7 +12,7 @@ import { yamlSchema } from "codemirror-json-schema/yaml";
 /* ---- value completions ---------------------------------------------------
  * codemirror-json-schema (0.8.x) completes property KEYS in YAML mode but not
  * VALUES, so enum-ish value hints live here. Vocabularies are read from the
- * JSON schema so schema and autocomplete cannot drift; link endpoints
+ * JSON schema so schema and autocomplete cannot drift; connection endpoints
  * (from/to) and group member lists complete against ids found in the doc. */
 function vocabularies(schema) {
   const defs = schema.$defs || {};
@@ -22,8 +22,8 @@ function vocabularies(schema) {
     nodes:   { type: typeValues, icon: typeValues,
                os: defs.node?.properties?.os?.examples || [] },
     groups:  { class: enums(defs.group?.properties?.class) },
-    links:   { protocol: defs.link?.properties?.protocol?.examples || [],
-               direction: enums(defs.link?.properties?.direction) },
+    connections: { protocol: defs.connection?.properties?.protocol?.examples || [],
+                   direction: enums(defs.connection?.properties?.direction) },
     diagram: { direction: enums(schema.properties?.diagram?.properties?.direction) },
   };
 }
@@ -49,7 +49,7 @@ export function valueCompletion(schema) {
     const line = ctx.state.doc.lineAt(ctx.pos);
     const before = line.text.slice(0, ctx.pos - line.from);
 
-    // enclosing top-level section (nodes / groups / links / diagram)
+    // enclosing top-level section (nodes / groups / connections / diagram)
     let section = null;
     for (let n = line.number; n >= 1 && !section; n--)
       section = (/^([A-Za-z_][\w-]*):/.exec(ctx.state.doc.line(n).text) || [])[1];
@@ -59,7 +59,7 @@ export function valueCompletion(schema) {
     let words = null, partial = "", kind = "keyword", m;
     if ((m = /([A-Za-z_][\w-]*):\s+([\w./-]*)$/.exec(before))) {
       partial = m[2];
-      if (section === "links" && (m[1] === "from" || m[1] === "to")) {
+      if (section === "connections" && (m[1] === "from" || m[1] === "to")) {
         words = idsIn(ctx.state.doc.toString());
         kind = "variable";
       } else {

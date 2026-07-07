@@ -31,14 +31,15 @@ groups:
     cidr: 10.0.10.0/24
     nodes: [web1]
 
-links:
-  - {from: fw1, to: web1, label: "443/tcp", type: primary}
-  - {from: dmz, to: fw1,  label: syslog,    type: logging}
+connections:
+  - {from: fw1, to: web1, label: https,  protocol: tcp, port: 443}
+  - {from: dmz, to: fw1,  label: syslog, protocol: udp, port: 514}
 ```
 
 …and get a graph-paper schematic with drawn device glyphs, tinted zone
-boundaries, semantic link styles, an auto-generated legend, and a drafting
-title block. Export as SVG with one click.
+boundaries, color-coded connections, and a drafting title block — plus a
+firewall-rule table derived from the connections. Export as SVG with one
+click.
 
 ## Quick start
 
@@ -49,8 +50,31 @@ npm run build          # -> dist/netdiagram.html
 
 Open `dist/netdiagram.html` in a browser. The left pane is a YAML editor with
 live validation and schema-aware autocomplete — keys, enum values (`type: f…`
-→ `firewall`), and node/group ids for link endpoints; the right pane renders
-as you type.
+→ `firewall`), and node/group ids for connection endpoints; the right pane
+renders as you type.
+
+### Prefer your own editor? (VS Code)
+
+You don't have to write the YAML in the browser app — a CLI renders any spec
+file straight to SVG:
+
+```bash
+npm run render -- mynet.yaml                     # -> mynet.svg
+npm run render -- mynet.yaml out.svg --watch     # re-render on every save
+```
+
+Opening this repo in VS Code gives you the same schema-driven IntelliSense
+through `.vscode/settings.json` and the recommended
+[YAML extension](https://marketplace.visualstudio.com/items?itemName=redhat.vscode-yaml):
+completion, hover docs, and validation for `examples/*.yaml` and
+`*.netdiagram.yaml` files. Two build tasks — *Render current YAML to SVG* and
+a `--watch` variant — feed the current file to the CLI; run the watch task
+and open the generated SVG in a side-by-side tab for a live preview. For
+spec files outside this repo, put a modeline on the first line instead:
+
+```yaml
+# yaml-language-server: $schema=/path/to/netdiagram-schema.json
+```
 
 ## Schema
 
@@ -59,6 +83,7 @@ as you type.
 |---|---|
 | `title` | shown in the drafting title block |
 | `direction` | `right` (default) or `down` |
+| *anything else* | any other scalar key (`author`, `revision`, `site`, …) is rendered as a row in the drafting title block |
 
 ### `nodes[]`
 | key | notes |
@@ -77,30 +102,35 @@ as you type.
 |---|---|
 | `id`, `label` | as for nodes |
 | `class` | `zone` `vlan` `subnet` `cloud` `onprem` `trust` — tint + border style (trust = red dashed) |
-| `cidr` | shown in the info box in the group's lower-right corner |
+| `cidr` | rendered as `cidr: <value>` in the info box in the group's lower-right corner |
 | `nodes` | member node ids (a node belongs to at most one group) |
 | `groups` | nested groups, arbitrary depth |
+| *anything else* | any other scalar key (`owner`, `site`, …) is rendered as `key: value` in the same info box |
 
-### `links[]`
+### `connections[]`
 | key | notes |
 |---|---|
 | `from`, `to` | node **or group** ids |
 | `label` | shown at the edge midpoint |
-| `type` | `primary` `backup` `management` `logging` `failure` — semantic color + dash |
+| `protocol` | `tcp`, `udp`, … — shown in the Connections table |
+| `port` | destination port number or range — shown in the Connections table |
 | `direction` | `forward` (default), `both`, `none` |
 
-**Color rules:** an explicit `type` always wins. Untyped links with a label get
-a color from a categorical palette, and **equal labels share the same color**
-(e.g. every `5432` link renders identically). Everything used appears in the
-legend.
+**Color rules:** connections with a label get a color from a categorical
+palette, and **equal labels share the same color** (e.g. every `pgsql`
+connection renders identically); unlabeled connections use the default ink.
+The app's **Connections tab** turns the list into a firewall-rule table
+(protocol/port/direction per rule), skipping pairs that sit in the same zone.
 
 ## Development
 
 ```
 src/netdiagram.js    core: parseSpec -> buildElk -> renderSVG (browser + node)
 src/app.js           browser wire-up (editor, debounce, download)
+src/editor.js        CodeMirror setup: schema-driven completion, lint, hover
 src/template.html    page shell with injection placeholders
 scripts/build.js     vendors js-yaml + elkjs, assembles dist/netdiagram.html
+scripts/render.js    CLI: YAML -> SVG (--watch), for external editors
 examples/            default example YAML (single source of truth)
 test/                npm test — pipeline, features, validation, jsdom boot
 ```

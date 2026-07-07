@@ -24,7 +24,7 @@ test("example parses and renders", async () => {
   assert.ok(spec.nodeMap.size >= 10, "nodes");
   assert.ok(spec.groupMap.size >= 4, "groups");
   const edges = [...svg.matchAll(/class="edge"/g)].length;
-  assert.strictEqual(edges, spec.doc.links.length, "every link rendered as an edge path");
+  assert.strictEqual(edges, spec.doc.connections.length, "every connection rendered as an edge path");
 });
 
 test("groups render cidr and classes", () => {
@@ -42,7 +42,8 @@ test("group cidr + attributes render in the bottom-right info box", () => {
   assert.ok(svg.includes('class="attr-box"'), "info box drawn");
   assert.ok(svg.includes(">owner: </tspan>"), "group attr key");
   assert.ok(svg.includes(">netops</tspan>"), "group attr value");
-  assert.ok(svg.includes('<tspan font-weight="600">10.0.10.0/24</tspan>'), "cidr line inside the box");
+  assert.ok(svg.includes(">cidr: </tspan>"), "cidr rendered as key: value");
+  assert.ok(svg.includes(">10.0.10.0/24</tspan>"), "cidr value inside the box");
 });
 
 test("nodes render kv lines (os/ip one per line) and type caption", () => {
@@ -116,7 +117,7 @@ test("all examples parse, layout and render", async () => {
   }));
 });
 
-test("group-to-group and group-to-node links route", async () => {
+test("group-to-group and group-to-node connections route", async () => {
   const s = parseSpec([
     "nodes:",
     "  - {id: a, label: a, type: server}",
@@ -124,13 +125,13 @@ test("group-to-group and group-to-node links route", async () => {
     "groups:",
     "  - {id: g1, label: G1, class: zone, nodes: [a]}",
     "  - {id: g2, label: G2, class: cloud, nodes: [c]}",
-    "links:",
+    "connections:",
     "  - {from: g1, to: g2, label: netflow}",
     "  - {from: g1, to: c}",
   ].join("\n"));
   const layout = await elk.layout(buildElk(s));
   const out = renderSVG(s, layout);
-  assert.strictEqual([...out.matchAll(/marker-end/g)].length, 2, "both group links drawn");
+  assert.strictEqual([...out.matchAll(/marker-end/g)].length, 2, "both group connections drawn");
 });
 
 // ---------- validation ----------
@@ -138,8 +139,10 @@ function expectError(yaml, needle) {
   try { parseSpec(yaml); assert.fail("expected error: " + needle); }
   catch (e) { assert.ok(e.message.includes(needle), `"${e.message}" should include "${needle}"`); }
 }
-test("validation: unknown link endpoint", () =>
-  expectError("nodes:\n  - {id: a}\nlinks:\n  - {from: a, to: ghost}", 'unknown endpoint "ghost"'));
+test("validation: unknown connection endpoint", () =>
+  expectError("nodes:\n  - {id: a}\nconnections:\n  - {from: a, to: ghost}", 'unknown endpoint "ghost"'));
+test("validation: legacy links key points to the rename", () =>
+  expectError("nodes:\n  - {id: a}\nlinks:\n  - {from: a, to: a}", 'use "connections:"'));
 test("validation: tags must be scalars", () =>
   expectError("nodes:\n  - {id: a, tags: {env: prod}}", "tags must be a scalar or a list of scalars"));
 test("validation: node in two groups", () =>
@@ -180,10 +183,10 @@ test("editor: value completion offers enum values and document ids", () => {
     "'type: f' offers firewall");
   assert.ok(labelsAt("groups:\n  - id: g\n    class: z").includes("zone"),
     "'class: z' offers zone");
-  assert.ok(labelsAt("links:\n  - {from: a, to: b, protocol: t").includes("tcp"),
+  assert.ok(labelsAt("connections:\n  - {from: a, to: b, protocol: t").includes("tcp"),
     "protocol offers tcp (flow style)");
-  assert.deepStrictEqual(labelsAt("nodes:\n  - id: fw1\n  - id: web1\nlinks:\n  - from: "),
-    ["fw1", "web1"], "link endpoints complete against document ids");
+  assert.deepStrictEqual(labelsAt("nodes:\n  - id: fw1\n  - id: web1\nconnections:\n  - from: "),
+    ["fw1", "web1"], "connection endpoints complete against document ids");
   assert.deepStrictEqual(
     labelsAt("nodes:\n  - id: n1\ngroups:\n  - id: g\n    nodes: [x, "),
     ["n1"], "group member list offers node ids only (not group ids)");

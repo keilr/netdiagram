@@ -1,8 +1,8 @@
 "use strict";
 /* netdiagram core: YAML spec -> ELK graph -> SVG. Runs in browser (inlined) and node (tests). */
 const jsyaml = (typeof window !== "undefined" && window.jsyaml) ? window.jsyaml : require("js-yaml");
-/* ---------------- link + group semantics ---------------- */
-const LINK_STYLES = {
+/* ---------------- connection + group semantics ---------------- */
+const CONNECTION_STYLES = {
   default: { hex:'#24344d', dash:null, width:1.8 },
   labeled: { dash:null, width:2 }   // hex assigned per label from LABEL_PALETTE
 };
@@ -16,10 +16,10 @@ const GROUP_STYLES = {
   default:{ fill:'rgba(60,72,88,.04)',   stroke:'#a8b2bd', dash:null,  label:'#5b6874' }
 };
 
-/* colors assigned to shared link labels (untyped links) */
+/* colors assigned to shared connection labels */
 const LABEL_PALETTE = ['#0f766e','#7c3aed','#1d4ed8','#9d174d','#4d7c0f','#0e7490','#a21caf','#b45309'];
 
-/* link direction vocabulary — shared by the SVG arrows and the Connections table */
+/* connection direction vocabulary — shared by the SVG arrows and the Connections table */
 const DIR_ALIASES = { both:'both', bidirectional:'both', none:'none' };
 const dirOf = l => DIR_ALIASES[String(l.direction || '').toLowerCase()] || 'forward';
 
@@ -170,12 +170,12 @@ function nodeMetrics(n){
 const GBOX_PAD = 10, GBOX_LINE_H = 15, GBOX_MARGIN = 8;
 function groupHeader(g){
   const lines = [
-    ...(g.cidr != null ? [[null, String(g.cidr)]] : []),   // cidr: plain line, no key
+    ...(g.cidr != null ? [['cidr', String(g.cidr)]] : []),
     ...attrLines(g, GROUP_KNOWN_KEYS)
   ];
   const box = lines.length ? {
     lines,
-    w: Math.ceil(Math.max(...lines.map(([k,v]) => textW(k ? k + ': ' + v : v, IP_FONT)))) + GBOX_PAD*2,
+    w: Math.ceil(Math.max(...lines.map(([k,v]) => textW(k + ': ' + v, IP_FONT)))) + GBOX_PAD*2,
     h: lines.length*GBOX_LINE_H + 10
   } : null;
   return { labelY:22, padTop:46, box, padBottom: box ? GBOX_MARGIN + box.h + 10 : 22 };
@@ -184,8 +184,9 @@ function groupHeader(g){
 /* ---------------- parse + validate ---------------- */
 function parseSpec(text){
   const doc = jsyaml.load(text);
-  if (!doc || typeof doc !== 'object') throw new Error('Empty document — define nodes and links.');
+  if (!doc || typeof doc !== 'object') throw new Error('Empty document — define nodes and connections.');
   const errors = [];
+  if (doc.links != null) errors.push('"links:" has been renamed — use "connections:" instead');
   const nodes = Array.isArray(doc.nodes) ? doc.nodes : [];
   if (!nodes.length) errors.push('No nodes defined.');
   const nodeMap = new Map();
@@ -218,12 +219,12 @@ function parseSpec(text){
   }
   walkGroups(doc.groups, 'groups');
 
-  const links = Array.isArray(doc.links) ? doc.links : [];
-  links.forEach((l,i)=>{
-    if (!l || l.from == null || l.to == null) { errors.push(`links[${i}]: needs from + to`); return; }
+  const connections = Array.isArray(doc.connections) ? doc.connections : [];
+  connections.forEach((l,i)=>{
+    if (!l || l.from == null || l.to == null) { errors.push(`connections[${i}]: needs from + to`); return; }
     for (const end of [String(l.from), String(l.to)])
       if (!nodeMap.has(end) && !groupMap.has(end))
-        errors.push(`links[${i}]: unknown endpoint "${end}"`);
+        errors.push(`connections[${i}]: unknown endpoint "${end}"`);
   });
 
   if (errors.length) { const e = new Error(errors.join('\n')); e.isSpec = true; throw e; }
@@ -241,7 +242,7 @@ const ELK_SPACING = {
   'elk.spacing.edgeNode':'24',
   'elk.spacing.edgeEdge':'18'
 };
-/* ELK edge ids encode the index into doc.links (edge order = link order) */
+/* ELK edge ids encode the index into doc.connections (edge order = connection order) */
 const edgeId = i => 'e' + i;
 const edgeIndex = id => parseInt(String(id).slice(1), 10);
 
@@ -272,7 +273,7 @@ function buildElk(spec){
     ...(doc.groups||[]).map(elkGroup),
     ...[...nodeMap.values()].filter(n=>!claimed.has(String(n.id))).map(elkNode)
   ];
-  const edges = (doc.links||[]).map((l,i)=>({ id:edgeId(i), sources:[String(l.from)], targets:[String(l.to)] }));
+  const edges = (doc.connections||[]).map((l,i)=>({ id:edgeId(i), sources:[String(l.from)], targets:[String(l.to)] }));
 
   return {
     id:'root',
@@ -311,15 +312,15 @@ function renderSVG(spec, layout){
   const { doc, nodeMap, groupMap } = spec;
   const title = String(doc.diagram?.title || 'untitled network');
 
-  // links with the same label share a palette color
+  // connections with the same label share a palette color
   const labelColor = new Map();
-  for (const l of (doc.links||[])){
+  for (const l of (doc.connections||[])){
     if (l.label != null && !labelColor.has(String(l.label)))
       labelColor.set(String(l.label), LABEL_PALETTE[labelColor.size % LABEL_PALETTE.length]);
   }
   function styleOf(l){
-    if (l.label != null) return { ...LINK_STYLES.labeled, hex: labelColor.get(String(l.label)) };
-    return LINK_STYLES.default;
+    if (l.label != null) return { ...CONNECTION_STYLES.labeled, hex: labelColor.get(String(l.label)) };
+    return CONNECTION_STYLES.default;
   }
   // absolute positions
   const abs = new Map(); // id -> {x,y,w,h,isGroup}
@@ -348,7 +349,7 @@ function renderSVG(spec, layout){
       <rect width="60" height="60" fill="url(#gridS)"/>
       <path d="M60 0H0v60" fill="none" stroke="#dde3d7" stroke-width="1"/>
     </pattern>`;
-  const markerHexes = [...new Set((doc.links||[]).map(l => styleOf(l).hex))];
+  const markerHexes = [...new Set((doc.connections||[]).map(l => styleOf(l).hex))];
   for (const hex of markerHexes){
     defs += `
     <marker id="ah-${hex.slice(1)}" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse">
@@ -371,10 +372,7 @@ function renderSVG(spec, layout){
       const bx = b.x + b.w - GBOX_MARGIN - hdr.box.w, by = b.y + b.h - GBOX_MARGIN - hdr.box.h;
       boxText = `<rect class="attr-box" x="${bx}" y="${by}" width="${hdr.box.w}" height="${hdr.box.h}" rx="3" fill="#ffffff" fill-opacity=".8" stroke="${st.stroke}" stroke-width=".9"/>`
         + hdr.box.lines.map(([k,v],i) =>
-          `<text x="${bx+GBOX_PAD}" y="${by + 16 + i*GBOX_LINE_H}" font-family="ui-monospace,Menlo,monospace" font-size="10.5" fill="${st.label}">${
-            k ? `<tspan opacity=".6">${esc(k)}: </tspan><tspan opacity=".9">${esc(v)}</tspan>`
-              : `<tspan font-weight="600">${esc(v)}</tspan>`
-          }</text>`).join('');
+          `<text x="${bx+GBOX_PAD}" y="${by + 16 + i*GBOX_LINE_H}" font-family="ui-monospace,Menlo,monospace" font-size="10.5" fill="${st.label}"><tspan opacity=".6">${esc(k)}: </tspan><tspan opacity=".9">${esc(v)}</tspan></text>`).join('');
     }
     gGroups += `<rect x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" rx="8" fill="${st.fill}" stroke="${st.stroke}" stroke-width="1.4"${dash}/>
       <text x="${b.x+14}" y="${b.y+hdr.labelY}" font-family="ui-monospace,Menlo,monospace" font-size="11" font-weight="700" letter-spacing="1.6" fill="${st.label}">${esc(String(g.label||id).toUpperCase())}</text>
@@ -426,7 +424,7 @@ function renderSVG(spec, layout){
   })(layout);
   const offsetOf = id => (!id || id==='root') ? {x:0,y:0} : (abs.get(id) || {x:0,y:0});
   allEdges.forEach(e=>{
-    const l = (doc.links||[])[edgeIndex(e.id)] || {};
+    const l = (doc.connections||[])[edgeIndex(e.id)] || {};
     const st = styleOf(l);
     const mk = 'ah-' + st.hex.slice(1);
     const sec = (e.sections||[])[0]; if (!sec) return;
@@ -481,4 +479,4 @@ function renderSVG(spec, layout){
 }
 
 if (typeof module !== "undefined" && module.exports)
-  module.exports = { parseSpec, buildElk, renderSVG, LINK_STYLES, GROUP_STYLES, GLYPHS, LABEL_PALETTE };
+  module.exports = { parseSpec, buildElk, renderSVG, CONNECTION_STYLES, GROUP_STYLES, GLYPHS, LABEL_PALETTE };
