@@ -50,9 +50,14 @@
   select:focus-visible{outline:2px solid #2563eb;outline-offset:2px}
   main{flex:1;display:flex;min-height:0}
   #editor-pane{
-    width:38%;min-width:300px;display:flex;flex-direction:column;
+    width:var(--editor-w,38%);min-width:220px;display:flex;flex-direction:column;
     border-right:1px solid #2c3542;background:var(--slate);
   }
+  #splitter{
+    flex:0 0 6px;cursor:col-resize;background:var(--slate-2);
+    transition:background .15s;touch-action:none;
+  }
+  #splitter:hover,#splitter.dragging{background:var(--accent)}
   #editor{
     flex:1;overflow:hidden;min-height:0;
   }
@@ -95,7 +100,8 @@
   .conn-empty{padding:32px 20px;color:#7a8798;font-style:italic}
   @media (max-width:760px){
     main{flex-direction:column}
-    #editor-pane{width:100%;height:45%;border-right:0;border-bottom:1px solid #2c3542}
+    #editor-pane{width:100%;height:var(--editor-h,45%);min-height:120px;border-right:0;border-bottom:1px solid #2c3542}
+    #splitter{cursor:row-resize}
   }
 </style>
 </head>
@@ -112,6 +118,7 @@
     <div id="editor" aria-label="YAML source"></div>
     <div id="status">Ready.</div>
   </div>
+  <div id="splitter" role="separator" aria-label="Resize editor" title="Drag to resize · double-click to reset"></div>
   <div id="right-pane">
     <div id="view-tabs">
       <button class="tab-btn active" data-pane="canvas-pane">Diagram</button>

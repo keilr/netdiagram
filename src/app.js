@@ -88,6 +88,38 @@ connEl.addEventListener('click', e => {
   });
 });
 
+/* ---------------- pane splitter ---------------- */
+/* Drag resizes the editor pane (width in the row layout, height in the
+ * stacked <=760px layout); double-click resets to the CSS default. */
+const splitter = $('#splitter'), mainEl = $('main');
+const stacked = () => matchMedia('(max-width:760px)').matches;
+splitter.addEventListener('pointerdown', e => {
+  e.preventDefault();
+  splitter.setPointerCapture(e.pointerId);
+  splitter.classList.add('dragging');
+  const move = ev => {
+    const r = mainEl.getBoundingClientRect();
+    if (stacked()){
+      const h = Math.min(Math.max(ev.clientY - r.top, 120), r.height - 120);
+      mainEl.style.setProperty('--editor-h', h + 'px');
+    } else {
+      const w = Math.min(Math.max(ev.clientX - r.left, 220), r.width - 320);
+      mainEl.style.setProperty('--editor-w', w + 'px');
+    }
+  };
+  const up = () => {
+    splitter.classList.remove('dragging');
+    splitter.removeEventListener('pointermove', move);
+    splitter.removeEventListener('pointerup', up);
+  };
+  splitter.addEventListener('pointermove', move);
+  splitter.addEventListener('pointerup', up);
+});
+splitter.addEventListener('dblclick', () => {
+  mainEl.style.removeProperty('--editor-w');
+  mainEl.style.removeProperty('--editor-h');
+});
+
 /* ---------------- tab switching ---------------- */
 document.querySelectorAll('.tab-btn').forEach(btn => {
   btn.addEventListener('click', () => {
