@@ -1,0 +1,41 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+
+permissions:
+  contents: write # release creation on tag pushes; read-only on PRs anyway
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # pretest builds dist/netdiagram.html, then the assertion suite runs
+      - run: npm test
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: netdiagram-html
+          path: dist/netdiagram.html
+          if-no-files-found: error
+
+      - name: Create release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/netdiagram.html \
+            --title "$GITHUB_REF_NAME" \
+            --generate-notes
