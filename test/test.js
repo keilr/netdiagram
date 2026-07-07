@@ -54,8 +54,9 @@ test("nodes render kv lines (os/ip one per line) and type caption", () => {
   assert.ok(svg.includes(">FIREWALL</text>"), "type caption under icon");
 });
 
-test("hw kinds: VM/BM/CT badges and border styles", () => {
-  for (const b of ["VM", "BM", "CT"]) assert.ok(svg.includes(`>${b}</text>`), b + " badge");
+test("tags: platform pills, custom pills and border styles", () => {
+  for (const b of ["VM", "BM", "CT"]) assert.ok(svg.includes(`>${b}</text>`), b + " platform pill");
+  assert.ok(svg.includes(">PROD</text>"), "custom tag pill");
   assert.ok(svg.includes('stroke-dasharray="5 3"'), "vm dashed border");
   assert.ok(svg.includes('stroke-dasharray="2 3"'), "container dotted border");
 });
@@ -66,13 +67,13 @@ test("dedicated glyphs for vm/container/metal types, hw fallback when untyped", 
     "  - {id: v, type: vm}",
     "  - {id: c, type: container}",
     "  - {id: m, type: metal}",
-    "  - {id: h, hw: docker}",     // no type/icon -> glyph falls back to hw kind
+    "  - {id: h, tags: [docker]}",     // no type/icon -> glyph falls back to platform tag
   ].join("\n"));
   const out = renderSVG(s, await elk.layout(buildElk(s)));
   assert.ok(out.includes('M8 8V5.5'), "vm glyph drawn");
   assert.ok(out.includes('M9.5 6V3'), "metal glyph drawn");
   assert.strictEqual([...out.matchAll(/M6\.5 10v5/g)].length, 2,
-    "container glyph drawn for type:container AND untyped hw:docker node");
+    "container glyph drawn for type:container AND untyped tags:[docker] node");
 });
 
 test("equal labels share a color; distinct labels differ", () => {
@@ -121,8 +122,8 @@ function expectError(yaml, needle) {
 }
 test("validation: unknown link endpoint", () =>
   expectError("nodes:\n  - {id: a}\nlinks:\n  - {from: a, to: ghost}", 'unknown endpoint "ghost"'));
-test("validation: bad hw value", () =>
-  expectError("nodes:\n  - {id: a, hw: quantum}", "hw must be vm, metal or container"));
+test("validation: tags must be scalars", () =>
+  expectError("nodes:\n  - {id: a, tags: {env: prod}}", "tags must be a scalar or a list of scalars"));
 test("validation: node in two groups", () =>
   expectError(
     "nodes:\n  - {id: a}\ngroups:\n  - {id: g1, nodes: [a]}\n  - {id: g2, nodes: [a]}",

@@ -110,22 +110,11 @@
           "type": "string",
           "description": "Operating system; rendered as 'os: <value>' on the node"
         },
-        "hw": {
-          "type": "string",
-          "description": "Hardware class — controls border style and the VM/BM/CT badge; also picks the glyph when type/icon are omitted",
-          "enum": [
-            "vm", "virtual", "guest",
-            "metal", "baremetal", "bare-metal", "bm", "physical",
-            "container", "ct", "docker", "pod", "lxc", "oci"
-          ]
-        },
-        "hardware": {
-          "type": "string",
-          "description": "Alias for hw",
-          "enum": [
-            "vm", "virtual", "guest",
-            "metal", "baremetal", "bare-metal", "bm", "physical",
-            "container", "ct", "docker", "pod", "lxc", "oci"
+        "tags": {
+          "description": "Tags shown as pills in the node's top-right corner. Platform tags (vm/metal/container and aliases like docker, baremetal) get a colored VM/BM/CT pill, set the border style, and pick the platform glyph when type/icon are omitted; other tags render as neutral pills with their own text.",
+          "oneOf": [
+            { "type": ["string", "number"] },
+            { "type": "array", "items": { "type": ["string", "number", "boolean"] }, "minItems": 1 }
           ]
         }
       },

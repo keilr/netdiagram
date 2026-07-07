@@ -17,43 +17,43 @@ nodes:
     type: lb
     ip: 192.0.2.10
     os: linux
-    hw: container
+    tags: [container]
   - id: web1
     label: web-01
     type: web
     ip: 10.1.10.11
     os: linux
-    hw: vm
+    tags: [vm]
   - id: web2
     label: web-02
     type: web
     ip: 10.1.10.12
     os: linux
-    hw: vm
+    tags: [vm]
   - id: app1
     label: app-01
     type: container
     ip: 10.1.20.11
     os: linux
-    hw: container
+    tags: [container]
   - id: app2
     label: app-02
     type: container
     ip: 10.1.20.12
     os: linux
-    hw: container
+    tags: [container]
   - id: db1
     label: pg-primary
     type: db
     ip: 10.1.30.11
     os: linux
-    hw: metal
+    tags: [metal]
   - id: db2
     label: pg-replica
     type: db
     ip: 10.1.30.12
     os: linux
-    hw: metal
+    tags: [metal]
 
 groups:
   - id: edge

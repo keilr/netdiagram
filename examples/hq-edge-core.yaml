@@ -1,9 +1,10 @@
 # netdiagram — describe the network, get a schematic.
 # diagram: options title + direction control rendering;
 #          any other scalar key is an attribute shown in the title block
-# nodes:  id, label, type/icon, ip|ips, os, hw: vm|metal|container
-#         types vm|container|metal draw platform glyphs (hw is used
-#         as glyph fallback when type/icon are omitted)
+# nodes:  id, label, type/icon, ip|ips, os, tags: [..] shown as pills
+#         platform tags vm|metal|container set border style + colored pill,
+#         and pick the platform glyph when type/icon are omitted;
+#         types vm|container|metal draw the platform glyphs directly
 #         any other scalar key is rendered as "key: value" on the node
 # groups: class: zone|vlan|subnet|cloud|onprem|trust, cidr
 #         any other scalar key is rendered "key: value" bottom-right in the group
@@ -26,45 +27,45 @@ nodes:
     type: firewall
     ip: 203.0.113.1
     os: bsd
-    hw: metal
+    tags: [metal]
   - id: fw2
     label: Edge FW B
     type: firewall
     ip: 203.0.113.2
     os: bsd
-    hw: metal
+    tags: [metal]
   - id: waf
     label: WAF
     type: lb
-    hw: vm
+    tags: [vm]
   - id: web1
     label: web-01
     type: server
     ip: 10.0.10.11
     os: linux
-    hw: vm
+    tags: [vm]
   - id: core
     label: Core Switch
     type: switch
-    hw: metal
+    tags: [metal]
   - id: app1
     label: app-01
     type: vm            # platform glyph: virtual machine
     ip: 10.0.20.11
     os: linux
-    hw: vm
+    tags: [vm]
   - id: api1
     label: api-01
     type: container     # platform glyph: container
     ip: 10.0.20.12
     os: linux
-    hw: container
+    tags: [container, prod]   # multiple tags: platform pill + custom pill
   - id: db1
     label: pg-primary
     type: db
     ips: [10.0.20.21, 10.0.99.21]
     os: linux
-    hw: metal
+    tags: [metal]
   - id: mgmt
     label: Mgmt Station
     type: user

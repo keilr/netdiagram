@@ -81,7 +81,7 @@ const IP_FONT = '10.5px ui-monospace, Menlo, Consolas, monospace';
 function glyphFor(node){
   let key = (node.icon || node.type || '').toString().toLowerCase().trim();
   if (!key){
-    // no type/icon: fall back to the hw kind's glyph (vm / container / metal)
+    // no type/icon: fall back to the platform tag's glyph (vm / container / metal)
     const hw = hwOf(node);
     key = hw === 'ct' ? 'container' : (hw || '');
   }
@@ -96,13 +96,34 @@ const HW_STYLES = {
   metal: { inner:true, badge:'BM', badgeFill:'#f1f5f9' },
   ct:    { dash:'2 3', badge:'CT', badgeFill:'#fef3c7' }
 };
-function hwOf(n){ return HW_KINDS[String(n.hw ?? n.hardware ?? '').toLowerCase()] || null; }
+function tagsOf(n){
+  const v = n.tags;
+  return v == null ? [] : (Array.isArray(v) ? v : [v]).map(String);
+}
+/* first platform tag (vm/metal/container + aliases) drives border style + glyph fallback */
+function hwOf(n){
+  for (const t of tagsOf(n)){ const k = HW_KINDS[t.toLowerCase()]; if (k) return k; }
+  return null;
+}
+const BADGE_FONT = '700 8px ui-monospace, Menlo, Consolas, monospace';
+/* every tag renders as a pill in the node's top-right corner; platform tags
+ * show their canonical short badge (VM/BM/CT) and tinted fill, other tags
+ * show their own text on a neutral pill */
+function tagPills(n){
+  return tagsOf(n).map(t => {
+    const kind = HW_KINDS[t.toLowerCase()];
+    const text = kind ? HW_STYLES[kind].badge : t.toUpperCase();
+    const fill = kind ? HW_STYLES[kind].badgeFill : '#eef1f4';
+    const w = Math.max(24, Math.ceil(textW(text, BADGE_FONT) + text.length * .8 + 10));
+    return { text, fill, w };
+  });
+}
 function ipListOf(n){
   const v = n.ip ?? n.ips ?? n.addr;
   return v == null ? [] : (Array.isArray(v) ? v : [v]).map(String);
 }
 function ipsOf(n){ return ipListOf(n).join(' · '); }
-const NODE_KNOWN_KEYS = new Set(['id','label','type','icon','ip','ips','addr','os','hw','hardware']);
+const NODE_KNOWN_KEYS = new Set(['id','label','type','icon','ip','ips','addr','os','tags']);
 /* option keys control rendering; every other scalar key is a displayed attribute */
 const DIAGRAM_OPTION_KEYS = new Set(['title','direction']);
 const GROUP_KNOWN_KEYS = new Set(['id','label','class','cidr','nodes','groups']);
@@ -134,9 +155,11 @@ function nodeMetrics(n){
   const leftW = (glyph || type) ? Math.max(glyph ? 24 : 0, Math.ceil(capW)) : 0;
   const textX = 12 + leftW + (leftW ? 12 : 4);
   const kvW = kv.length ? Math.max(...kv.map(([k,v]) => textW(k + ': ' + v, IP_FONT))) : 0;
-  const w = Math.max(120, Math.ceil(textX + Math.max(textW(label, NODE_FONT), kvW) + 16 + (hw ? 30 : 0)));
+  const pills = tagPills(n);
+  const pillsW = pills.reduce((a,p) => a + p.w + 4, 0) + (pills.length ? 9 : 0);   // 4 gap per pill, corner margin
+  const w = Math.max(120, Math.ceil(textX + Math.max(textW(label, NODE_FONT), kvW) + 16 + pillsW));
   const h = Math.max(54, 32 + kv.length * 14);
-  return { label, type, kv, hw, glyph, leftW, textX, w, h };
+  return { label, type, kv, hw, pills, glyph, leftW, textX, w, h };
 }
 
 /* group chrome layout — single source of truth for ELK padding (elkGroup) and
@@ -162,8 +185,10 @@ function parseSpec(text){
   nodes.forEach((n,i)=>{
     if (!n || !n.id) { errors.push(`nodes[${i}]: missing id`); return; }
     if (nodeMap.has(String(n.id))) errors.push(`duplicate node id "${n.id}"`);
-    if (n.hw != null && !HW_KINDS[String(n.hw).toLowerCase()])
-      errors.push(`nodes[${i}] "${n.id}": hw must be vm, metal or container (got "${n.hw}")`);
+    if (n.tags != null && (
+        (typeof n.tags === 'object' && !Array.isArray(n.tags)) ||
+        (Array.isArray(n.tags) && n.tags.some(t => t != null && typeof t === 'object'))))
+      errors.push(`nodes[${i}] "${n.id}": tags must be a scalar or a list of scalars`);
     nodeMap.set(String(n.id), n);
   });
 
@@ -356,7 +381,7 @@ function renderSVG(spec, layout){
   for (const [id, b] of abs){
     if (b.isGroup) continue;
     const n = nodeMap.get(id); if (!n) continue;
-    const { label, type, kv, hw, glyph, leftW, textX } = nodeMetrics(n);
+    const { label, type, kv, hw, pills, glyph, leftW, textX } = nodeMetrics(n);
     const iconX = b.x + 12 + (leftW - 24) / 2;
     const capX = b.x + 12 + leftW / 2;
     const tx = b.x + textX;
@@ -364,11 +389,14 @@ function renderSVG(spec, layout){
     const borderDash = hs?.dash ? ` stroke-dasharray="${hs.dash}"` : '';
     const inner = hs?.inner
       ? `<rect x="${b.x+3}" y="${b.y+3}" width="${b.w-6}" height="${b.h-6}" rx="4" fill="none" stroke="#24344d" stroke-width=".8"/>` : '';
-    const badge = hs ? (()=>{
-      const bw = 24, bx = b.x + b.w - bw - 7, by = b.y + 6;
-      return `<rect x="${bx}" y="${by}" width="${bw}" height="12" rx="6" fill="${hs.badgeFill}" stroke="#9aa7ba" stroke-width=".8"/>
-      <text x="${bx+bw/2}" y="${by+9}" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8" font-weight="700" letter-spacing=".8" fill="#5b6874">${hs.badge}</text>`;
-    })() : '';
+    // tag pills stack right-to-left from the corner (first tag outermost)
+    let badge = '', px = b.x + b.w - 7;
+    for (const p of pills){
+      px -= p.w;
+      badge += `<rect x="${px}" y="${b.y+6}" width="${p.w}" height="12" rx="6" fill="${p.fill}" stroke="#9aa7ba" stroke-width=".8"/>
+      <text x="${px+p.w/2}" y="${b.y+15}" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8" font-weight="700" letter-spacing=".8" fill="#5b6874">${esc(p.text)}</text>`;
+      px -= 4;
+    }
     const kvText = kv.map(([k,v],i) =>
       `<text x="${tx}" y="${b.y + 38 + i*14}" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#7a8798">${esc(k)}: </tspan><tspan fill="#3f5e8c">${esc(v)}</tspan></text>`
     ).join('');
