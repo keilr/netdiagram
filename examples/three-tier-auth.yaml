@@ -19,12 +19,14 @@ nodes:
     os: linux
   - id: web1
     label: web-01
-    type: web
+    type: vm            # web tier runs on VMs
+    icon: web
     ip: 10.1.10.11
     os: linux
   - id: web2
     label: web-02
-    type: web
+    type: vm
+    icon: web
     ip: 10.1.10.12
     os: linux
   - id: app1
@@ -39,12 +41,14 @@ nodes:
     os: linux
   - id: db1
     label: pg-primary
-    type: db
+    type: metal         # data tier on bare metal; icon keeps the db glyph
+    icon: db
     ip: 10.1.30.11
     os: linux
   - id: db2
     label: pg-replica
-    type: db
+    type: metal
+    icon: db
     ip: 10.1.30.12
     os: linux
 

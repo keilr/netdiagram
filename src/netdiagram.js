@@ -55,7 +55,10 @@ const GLYPH_ALIASES = {
   nas:'storage', san:'storage', backup:'storage',
   virtual:'vm', guest:'vm', virtualmachine:'vm',
   ct:'container', docker:'container', pod:'container', lxc:'container', oci:'container',
-  baremetal:'metal', 'bare-metal':'metal', bm:'metal', physical:'metal'
+  /* "server" means a physical machine -> bare metal (rack glyph stays available via host/app/web) */
+  server:'metal', baremetal:'metal', 'bare-metal':'metal', 'bare metal':'metal',
+  bm:'metal', physical:'metal', 'physical server':'metal', 'physical-server':'metal',
+  physicalserver:'metal', dedicated:'metal', 'dedicated server':'metal'
 };
 
 /* ---------------- helpers ---------------- */
@@ -78,11 +81,13 @@ const NODE_FONT = '600 13px ui-monospace, Menlo, Consolas, monospace';
 const CAP_FONT = '700 8.5px ui-monospace, Menlo, Consolas, monospace';
 const IP_FONT = '10.5px ui-monospace, Menlo, Consolas, monospace';
 
-function glyphFor(node){
-  let key = (node.icon || node.type || '').toString().toLowerCase().trim();
-  if (GLYPH_ALIASES[key]) key = GLYPH_ALIASES[key];
-  return GLYPHS[key] || null;
+/* canonical key: aliases resolved, whitespace normalized */
+function resolveKey(raw){
+  const key = String(raw ?? '').toLowerCase().trim().replace(/\s+/g, ' ');
+  return GLYPH_ALIASES[key] || key;
 }
+/* glyph comes from icon (pure visual override) or type */
+function glyphFor(node){ return GLYPHS[resolveKey(node.icon || node.type)] || null; }
 
 /* VM = dashed border, bare metal = double border (inner rect), container = fine-dotted;
  * keyed by the platform kind derived from type/icon (see hwOf) */
@@ -95,12 +100,10 @@ function tagsOf(n){
   const v = n.tags;
   return v == null ? [] : (Array.isArray(v) ? v : [v]).map(String);
 }
-/* platform kind (vm | metal | ct) derived from the node's type/icon — the
- * platform types and their aliases fully determine the node's styling */
+/* platform kind (vm | metal | ct) derived from the node's type ONLY — icon is
+ * a visual glyph override and never affects styling */
 function hwOf(n){
-  let key = (n.icon || n.type || '').toString().toLowerCase().trim();
-  if (GLYPH_ALIASES[key]) key = GLYPH_ALIASES[key];
-  return { vm:'vm', metal:'metal', container:'ct' }[key] || null;
+  return { vm:'vm', metal:'metal', container:'ct' }[resolveKey(n.type)] || null;
 }
 const BADGE_FONT = '700 8px ui-monospace, Menlo, Consolas, monospace';
 /* tags are informational only: neutral pills in the node's top-right corner
@@ -162,15 +165,20 @@ function nodeMetrics(n){
 }
 
 /* group chrome layout — single source of truth for ELK padding (elkGroup) and
- * the text offsets drawn in renderSVG. Label + optional cidr live in the
- * header (top); attributes render bottom-right, so they grow the bottom pad. */
+ * renderSVG. The label sits top-left; cidr + attributes render together in a
+ * small info box in the group's bottom-right corner (grows the bottom pad). */
+const GBOX_PAD = 10, GBOX_LINE_H = 15, GBOX_MARGIN = 8;
 function groupHeader(g){
-  const attrs = attrLines(g, GROUP_KNOWN_KEYS);
-  return {
-    attrs, labelY:22, cidrY:38, lineH:15, attrBotY:12,
-    padTop: (g.cidr != null ? 54 : 38) + 8,
-    padBottom: 22 + attrs.length*15
-  };
+  const lines = [
+    ...(g.cidr != null ? [[null, String(g.cidr)]] : []),   // cidr: plain line, no key
+    ...attrLines(g, GROUP_KNOWN_KEYS)
+  ];
+  const box = lines.length ? {
+    lines,
+    w: Math.ceil(Math.max(...lines.map(([k,v]) => textW(k ? k + ': ' + v : v, IP_FONT)))) + GBOX_PAD*2,
+    h: lines.length*GBOX_LINE_H + 10
+  } : null;
+  return { labelY:22, padTop:46, box, padBottom: box ? GBOX_MARGIN + box.h + 10 : 22 };
 }
 
 /* ---------------- parse + validate ---------------- */
@@ -357,23 +365,20 @@ function renderSVG(spec, layout){
     const st = GROUP_STYLES[String(g.class||'').toLowerCase()] || GROUP_STYLES.default;
     const dash = st.dash ? ` stroke-dasharray="${st.dash}"` : '';
     const hdr = groupHeader(g);
-    let cidrText = '';
-    if (g.cidr != null){
-      const labelStr = String(g.label||id).toUpperCase();
-      const labelW = textW(labelStr, '700 11px ui-monospace') + labelStr.length * 1.6;
-      const cidrW = textW(String(g.cidr), IP_FONT);
-      const fits = b.w >= 14 + labelW + 28 + cidrW + 14;
-      cidrText = fits
-        ? `<text x="${b.x+b.w-14}" y="${b.y+hdr.labelY}" text-anchor="end" font-family="ui-monospace,Menlo,monospace" font-size="10.5" fill="${st.label}" opacity=".85">${esc(String(g.cidr))}</text>`
-        : `<text x="${b.x+14}" y="${b.y+hdr.cidrY}" font-family="ui-monospace,Menlo,monospace" font-size="10.5" fill="${st.label}" opacity=".85">${esc(String(g.cidr))}</text>`;
+    // cidr + attributes live in a small info box in the bottom-right corner
+    let boxText = '';
+    if (hdr.box){
+      const bx = b.x + b.w - GBOX_MARGIN - hdr.box.w, by = b.y + b.h - GBOX_MARGIN - hdr.box.h;
+      boxText = `<rect class="attr-box" x="${bx}" y="${by}" width="${hdr.box.w}" height="${hdr.box.h}" rx="3" fill="#ffffff" fill-opacity=".8" stroke="${st.stroke}" stroke-width=".9"/>`
+        + hdr.box.lines.map(([k,v],i) =>
+          `<text x="${bx+GBOX_PAD}" y="${by + 16 + i*GBOX_LINE_H}" font-family="ui-monospace,Menlo,monospace" font-size="10.5" fill="${st.label}">${
+            k ? `<tspan opacity=".6">${esc(k)}: </tspan><tspan opacity=".9">${esc(v)}</tspan>`
+              : `<tspan font-weight="600">${esc(v)}</tspan>`
+          }</text>`).join('');
     }
-    // attributes stack upward from the lower-right corner (last attr sits lowest)
-    const attrText = hdr.attrs.map(([k,v],i) =>
-      `<text x="${b.x+b.w-14}" y="${b.y + b.h - hdr.attrBotY - (hdr.attrs.length-1-i)*hdr.lineH}" text-anchor="end" font-family="ui-monospace,Menlo,monospace" font-size="10.5" fill="${st.label}"><tspan opacity=".6">${esc(k)}: </tspan><tspan opacity=".9">${esc(v)}</tspan></text>`
-    ).join('');
     gGroups += `<rect x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" rx="8" fill="${st.fill}" stroke="${st.stroke}" stroke-width="1.4"${dash}/>
       <text x="${b.x+14}" y="${b.y+hdr.labelY}" font-family="ui-monospace,Menlo,monospace" font-size="11" font-weight="700" letter-spacing="1.6" fill="${st.label}">${esc(String(g.label||id).toUpperCase())}</text>
-      ${cidrText}${attrText}`;
+      ${boxText}`;
   }
 
   // nodes

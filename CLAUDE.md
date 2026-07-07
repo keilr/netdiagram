@@ -53,12 +53,15 @@ diagram:
 nodes:
   - id: str                # required, unique across nodes AND groups
     label: str
-    type: str              # picks glyph: router switch firewall server db lb
-                           # cloud internet user wifi siem storage vm container
-                           # metal (+aliases). Platform types vm|container|metal
-                           # also set the border style: dashed / fine-dotted /
-                           # double (see hwOf + HW_STYLES)
-    icon: str              # explicit glyph override
+    type: str              # picks glyph: router switch firewall db lb cloud
+                           # internet user wifi siem storage vm container metal
+                           # (+aliases; the rack-server glyph is host|app|web).
+                           # Platform types vm|container|metal also set the
+                           # border style: dashed / fine-dotted / double (hwOf +
+                           # HW_STYLES). server, physical [server], dedicated,
+                           # baremetal … are metal aliases (GLYPH_ALIASES)
+    icon: str              # explicit glyph override (visual only — border
+                           # styling always follows type)
     ip: str | ips: [str]   # rendered one per line as "ip: <value>"
     os: str                # free-form; rendered as "os: <value>"
     tags: [str] | str      # informational only: neutral pills in the top-right
@@ -69,8 +72,9 @@ nodes:
 groups:
   - id, label, class: zone|vlan|subnet|cloud|onprem|trust, cidr,
     nodes: [ids], groups: [nested]   # a node may belong to at most one group
-    <any-scalar-key>: val  # rendered as "key: value" bottom-right in the group
-                           # (bottom padding grows per attr line — see
+    <any-scalar-key>: val  # cidr + attributes render as "key: value" lines in
+                           # an info box in the group's bottom-right corner
+                           # (bottom padding grows with the box — see
                            # groupHeader() in src/netdiagram.js)
 links:
   - from/to: node OR group id

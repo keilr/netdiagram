@@ -2,12 +2,13 @@
 # diagram: options title + direction control rendering;
 #          any other scalar key is an attribute shown in the title block
 # nodes:  id, label, type/icon, ip|ips, os, tags: [..]
-#         platform types vm|metal|container (+ aliases like docker, baremetal)
-#         draw the platform glyph AND set the border style (dashed/double/dotted)
+#         platform types vm|metal|container (+ aliases like docker, baremetal,
+#         server, "physical server", dedicated) draw the platform glyph AND set
+#         the border style (dashed/double/dotted)
 #         tags are informational: neutral pills top-right, two per row
 #         any other scalar key is rendered as "key: value" on the node
 # groups: class: zone|vlan|subnet|cloud|onprem|trust, cidr
-#         any other scalar key is rendered "key: value" bottom-right in the group
+#         cidr + any other scalar key render in an info box bottom-right in the group
 # links:  from/to can be node OR group ids
 #         label (optional) shown on edge; links sharing the same label share a color
 #         protocol: tcp|udp|icmp|vrrp|any   port: number or range
@@ -58,7 +59,8 @@ nodes:
     tags: [prod, pci]   # informational pills, two per row
   - id: db1
     label: pg-primary
-    type: db
+    type: metal         # bare-metal database; icon keeps the db glyph
+    icon: db
     ips: [10.0.20.21, 10.0.99.21]
     os: linux
   - id: mgmt

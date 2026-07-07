@@ -38,11 +38,11 @@ test("diagram attributes render as rows in the title block", () => {
   assert.ok(svg.includes(">REVISION</text>") && svg.includes(">1.2</text>"), "second attr");
 });
 
-test("group attributes render bottom-right in the group", () => {
+test("group cidr + attributes render in the bottom-right info box", () => {
+  assert.ok(svg.includes('class="attr-box"'), "info box drawn");
   assert.ok(svg.includes(">owner: </tspan>"), "group attr key");
   assert.ok(svg.includes(">netops</tspan>"), "group attr value");
-  const attrLine = svg.match(/<text[^>]*><tspan[^>]*>owner: /)?.[0];
-  assert.ok(attrLine && attrLine.includes('text-anchor="end"'), "attr anchored to the right edge");
+  assert.ok(svg.includes('<tspan font-weight="600">10.0.10.0/24</tspan>'), "cidr line inside the box");
 });
 
 test("nodes render kv lines (os/ip one per line) and type caption", () => {
@@ -72,15 +72,22 @@ test("platform types draw dedicated glyphs and set border style; tags do not", a
   const s = parseSpec([
     "nodes:",
     "  - {id: v, type: vm}",
-    "  - {id: c, type: docker}",             // alias -> container
+    "  - {id: c, type: docker}",              // alias -> container
     "  - {id: m, type: metal}",
-    "  - {id: t, type: server, tags: [vm]}", // tag is a neutral pill, no styling
+    "  - {id: s, type: server}",              // server = physical machine -> metal
+    "  - {id: p, type: physical server}",     // multi-word alias -> metal
+    "  - {id: t, type: host, tags: [vm]}",    // rack glyph; tag is a neutral pill, no styling
+    "  - {id: d, type: metal, icon: db}",     // icon overrides glyph only, styling stays metal
   ].join("\n"));
   const out = renderSVG(s, await elk.layout(buildElk(s)));
   assert.ok(out.includes('M8 8V5.5'), "vm glyph drawn");
   assert.ok(out.includes('M6.5 10v5'), "container glyph via docker alias");
-  assert.ok(out.includes('M9.5 6V3'), "metal glyph drawn");
-  assert.ok(out.includes('rx="4" fill="none"'), "metal double border (inner rect)");
+  assert.ok(out.includes('<ellipse cx="12" cy="5.5"'), "db glyph via icon override");
+  assert.strictEqual([...out.matchAll(/M9\.5 6V3/g)].length, 3,
+    "chip glyph for metal, server and 'physical server' (not the icon:db node)");
+  assert.strictEqual([...out.matchAll(/rx="4" fill="none"/g)].length, 4,
+    "double border for metal, server, 'physical server' and metal-with-db-icon");
+  assert.ok(out.includes('M5 9h14'), "host keeps the rack glyph");
   assert.strictEqual([...out.matchAll(/stroke-dasharray="5 3"/g)].length, 1,
     "dashed border only on the vm-typed node, not the vm-tagged one");
   assert.strictEqual([...out.matchAll(/stroke-dasharray="2 3"/g)].length, 1,

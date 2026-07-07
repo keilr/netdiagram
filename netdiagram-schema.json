@@ -57,7 +57,7 @@
         },
         "type": {
           "type": "string",
-          "description": "Device type — picks the glyph and caption. Platform types vm/container/metal (and aliases like docker, baremetal) also set the border style: dashed / fine-dotted / double. Canonical values and common aliases are accepted.",
+          "description": "Device type — picks the glyph and caption. Platform types vm/container/metal (and aliases like docker, baremetal, server, 'physical server', dedicated) also set the border style: dashed / fine-dotted / double. 'server' means a physical machine and maps to metal; the rack-server glyph is available via host/app/web. Canonical values and common aliases are accepted.",
           "anyOf": [
             {
               "enum": [
@@ -75,7 +75,9 @@
                 "storage", "nas", "san", "backup",
                 "vm", "virtual", "guest", "virtualmachine",
                 "container", "ct", "docker", "pod", "lxc", "oci",
-                "metal", "baremetal", "bare-metal", "bm", "physical"
+                "metal", "baremetal", "bare-metal", "bare metal", "bm",
+                "physical", "physical server", "physical-server", "physicalserver",
+                "dedicated", "dedicated server"
               ]
             },
             { "type": "string" }
@@ -83,7 +85,7 @@
         },
         "icon": {
           "type": "string",
-          "description": "Explicit glyph override — accepts the same values as type"
+          "description": "Explicit glyph override — accepts the same values as type. Visual only: border styling always follows type (e.g. type: metal, icon: db draws the db glyph with the bare-metal double border)"
         },
         "ip": {
           "description": "Single IP address rendered as 'ip: <value>' on the node",
@@ -128,7 +130,7 @@
       "required": ["id"],
       "additionalProperties": {
         "type": ["string", "number", "boolean"],
-        "description": "Any additional scalar key is rendered as 'key: value' in the group's lower-right corner"
+        "description": "Any additional scalar key is rendered as 'key: value' inside the info box in the group's lower-right corner"
       },
       "properties": {
         "id": {
@@ -146,7 +148,7 @@
         },
         "cidr": {
           "type": "string",
-          "description": "CIDR notation shown in the group header (e.g. 10.0.0.0/24)"
+          "description": "CIDR notation shown in the info box in the group's lower-right corner (e.g. 10.0.0.0/24)"
         },
         "nodes": {
           "type": "array",
