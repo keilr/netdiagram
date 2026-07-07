@@ -2,9 +2,11 @@
 # diagram: options title + direction control rendering;
 #          any other scalar key is an attribute shown in the title block
 # nodes:  id, label, type/icon, ip|ips, os, hw: vm|metal|container
+#         types vm|container|metal draw platform glyphs (hw is used
+#         as glyph fallback when type/icon are omitted)
 #         any other scalar key is rendered as "key: value" on the node
 # groups: class: zone|vlan|subnet|cloud|onprem|trust, cidr
-#         any other scalar key is rendered as "key: value" in the group header
+#         any other scalar key is rendered "key: value" bottom-right in the group
 # links:  from/to can be node OR group ids
 #         label (optional) shown on edge; links sharing the same label share a color
 #         protocol: tcp|udp|icmp|vrrp|any   port: number or range
@@ -47,13 +49,13 @@ nodes:
     hw: metal
   - id: app1
     label: app-01
-    type: server
+    type: vm            # platform glyph: virtual machine
     ip: 10.0.20.11
     os: linux
     hw: vm
   - id: api1
     label: api-01
-    type: server
+    type: container     # platform glyph: container
     ip: 10.0.20.12
     os: linux
     hw: container

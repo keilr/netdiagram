@@ -64,7 +64,7 @@
                 "router", "rtr", "gateway", "gw",
                 "switch", "sw", "l2", "l3",
                 "firewall", "fw", "waf", "ips",
-                "server", "host", "vm", "app", "web",
+                "server", "host", "app", "web",
                 "db", "database", "sql",
                 "lb", "loadbalancer", "load-balancer", "proxy",
                 "cloud",
@@ -72,7 +72,10 @@
                 "user", "client", "workstation", "admin",
                 "wifi", "ap", "wireless",
                 "siem", "log", "monitor", "monitoring",
-                "storage", "nas", "san", "backup"
+                "storage", "nas", "san", "backup",
+                "vm", "virtual", "guest", "virtualmachine",
+                "container", "ct", "docker", "pod", "lxc", "oci",
+                "metal", "baremetal", "bare-metal", "bm", "physical"
               ]
             },
             { "type": "string" }
@@ -109,7 +112,7 @@
         },
         "hw": {
           "type": "string",
-          "description": "Hardware class — controls border style and VM/BM/CT badge",
+          "description": "Hardware class — controls border style and the VM/BM/CT badge; also picks the glyph when type/icon are omitted",
           "enum": [
             "vm", "virtual", "guest",
             "metal", "baremetal", "bare-metal", "bm", "physical",
@@ -136,7 +139,7 @@
       "required": ["id"],
       "additionalProperties": {
         "type": ["string", "number", "boolean"],
-        "description": "Any additional scalar key is rendered as 'key: value' in the group header"
+        "description": "Any additional scalar key is rendered as 'key: value' in the group's lower-right corner"
       },
       "properties": {
         "id": {

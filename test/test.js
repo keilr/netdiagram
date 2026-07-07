@@ -38,9 +38,11 @@ test("diagram attributes render as rows in the title block", () => {
   assert.ok(svg.includes(">REVISION</text>") && svg.includes(">1.2</text>"), "second attr");
 });
 
-test("group attributes render as kv lines in the group header", () => {
+test("group attributes render bottom-right in the group", () => {
   assert.ok(svg.includes(">owner: </tspan>"), "group attr key");
   assert.ok(svg.includes(">netops</tspan>"), "group attr value");
+  const attrLine = svg.match(/<text[^>]*><tspan[^>]*>owner: /)?.[0];
+  assert.ok(attrLine && attrLine.includes('text-anchor="end"'), "attr anchored to the right edge");
 });
 
 test("nodes render kv lines (os/ip one per line) and type caption", () => {
@@ -56,6 +58,21 @@ test("hw kinds: VM/BM/CT badges and border styles", () => {
   for (const b of ["VM", "BM", "CT"]) assert.ok(svg.includes(`>${b}</text>`), b + " badge");
   assert.ok(svg.includes('stroke-dasharray="5 3"'), "vm dashed border");
   assert.ok(svg.includes('stroke-dasharray="2 3"'), "container dotted border");
+});
+
+test("dedicated glyphs for vm/container/metal types, hw fallback when untyped", async () => {
+  const s = parseSpec([
+    "nodes:",
+    "  - {id: v, type: vm}",
+    "  - {id: c, type: container}",
+    "  - {id: m, type: metal}",
+    "  - {id: h, hw: docker}",     // no type/icon -> glyph falls back to hw kind
+  ].join("\n"));
+  const out = renderSVG(s, await elk.layout(buildElk(s)));
+  assert.ok(out.includes('M8 8V5.5'), "vm glyph drawn");
+  assert.ok(out.includes('M9.5 6V3'), "metal glyph drawn");
+  assert.strictEqual([...out.matchAll(/M6\.5 10v5/g)].length, 2,
+    "container glyph drawn for type:container AND untyped hw:docker node");
 });
 
 test("equal labels share a color; distinct labels differ", () => {

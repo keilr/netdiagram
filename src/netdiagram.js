@@ -36,20 +36,26 @@ const GLYPHS = {
   user:   `<circle cx="12" cy="7.5" r="4"/><path d="M4.5 20.5c0-4 3.4-6.5 7.5-6.5s7.5 2.5 7.5 6.5"/>`,
   wifi:   `<path d="M3 9.5a13 13 0 0 1 18 0M6.2 13a8.5 8.5 0 0 1 11.6 0M9.4 16.4a4 4 0 0 1 5.2 0"/><circle cx="12" cy="19.5" r="1.3" fill="currentColor" stroke="none"/>`,
   siem:   `<rect x="3" y="4" width="18" height="14" rx="1.5"/><path d="M6 13.5l3-3.5 2.5 2.5L15 8l3 4M8 21h8"/>`,
-  storage:`<rect x="3" y="5" width="18" height="6" rx="1"/><rect x="3" y="13" width="18" height="6" rx="1"/><circle cx="7" cy="8" r=".9" fill="currentColor" stroke="none"/><circle cx="7" cy="16" r=".9" fill="currentColor" stroke="none"/>`
+  storage:`<rect x="3" y="5" width="18" height="6" rx="1"/><rect x="3" y="13" width="18" height="6" rx="1"/><circle cx="7" cy="8" r=".9" fill="currentColor" stroke="none"/><circle cx="7" cy="16" r=".9" fill="currentColor" stroke="none"/>`,
+  vm:     `<rect x="3" y="8" width="13" height="13" rx="1.5"/><path d="M8 8V5.5A1.5 1.5 0 0 1 9.5 4h9A1.5 1.5 0 0 1 20 5.5v9a1.5 1.5 0 0 1-1.5 1.5H16"/>`,
+  container:`<rect x="2" y="7" width="20" height="11" rx="1.5"/><path d="M6.5 10v5M12 10v5M17.5 10v5"/>`,
+  metal:  `<rect x="6" y="6" width="12" height="12" rx="1"/><rect x="10" y="10" width="4" height="4"/><path d="M9.5 6V3M14.5 6V3M9.5 21v-3M14.5 21v-3M6 9.5H3M6 14.5H3M21 9.5h-3M21 14.5h-3"/>`
 };
 const GLYPH_ALIASES = {
   fw:'firewall', waf:'firewall', ips:'firewall',
   rtr:'router', gateway:'router', gw:'router',
   sw:'switch', l2:'switch', l3:'switch',
-  host:'server', vm:'server', app:'server', web:'server',
+  host:'server', app:'server', web:'server',
   database:'db', sql:'db',
   loadbalancer:'lb', 'load-balancer':'lb', proxy:'lb',
   inet:'internet', wan:'internet',
   client:'user', workstation:'user', admin:'user',
   ap:'wifi', wireless:'wifi',
   log:'siem', monitor:'siem', monitoring:'siem',
-  nas:'storage', san:'storage', backup:'storage'
+  nas:'storage', san:'storage', backup:'storage',
+  virtual:'vm', guest:'vm', virtualmachine:'vm',
+  ct:'container', docker:'container', pod:'container', lxc:'container', oci:'container',
+  baremetal:'metal', 'bare-metal':'metal', bm:'metal', physical:'metal'
 };
 
 /* ---------------- helpers ---------------- */
@@ -74,6 +80,11 @@ const IP_FONT = '10.5px ui-monospace, Menlo, Consolas, monospace';
 
 function glyphFor(node){
   let key = (node.icon || node.type || '').toString().toLowerCase().trim();
+  if (!key){
+    // no type/icon: fall back to the hw kind's glyph (vm / container / metal)
+    const hw = hwOf(node);
+    key = hw === 'ct' ? 'container' : (hw || '');
+  }
   if (GLYPH_ALIASES[key]) key = GLYPH_ALIASES[key];
   return GLYPHS[key] || null;
 }
@@ -128,12 +139,16 @@ function nodeMetrics(n){
   return { label, type, kv, hw, glyph, leftW, textX, w, h };
 }
 
-/* group header layout — single source of truth for ELK padding (elkGroup) and
- * the header text y-offsets drawn in renderSVG */
+/* group chrome layout — single source of truth for ELK padding (elkGroup) and
+ * the text offsets drawn in renderSVG. Label + optional cidr live in the
+ * header (top); attributes render bottom-right, so they grow the bottom pad. */
 function groupHeader(g){
   const attrs = attrLines(g, GROUP_KNOWN_KEYS);
-  const attrY0 = g.cidr != null ? 54 : 38;   // below label (22) and optional cidr line (38)
-  return { attrs, labelY:22, cidrY:38, attrY0, lineH:15, padTop: attrY0 + attrs.length*15 + 8 };
+  return {
+    attrs, labelY:22, cidrY:38, lineH:15, attrBotY:12,
+    padTop: (g.cidr != null ? 54 : 38) + 8,
+    padBottom: 22 + attrs.length*15
+  };
 }
 
 /* ---------------- parse + validate ---------------- */
@@ -208,10 +223,11 @@ function buildElk(spec){
     return { id:String(n.id), width:m.w, height:m.h };
   }
   function elkGroup(g){
+    const hdr = groupHeader(g);
     return {
       id:String(g.id),
       layoutOptions:{
-        'elk.padding': `[top=${groupHeader(g).padTop},left=22,bottom=22,right=22]`,
+        'elk.padding': `[top=${hdr.padTop},left=22,bottom=${hdr.padBottom},right=22]`,
         ...ELK_SPACING
       },
       children:[
@@ -327,8 +343,9 @@ function renderSVG(spec, layout){
         ? `<text x="${b.x+b.w-14}" y="${b.y+hdr.labelY}" text-anchor="end" font-family="ui-monospace,Menlo,monospace" font-size="10.5" fill="${st.label}" opacity=".85">${esc(String(g.cidr))}</text>`
         : `<text x="${b.x+14}" y="${b.y+hdr.cidrY}" font-family="ui-monospace,Menlo,monospace" font-size="10.5" fill="${st.label}" opacity=".85">${esc(String(g.cidr))}</text>`;
     }
+    // attributes stack upward from the lower-right corner (last attr sits lowest)
     const attrText = hdr.attrs.map(([k,v],i) =>
-      `<text x="${b.x+14}" y="${b.y + hdr.attrY0 + i*hdr.lineH}" font-family="ui-monospace,Menlo,monospace" font-size="10.5" fill="${st.label}"><tspan opacity=".6">${esc(k)}: </tspan><tspan opacity=".9">${esc(v)}</tspan></text>`
+      `<text x="${b.x+b.w-14}" y="${b.y + b.h - hdr.attrBotY - (hdr.attrs.length-1-i)*hdr.lineH}" text-anchor="end" font-family="ui-monospace,Menlo,monospace" font-size="10.5" fill="${st.label}"><tspan opacity=".6">${esc(k)}: </tspan><tspan opacity=".9">${esc(v)}</tspan></text>`
     ).join('');
     gGroups += `<rect x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" rx="8" fill="${st.fill}" stroke="${st.stroke}" stroke-width="1.4"${dash}/>
       <text x="${b.x+14}" y="${b.y+hdr.labelY}" font-family="ui-monospace,Menlo,monospace" font-size="11" font-weight="700" letter-spacing="1.6" fill="${st.label}">${esc(String(g.label||id).toUpperCase())}</text>

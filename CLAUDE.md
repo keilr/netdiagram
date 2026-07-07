@@ -54,17 +54,19 @@ nodes:
   - id: str                # required, unique across nodes AND groups
     label: str
     type: str              # picks glyph: router switch firewall server db lb
-                           # cloud internet user wifi siem storage (+aliases)
+                           # cloud internet user wifi siem storage vm container
+                           # metal (+aliases)
     icon: str              # explicit glyph override
     ip: str | ips: [str]   # rendered one per line as "ip: <value>"
     os: str                # free-form; rendered as "os: <value>"
-    hw: vm|metal|container # border style + VM/BM/CT badge (aliases in HW_KINDS)
+    hw: vm|metal|container # border style + VM/BM/CT badge (aliases in HW_KINDS);
+                           # also picks the glyph when type/icon are omitted
     <any-scalar-key>: val  # unknown scalar keys render as "key: value" lines
 groups:
   - id, label, class: zone|vlan|subnet|cloud|onprem|trust, cidr,
     nodes: [ids], groups: [nested]   # a node may belong to at most one group
-    <any-scalar-key>: val  # rendered as "key: value" in the group header
-                           # (group padding grows per attr line — see
+    <any-scalar-key>: val  # rendered as "key: value" bottom-right in the group
+                           # (bottom padding grows per attr line — see
                            # groupHeader() in src/netdiagram.js)
 links:
   - from/to: node OR group id
@@ -121,7 +123,9 @@ autocomplete in sync when the format changes.
 - Validation philosophy: `parseSpec` collects **all** errors (with ids and
   indices) and throws once — don't fail fast on the first problem.
 - Visual conventions: VM = dashed border, bare metal = double border,
-  container = fine-dotted border; trust boundaries = red dashed group border.
+  container = fine-dotted border, plus a VM/BM/CT corner badge (HW_STYLES);
+  trust boundaries = red dashed group border. Dedicated device glyphs exist
+  for vm / container / metal types (GLYPHS).
 - After changing rendering or layout, eyeball the example: render
   `examples/hq-edge-core.yaml` and check labels don't collide (there is no
   automated visual regression test).
