@@ -213,6 +213,13 @@ test("dist/netdiagram.html boots and renders in jsdom", async () => {
   assert.deepStrictEqual(errs, [], "no page errors");
   assert.ok(rendered, "svg rendered");
   assert.ok(/^OK/.test(status), "status OK, got: " + status);
+
+  // zoom controls scale the svg's width/height attributes
+  const w0 = +rendered.getAttribute("width");
+  dom.window.document.querySelector("#zoom-in").click();
+  assert.strictEqual(+rendered.getAttribute("width"), Math.round(w0 * 1.25), "zoom in scales the svg");
+  dom.window.document.querySelector("#zoom-pct").click();
+  assert.strictEqual(+rendered.getAttribute("width"), w0, "reset returns to natural size");
 });
 
 // ---------- runner ----------

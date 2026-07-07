@@ -120,7 +120,80 @@ splitter.addEventListener('dblclick', () => {
   mainEl.style.removeProperty('--editor-h');
 });
 
+/* ---------------- canvas zoom + pan ---------------- */
+/* Zoom scales the SVG's width/height attributes (viewBox stays fixed), so the
+ * pane's native scrolling doubles as panning; drag-to-pan drives scrollLeft/Top. */
+const zoomPct = $('#zoom-pct');
+let zoom = 1;
+function applyZoom(){
+  const svg = canvasEl.querySelector('svg'); if (!svg) return;
+  if (!svg.dataset.w){   // natural size, stashed once per rendered SVG
+    svg.dataset.w = svg.getAttribute('width');
+    svg.dataset.h = svg.getAttribute('height');
+  }
+  svg.setAttribute('width',  Math.round(svg.dataset.w * zoom));
+  svg.setAttribute('height', Math.round(svg.dataset.h * zoom));
+  zoomPct.textContent = Math.round(zoom * 100) + '%';
+}
+/* (cx, cy): pane point to keep stationary — defaults to the pane center */
+function setZoom(z, cx = canvasEl.clientWidth / 2, cy = canvasEl.clientHeight / 2){
+  z = Math.min(8, Math.max(.1, z));
+  const prev = zoom; zoom = z;
+  const sl = (canvasEl.scrollLeft + cx) * (z / prev) - cx;
+  const st = (canvasEl.scrollTop  + cy) * (z / prev) - cy;
+  applyZoom();
+  canvasEl.scrollLeft = sl; canvasEl.scrollTop = st;
+}
+function fitZoom(){
+  const svg = canvasEl.querySelector('svg'); if (!svg) return;
+  const w = +(svg.dataset.w || svg.getAttribute('width'));
+  const h = +(svg.dataset.h || svg.getAttribute('height'));
+  if (!w || !h || !canvasEl.clientWidth) return;
+  zoom = Math.min(canvasEl.clientWidth / w, canvasEl.clientHeight / h) * .99;
+  applyZoom();
+  canvasEl.scrollLeft = canvasEl.scrollTop = 0;
+}
+$('#zoom-in').addEventListener('click',  () => setZoom(zoom * 1.25));
+$('#zoom-out').addEventListener('click', () => setZoom(zoom / 1.25));
+$('#zoom-fit').addEventListener('click', fitZoom);
+zoomPct.addEventListener('click', () => setZoom(1));
+
+/* Ctrl+wheel / trackpad pinch zooms toward the cursor; plain wheel scrolls */
+canvasEl.addEventListener('wheel', e => {
+  if (!e.ctrlKey) return;
+  e.preventDefault();
+  const r = canvasEl.getBoundingClientRect();
+  setZoom(zoom * Math.pow(1.0015, -e.deltaY), e.clientX - r.left, e.clientY - r.top);
+}, { passive: false });
+
+/* drag to pan; a real drag (>4px) suppresses the edge-highlight click */
+let pan = null, suppressClick = false;
+canvasEl.addEventListener('pointerdown', e => {
+  if (e.button !== 0) return;
+  pan = { x: e.clientX, y: e.clientY, sl: canvasEl.scrollLeft, st: canvasEl.scrollTop,
+          id: e.pointerId, moved: false };
+});
+canvasEl.addEventListener('pointermove', e => {
+  if (!pan) return;
+  const dx = e.clientX - pan.x, dy = e.clientY - pan.y;
+  if (!pan.moved){
+    if (Math.hypot(dx, dy) < 4) return;
+    pan.moved = true;
+    canvasEl.setPointerCapture(pan.id);
+    canvasEl.classList.add('panning');
+  }
+  canvasEl.scrollLeft = pan.sl - dx;
+  canvasEl.scrollTop  = pan.st - dy;
+});
+const endPan = () => {
+  if (pan?.moved){ suppressClick = true; canvasEl.classList.remove('panning'); }
+  pan = null;
+};
+canvasEl.addEventListener('pointerup', endPan);
+canvasEl.addEventListener('pointercancel', endPan);
+
 /* ---------------- tab switching ---------------- */
+const zoomTools = $('#zoom-tools');
 document.querySelectorAll('.tab-btn').forEach(btn => {
   btn.addEventListener('click', () => {
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
@@ -128,6 +201,7 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     const target = btn.dataset.pane;
     canvasEl.hidden = target !== 'canvas-pane';
     connEl.hidden   = target !== 'connections-pane';
+    zoomTools.hidden = target !== 'canvas-pane';
   });
 });
 
@@ -142,6 +216,7 @@ async function render(text){
     activeLabel = null;
     lastSpec = spec;
     canvasEl.innerHTML = renderSVG(spec, layout);
+    applyZoom();                    // fresh SVG: re-apply the current zoom level
     renderConnections(spec);
     const n = spec.nodeMap.size, g = spec.groupMap.size, c = (spec.doc.connections||[]).length;
     statusEl.className = '';
@@ -159,6 +234,7 @@ let activeLabel = null;
 /* Edge click: highlight all edges sharing the same label, dim the rest.
  * Lives on the container so it survives SVG re-renders. */
 canvasEl.addEventListener('click', e => {
+  if (suppressClick){ suppressClick = false; return; }   // tail end of a pan drag
   const hit = e.target.closest('.edge, .edge-lbl');
   const label = hit?.dataset?.label || null;
   const toggle = label && label === activeLabel;
@@ -191,7 +267,13 @@ exampleSel.addEventListener('change', loadExample);
 $('#btn-example').addEventListener('click', loadExample);
 $('#btn-download').addEventListener('click', ()=>{
   const svg = canvasEl.querySelector('svg'); if (!svg) return;
-  const blob = new Blob([svg.outerHTML], {type:'image/svg+xml'});
+  const clone = svg.cloneNode(true);       // download at natural size, zoom-free
+  if (svg.dataset.w){
+    clone.setAttribute('width', svg.dataset.w);
+    clone.setAttribute('height', svg.dataset.h);
+  }
+  delete clone.dataset.w; delete clone.dataset.h;
+  const blob = new Blob([clone.outerHTML], {type:'image/svg+xml'});
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   const t = lastSpec?.doc.diagram?.title;   // the SVG on screen came from lastSpec
