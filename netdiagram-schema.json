@@ -111,7 +111,7 @@
           "description": "Operating system; rendered as 'os: <value>' on the node"
         },
         "tags": {
-          "description": "Tags shown as pills in the node's top-right corner. Platform tags (vm/metal/container and aliases like docker, baremetal) get a colored VM/BM/CT pill, set the border style, and pick the platform glyph when type/icon are omitted; other tags render as neutral pills with their own text.",
+          "description": "Tags shown as pills in the node's top-right corner (each pill shows the tag text, max two pills per row). Platform tags (vm/metal/container and aliases like docker, baremetal) get a tinted pill, set the border style, and pick the platform glyph when type/icon are omitted.",
           "oneOf": [
             { "type": ["string", "number"] },
             { "type": "array", "items": { "type": ["string", "number", "boolean"] }, "minItems": 1 }

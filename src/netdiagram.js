@@ -90,11 +90,12 @@ function glyphFor(node){
 }
 
 const HW_KINDS = { vm:'vm', virtual:'vm', guest:'vm', metal:'metal', baremetal:'metal', 'bare-metal':'metal', bm:'metal', physical:'metal', container:'ct', ct:'ct', docker:'ct', pod:'ct', lxc:'ct', oci:'ct' };
-/* VM = dashed border, bare metal = double border (inner rect), container = fine-dotted */
+/* VM = dashed border, bare metal = double border (inner rect), container = fine-dotted;
+ * badgeFill tints the platform tag's pill */
 const HW_STYLES = {
-  vm:    { dash:'5 3', badge:'VM', badgeFill:'#eef2ff' },
-  metal: { inner:true, badge:'BM', badgeFill:'#f1f5f9' },
-  ct:    { dash:'2 3', badge:'CT', badgeFill:'#fef3c7' }
+  vm:    { dash:'5 3', badgeFill:'#eef2ff' },
+  metal: { inner:true, badgeFill:'#f1f5f9' },
+  ct:    { dash:'2 3', badgeFill:'#fef3c7' }
 };
 function tagsOf(n){
   const v = n.tags;
@@ -106,18 +107,23 @@ function hwOf(n){
   return null;
 }
 const BADGE_FONT = '700 8px ui-monospace, Menlo, Consolas, monospace';
-/* every tag renders as a pill in the node's top-right corner; platform tags
- * show their canonical short badge (VM/BM/CT) and tinted fill, other tags
- * show their own text on a neutral pill */
+/* every tag renders as a pill in the node's top-right corner, showing its own
+ * text (uppercased); platform tags get a tinted fill, others a neutral one.
+ * Pills are arranged max two per row, wrapping to further rows. */
+const PILL_H = 12, PILL_GAP = 4, PILL_ROW_H = 16;
 function tagPills(n){
-  return tagsOf(n).map(t => {
+  const pills = tagsOf(n).map(t => {
     const kind = HW_KINDS[t.toLowerCase()];
-    const text = kind ? HW_STYLES[kind].badge : t.toUpperCase();
+    const text = t.toUpperCase();
     const fill = kind ? HW_STYLES[kind].badgeFill : '#eef1f4';
     const w = Math.max(24, Math.ceil(textW(text, BADGE_FONT) + text.length * .8 + 10));
     return { text, fill, w };
   });
+  const rows = [];
+  for (let i = 0; i < pills.length; i += 2) rows.push(pills.slice(i, i + 2));
+  return rows;
 }
+const pillRowW = row => row.reduce((a,p) => a + p.w, 0) + (row.length - 1) * PILL_GAP;
 function ipListOf(n){
   const v = n.ip ?? n.ips ?? n.addr;
   return v == null ? [] : (Array.isArray(v) ? v : [v]).map(String);
@@ -155,11 +161,11 @@ function nodeMetrics(n){
   const leftW = (glyph || type) ? Math.max(glyph ? 24 : 0, Math.ceil(capW)) : 0;
   const textX = 12 + leftW + (leftW ? 12 : 4);
   const kvW = kv.length ? Math.max(...kv.map(([k,v]) => textW(k + ': ' + v, IP_FONT))) : 0;
-  const pills = tagPills(n);
-  const pillsW = pills.reduce((a,p) => a + p.w + 4, 0) + (pills.length ? 9 : 0);   // 4 gap per pill, corner margin
+  const pillRows = tagPills(n);
+  const pillsW = pillRows.length ? Math.max(...pillRows.map(pillRowW)) + 13 : 0;   // widest row + corner margin
   const w = Math.max(120, Math.ceil(textX + Math.max(textW(label, NODE_FONT), kvW) + 16 + pillsW));
-  const h = Math.max(54, 32 + kv.length * 14);
-  return { label, type, kv, hw, pills, glyph, leftW, textX, w, h };
+  const h = Math.max(54, 32 + kv.length * 14, 12 + pillRows.length * PILL_ROW_H);
+  return { label, type, kv, hw, pillRows, glyph, leftW, textX, w, h };
 }
 
 /* group chrome layout — single source of truth for ELK padding (elkGroup) and
@@ -381,7 +387,7 @@ function renderSVG(spec, layout){
   for (const [id, b] of abs){
     if (b.isGroup) continue;
     const n = nodeMap.get(id); if (!n) continue;
-    const { label, type, kv, hw, pills, glyph, leftW, textX } = nodeMetrics(n);
+    const { label, type, kv, hw, pillRows, glyph, leftW, textX } = nodeMetrics(n);
     const iconX = b.x + 12 + (leftW - 24) / 2;
     const capX = b.x + 12 + leftW / 2;
     const tx = b.x + textX;
@@ -389,14 +395,17 @@ function renderSVG(spec, layout){
     const borderDash = hs?.dash ? ` stroke-dasharray="${hs.dash}"` : '';
     const inner = hs?.inner
       ? `<rect x="${b.x+3}" y="${b.y+3}" width="${b.w-6}" height="${b.h-6}" rx="4" fill="none" stroke="#24344d" stroke-width=".8"/>` : '';
-    // tag pills stack right-to-left from the corner (first tag outermost)
-    let badge = '', px = b.x + b.w - 7;
-    for (const p of pills){
-      px -= p.w;
-      badge += `<rect x="${px}" y="${b.y+6}" width="${p.w}" height="12" rx="6" fill="${p.fill}" stroke="#9aa7ba" stroke-width=".8"/>
-      <text x="${px+p.w/2}" y="${b.y+15}" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8" font-weight="700" letter-spacing=".8" fill="#5b6874">${esc(p.text)}</text>`;
-      px -= 4;
-    }
+    // tag pills: right-aligned block in the corner, up to two per row
+    let badge = '';
+    pillRows.forEach((row, r) => {
+      let px = b.x + b.w - 7 - pillRowW(row);
+      const py = b.y + 6 + r * PILL_ROW_H;
+      for (const p of row){
+        badge += `<rect x="${px}" y="${py}" width="${p.w}" height="${PILL_H}" rx="6" fill="${p.fill}" stroke="#9aa7ba" stroke-width=".8"/>
+      <text x="${px+p.w/2}" y="${py+9}" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8" font-weight="700" letter-spacing=".8" fill="#5b6874">${esc(p.text)}</text>`;
+        px += p.w + PILL_GAP;
+      }
+    });
     const kvText = kv.map(([k,v],i) =>
       `<text x="${tx}" y="${b.y + 38 + i*14}" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#7a8798">${esc(k)}: </tspan><tspan fill="#3f5e8c">${esc(v)}</tspan></text>`
     ).join('');

@@ -59,11 +59,11 @@ nodes:
     icon: str              # explicit glyph override
     ip: str | ips: [str]   # rendered one per line as "ip: <value>"
     os: str                # free-form; rendered as "os: <value>"
-    tags: [str] | str      # pills in the top-right corner. Platform tags
+    tags: [str] | str      # pills in the top-right corner showing the tag text,
+                           # max two per row (wraps below). Platform tags
                            # (vm|metal|container + aliases in HW_KINDS) tint the
-                           # pill VM/BM/CT, set the border style, and pick the
-                           # glyph when type/icon are omitted; other tags render
-                           # as neutral pills with their own text
+                           # pill, set the border style, and pick the glyph when
+                           # type/icon are omitted
     <any-scalar-key>: val  # unknown scalar keys render as "key: value" lines
 groups:
   - id, label, class: zone|vlan|subnet|cloud|onprem|trust, cidr,
@@ -126,10 +126,10 @@ autocomplete in sync when the format changes.
 - Validation philosophy: `parseSpec` collects **all** errors (with ids and
   indices) and throws once — don't fail fast on the first problem.
 - Visual conventions: platform tags — VM = dashed border, bare metal = double
-  border, container = fine-dotted border, plus a tinted VM/BM/CT pill
-  (HW_STYLES); other tags = neutral pills (tagPills). Trust boundaries = red
-  dashed group border. Dedicated device glyphs exist for vm / container /
-  metal types (GLYPHS).
+  border, container = fine-dotted border, plus a tinted pill (HW_STYLES);
+  other tags = neutral pills. Pills show the tag text, two per row (tagPills).
+  Trust boundaries = red dashed group border. Dedicated device glyphs exist
+  for vm / container / metal types (GLYPHS).
 - After changing rendering or layout, eyeball the example: render
   `examples/hq-edge-core.yaml` and check labels don't collide (there is no
   automated visual regression test).

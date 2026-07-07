@@ -68,7 +68,7 @@ live validation; the right pane renders as you type.
 | `icon` | explicit glyph override |
 | `ip` / `ips` | one or many; rendered one per line |
 | `os` | free-form (`linux`, `windows`, `bsd`, …) |
-| `tags` | list (or single string), shown as pills top-right. Platform tags `vm` (dashed border), `metal` (double border), `container` (dotted border) get a tinted VM/BM/CT pill and set the border; any other tag is a neutral pill |
+| `tags` | list (or single string), shown as pills top-right (tag text, two per row). Platform tags `vm` (dashed border), `metal` (double border), `container` (dotted border) get a tinted pill and set the border; any other tag is a neutral pill |
 | *anything else* | unknown scalar keys render as `key: value` lines |
 
 ### `groups[]`

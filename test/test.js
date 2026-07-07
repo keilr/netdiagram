@@ -54,11 +54,18 @@ test("nodes render kv lines (os/ip one per line) and type caption", () => {
   assert.ok(svg.includes(">FIREWALL</text>"), "type caption under icon");
 });
 
-test("tags: platform pills, custom pills and border styles", () => {
-  for (const b of ["VM", "BM", "CT"]) assert.ok(svg.includes(`>${b}</text>`), b + " platform pill");
-  assert.ok(svg.includes(">PROD</text>"), "custom tag pill");
+test("tags render as pills with their own text; border styles", () => {
+  for (const t of ["VM", "METAL", "CONTAINER", "PROD"]) assert.ok(svg.includes(`>${t}</text>`), t + " pill");
   assert.ok(svg.includes('stroke-dasharray="5 3"'), "vm dashed border");
   assert.ok(svg.includes('stroke-dasharray="2 3"'), "container dotted border");
+});
+
+test("tags wrap to a new row after two pills", async () => {
+  const s = parseSpec("nodes:\n  - {id: a, tags: [vm, prod, pci]}");
+  const out = renderSVG(s, await elk.layout(buildElk(s)));
+  const ys = [...out.matchAll(/<rect x="[\d.-]+" y="([\d.-]+)" width="[\d.]+" height="12" rx="6"/g)].map(m => m[1]);
+  assert.strictEqual(ys.length, 3, "three pills drawn");
+  assert.strictEqual(new Set(ys).size, 2, "pills occupy two rows");
 });
 
 test("dedicated glyphs for vm/container/metal types, hw fallback when untyped", async () => {
