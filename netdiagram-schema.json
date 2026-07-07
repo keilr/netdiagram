@@ -57,7 +57,7 @@
         },
         "type": {
           "type": "string",
-          "description": "Device type — picks the glyph and shows as a badge. Canonical values and common aliases are accepted.",
+          "description": "Device type — picks the glyph and caption. Platform types vm/container/metal (and aliases like docker, baremetal) also set the border style: dashed / fine-dotted / double. Canonical values and common aliases are accepted.",
           "anyOf": [
             {
               "enum": [
@@ -111,7 +111,7 @@
           "description": "Operating system; rendered as 'os: <value>' on the node"
         },
         "tags": {
-          "description": "Tags shown as pills in the node's top-right corner (each pill shows the tag text, max two pills per row). Platform tags (vm/metal/container and aliases like docker, baremetal) get a tinted pill, set the border style, and pick the platform glyph when type/icon are omitted.",
+          "description": "Informational labels shown as neutral pills in the node's top-right corner (each pill shows the tag text, max two pills per row). Tags never affect styling — glyph and border style come from type/icon.",
           "oneOf": [
             { "type": ["string", "number"] },
             { "type": "array", "items": { "type": ["string", "number", "boolean"] }, "minItems": 1 }

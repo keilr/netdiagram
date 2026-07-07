@@ -80,44 +80,37 @@ const IP_FONT = '10.5px ui-monospace, Menlo, Consolas, monospace';
 
 function glyphFor(node){
   let key = (node.icon || node.type || '').toString().toLowerCase().trim();
-  if (!key){
-    // no type/icon: fall back to the platform tag's glyph (vm / container / metal)
-    const hw = hwOf(node);
-    key = hw === 'ct' ? 'container' : (hw || '');
-  }
   if (GLYPH_ALIASES[key]) key = GLYPH_ALIASES[key];
   return GLYPHS[key] || null;
 }
 
-const HW_KINDS = { vm:'vm', virtual:'vm', guest:'vm', metal:'metal', baremetal:'metal', 'bare-metal':'metal', bm:'metal', physical:'metal', container:'ct', ct:'ct', docker:'ct', pod:'ct', lxc:'ct', oci:'ct' };
 /* VM = dashed border, bare metal = double border (inner rect), container = fine-dotted;
- * badgeFill tints the platform tag's pill */
+ * keyed by the platform kind derived from type/icon (see hwOf) */
 const HW_STYLES = {
-  vm:    { dash:'5 3', badgeFill:'#eef2ff' },
-  metal: { inner:true, badgeFill:'#f1f5f9' },
-  ct:    { dash:'2 3', badgeFill:'#fef3c7' }
+  vm:    { dash:'5 3' },
+  metal: { inner:true },
+  ct:    { dash:'2 3' }
 };
 function tagsOf(n){
   const v = n.tags;
   return v == null ? [] : (Array.isArray(v) ? v : [v]).map(String);
 }
-/* first platform tag (vm/metal/container + aliases) drives border style + glyph fallback */
+/* platform kind (vm | metal | ct) derived from the node's type/icon — the
+ * platform types and their aliases fully determine the node's styling */
 function hwOf(n){
-  for (const t of tagsOf(n)){ const k = HW_KINDS[t.toLowerCase()]; if (k) return k; }
-  return null;
+  let key = (n.icon || n.type || '').toString().toLowerCase().trim();
+  if (GLYPH_ALIASES[key]) key = GLYPH_ALIASES[key];
+  return { vm:'vm', metal:'metal', container:'ct' }[key] || null;
 }
 const BADGE_FONT = '700 8px ui-monospace, Menlo, Consolas, monospace';
-/* every tag renders as a pill in the node's top-right corner, showing its own
- * text (uppercased); platform tags get a tinted fill, others a neutral one.
- * Pills are arranged max two per row, wrapping to further rows. */
+/* tags are informational only: neutral pills in the node's top-right corner
+ * showing the tag text (uppercased), max two per row, wrapping below */
 const PILL_H = 12, PILL_GAP = 4, PILL_ROW_H = 16;
 function tagPills(n){
   const pills = tagsOf(n).map(t => {
-    const kind = HW_KINDS[t.toLowerCase()];
     const text = t.toUpperCase();
-    const fill = kind ? HW_STYLES[kind].badgeFill : '#eef1f4';
     const w = Math.max(24, Math.ceil(textW(text, BADGE_FONT) + text.length * .8 + 10));
-    return { text, fill, w };
+    return { text, w };
   });
   const rows = [];
   for (let i = 0; i < pills.length; i += 2) rows.push(pills.slice(i, i + 2));
@@ -401,7 +394,7 @@ function renderSVG(spec, layout){
       let px = b.x + b.w - 7 - pillRowW(row);
       const py = b.y + 6 + r * PILL_ROW_H;
       for (const p of row){
-        badge += `<rect x="${px}" y="${py}" width="${p.w}" height="${PILL_H}" rx="6" fill="${p.fill}" stroke="#9aa7ba" stroke-width=".8"/>
+        badge += `<rect x="${px}" y="${py}" width="${p.w}" height="${PILL_H}" rx="6" fill="#eef1f4" stroke="#9aa7ba" stroke-width=".8"/>
       <text x="${px+p.w/2}" y="${py+9}" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8" font-weight="700" letter-spacing=".8" fill="#5b6874">${esc(p.text)}</text>`;
         px += p.w + PILL_GAP;
       }

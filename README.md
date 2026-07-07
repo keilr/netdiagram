@@ -17,13 +17,12 @@ nodes:
     type: firewall
     ip: 203.0.113.1
     os: bsd
-    tags: [metal]
   - id: web1
     label: web-01
     type: server
     ip: 10.0.10.11
     os: linux
-    tags: [vm, prod]
+    tags: [prod]
 
 groups:
   - id: dmz
@@ -64,11 +63,11 @@ live validation; the right pane renders as you type.
 |---|---|
 | `id` | required, unique across nodes and groups |
 | `label` | display name (defaults to id) |
-| `type` | glyph + caption: `router` `switch` `firewall` `server` `db` `lb` `cloud` `internet` `user` `wifi` `siem` `storage` `vm` `container` `metal` (aliases like `waf`, `gw`, `docker`, `nas` work) |
+| `type` | glyph + caption: `router` `switch` `firewall` `server` `db` `lb` `cloud` `internet` `user` `wifi` `siem` `storage` `vm` `container` `metal` (aliases like `waf`, `gw`, `docker`, `nas` work). The platform types `vm` / `container` / `metal` also set the border style: dashed / fine-dotted / double |
 | `icon` | explicit glyph override |
 | `ip` / `ips` | one or many; rendered one per line |
 | `os` | free-form (`linux`, `windows`, `bsd`, …) |
-| `tags` | list (or single string), shown as pills top-right (tag text, two per row). Platform tags `vm` (dashed border), `metal` (double border), `container` (dotted border) get a tinted pill and set the border; any other tag is a neutral pill |
+| `tags` | informational labels — list (or single string), shown as neutral pills top-right (tag text, two per row). Tags never affect styling |
 | *anything else* | unknown scalar keys render as `key: value` lines |
 
 ### `groups[]`

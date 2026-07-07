@@ -1,10 +1,10 @@
 # netdiagram — describe the network, get a schematic.
 # diagram: options title + direction control rendering;
 #          any other scalar key is an attribute shown in the title block
-# nodes:  id, label, type/icon, ip|ips, os, tags: [..] shown as pills
-#         platform tags vm|metal|container set border style + colored pill,
-#         and pick the platform glyph when type/icon are omitted;
-#         types vm|container|metal draw the platform glyphs directly
+# nodes:  id, label, type/icon, ip|ips, os, tags: [..]
+#         platform types vm|metal|container (+ aliases like docker, baremetal)
+#         draw the platform glyph AND set the border style (dashed/double/dotted)
+#         tags are informational: neutral pills top-right, two per row
 #         any other scalar key is rendered as "key: value" on the node
 # groups: class: zone|vlan|subnet|cloud|onprem|trust, cidr
 #         any other scalar key is rendered "key: value" bottom-right in the group
@@ -27,45 +27,40 @@ nodes:
     type: firewall
     ip: 203.0.113.1
     os: bsd
-    tags: [metal]
+    tags: [ha]
   - id: fw2
     label: Edge FW B
     type: firewall
     ip: 203.0.113.2
     os: bsd
-    tags: [metal]
+    tags: [ha]
   - id: waf
     label: WAF
     type: lb
-    tags: [vm]
   - id: web1
     label: web-01
     type: server
     ip: 10.0.10.11
     os: linux
-    tags: [vm]
   - id: core
     label: Core Switch
     type: switch
-    tags: [metal]
   - id: app1
     label: app-01
-    type: vm            # platform glyph: virtual machine
+    type: vm            # platform type: VM glyph + dashed border
     ip: 10.0.20.11
     os: linux
-    tags: [vm]
   - id: api1
     label: api-01
-    type: container     # platform glyph: container
+    type: container     # platform type: container glyph + dotted border
     ip: 10.0.20.12
     os: linux
-    tags: [container, prod]   # multiple tags: platform pill + custom pill
+    tags: [prod, pci]   # informational pills, two per row
   - id: db1
     label: pg-primary
     type: db
     ips: [10.0.20.21, 10.0.99.21]
     os: linux
-    tags: [metal]
   - id: mgmt
     label: Mgmt Station
     type: user

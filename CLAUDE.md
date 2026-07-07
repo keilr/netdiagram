@@ -55,15 +55,16 @@ nodes:
     label: str
     type: str              # picks glyph: router switch firewall server db lb
                            # cloud internet user wifi siem storage vm container
-                           # metal (+aliases)
+                           # metal (+aliases). Platform types vm|container|metal
+                           # also set the border style: dashed / fine-dotted /
+                           # double (see hwOf + HW_STYLES)
     icon: str              # explicit glyph override
     ip: str | ips: [str]   # rendered one per line as "ip: <value>"
     os: str                # free-form; rendered as "os: <value>"
-    tags: [str] | str      # pills in the top-right corner showing the tag text,
-                           # max two per row (wraps below). Platform tags
-                           # (vm|metal|container + aliases in HW_KINDS) tint the
-                           # pill, set the border style, and pick the glyph when
-                           # type/icon are omitted
+    tags: [str] | str      # informational only: neutral pills in the top-right
+                           # corner showing the tag text, max two per row
+                           # (wraps below). Tags never affect styling — glyph
+                           # and border come from type/icon
     <any-scalar-key>: val  # unknown scalar keys render as "key: value" lines
 groups:
   - id, label, class: zone|vlan|subnet|cloud|onprem|trust, cidr,
@@ -125,11 +126,11 @@ autocomplete in sync when the format changes.
   access without a guard, so tests run in plain node.
 - Validation philosophy: `parseSpec` collects **all** errors (with ids and
   indices) and throws once — don't fail fast on the first problem.
-- Visual conventions: platform tags — VM = dashed border, bare metal = double
-  border, container = fine-dotted border, plus a tinted pill (HW_STYLES);
-  other tags = neutral pills. Pills show the tag text, two per row (tagPills).
-  Trust boundaries = red dashed group border. Dedicated device glyphs exist
-  for vm / container / metal types (GLYPHS).
+- Visual conventions: platform *types* (vm / container / metal + aliases) draw
+  the platform glyph AND set the border style — VM = dashed, bare metal =
+  double, container = fine-dotted (hwOf + HW_STYLES). Tags are informational
+  neutral pills, two per row (tagPills), never styling. Trust boundaries =
+  red dashed group border.
 - After changing rendering or layout, eyeball the example: render
   `examples/hq-edge-core.yaml` and check labels don't collide (there is no
   automated visual regression test).
