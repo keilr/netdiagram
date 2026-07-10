@@ -32,7 +32,6 @@
   }
   header h1{font-size:13px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:#8fa3bf}
   header h1 b{color:#e8eef6;font-weight:700}
-  header .spacer{flex:1}
   button{
     font:inherit;font-size:12px;padding:6px 14px;cursor:pointer;
     background:transparent;color:#aebbcc;border:1px solid #3a4556;border-radius:4px;
@@ -52,6 +51,8 @@
   .picker-label{font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:#7d8da3;white-space:nowrap;cursor:pointer}
   #sel-example,#sel-project{max-width:190px}
   #btn-save.dirty{border-color:var(--accent);color:#f0c088}
+  /* diagram outputs: kept together and pushed to the right, even when wrapped */
+  .hdr-actions{display:flex;align-items:center;gap:14px;margin-left:auto}
   main{flex:1;display:flex;min-height:0}
   #editor-pane{
     width:var(--editor-w,38%);min-width:220px;display:flex;flex-direction:column;
@@ -123,7 +124,6 @@
 <body>
 <header>
   <h1><b>netdiagram</b> · yaml → schematic</h1>
-  <div class="spacer"></div>
   <div class="picker" id="project-picker">
     <label class="picker-label" for="sel-project">Project</label>
     <select id="sel-project" title="Open or switch between projects saved in this browser"></select>
@@ -137,8 +137,10 @@
             title="Loads the selected example into the editor (replaces the current contents)"></select>
   </div>
   <button id="btn-example">Reset</button>
-  <button id="btn-pdf" title="Open the print dialog to save as PDF">Export PDF</button>
-  <button id="btn-download" class="primary">Download SVG</button>
+  <div class="hdr-actions">
+    <button id="btn-pdf" title="Open the print dialog to save as PDF">Export PDF</button>
+    <button id="btn-download" class="primary">Download SVG</button>
+  </div>
 </header>
 <main>
   <div id="editor-pane">
