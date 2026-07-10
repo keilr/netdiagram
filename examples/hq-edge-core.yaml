@@ -37,7 +37,7 @@ nodes:
     tags: [ha]
   - id: waf
     label: WAF
-    type: lb
+    type: waf
   - id: web1
     label: web-01
     type: server
@@ -100,20 +100,21 @@ groups:
     nodes: [siem]
 
 connections:
-  - {from: inet,  to: fw1,  label: HTTPS,   protocol: tcp,  port: 443}
-  - {from: inet,  to: fw2,  label: HTTPS,   protocol: tcp,  port: 443}
-  - {from: fw1,   to: fw2,  label: vrrp,    protocol: vrrp, direction: both}
-  - {from: fw1,   to: waf,                  protocol: tcp,  port: 443}
-  - {from: waf,   to: web1,                 protocol: tcp,  port: 8443}
-  - {from: fw1,   to: core,                 protocol: any}
-  - {from: fw2,   to: core,                 protocol: any}
-  - {from: core,  to: app1,                 protocol: tcp,  port: 8080}
-  - {from: core,  to: api1,                 protocol: tcp,  port: 8080}
-  - {from: web1,  to: app1,                 protocol: tcp,  port: 8443}
-  - {from: app1,  to: db1,  label: pgsql,   protocol: tcp,  port: 5432, direction: both}
-  - {from: api1,  to: db1,  label: pgsql,   protocol: tcp,  port: 5432}
-  - {from: oob,   to: lan,  label: ssh,     protocol: tcp,  port: 22}
-  - {from: oob,   to: fw1,  label: ssh,     protocol: tcp,  port: 22}
-  - {from: dmz,   to: siem, label: syslog,  protocol: udp,  port: 514}
-  - {from: lan,   to: siem, label: syslog,  protocol: udp,  port: 514}
-  - {from: web1,  to: db1,  label: blocked, direction: none}
+  # edge labels follow "<proto>/<port> <context>"; any/vrrp/deny flows keep a plain note
+  - {from: inet,  to: fw1,  label: "tcp/443 https",   protocol: tcp,  port: 443}
+  - {from: inet,  to: fw2,  label: "tcp/443 https",   protocol: tcp,  port: 443}
+  - {from: fw1,   to: fw2,  label: "vrrp ha",         protocol: vrrp, direction: both}
+  - {from: fw1,   to: waf,  label: "tcp/443 https",   protocol: tcp,  port: 443}
+  - {from: waf,   to: web1, label: "tcp/8443 https",  protocol: tcp,  port: 8443}
+  - {from: fw1,   to: core,                           protocol: any}
+  - {from: fw2,   to: core,                           protocol: any}
+  - {from: core,  to: app1, label: "tcp/8080 app",    protocol: tcp,  port: 8080}
+  - {from: core,  to: api1, label: "tcp/8080 api",    protocol: tcp,  port: 8080}
+  - {from: web1,  to: app1, label: "tcp/8443 app",    protocol: tcp,  port: 8443}
+  - {from: app1,  to: db1,  label: "tcp/5432 pgsql",  protocol: tcp,  port: 5432, direction: both}
+  - {from: api1,  to: db1,  label: "tcp/5432 pgsql",  protocol: tcp,  port: 5432}
+  - {from: oob,   to: lan,  label: "tcp/22 ssh",      protocol: tcp,  port: 22}
+  - {from: oob,   to: fw1,  label: "tcp/22 ssh",      protocol: tcp,  port: 22}
+  - {from: dmz,   to: siem, label: "udp/514 syslog",  protocol: udp,  port: 514}
+  - {from: lan,   to: siem, label: "udp/514 syslog",  protocol: udp,  port: 514}
+  - {from: web1,  to: db1,  label: "blocked",         direction: none}

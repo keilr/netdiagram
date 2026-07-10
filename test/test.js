@@ -95,11 +95,27 @@ test("platform types draw dedicated glyphs and set border style; tags do not", a
     "dotted border only on the container-typed node");
 });
 
+test("waf and gpu draw their own glyphs with the default border", async () => {
+  const s = parseSpec([
+    "nodes:",
+    "  - {id: w, type: waf}",
+    "  - {id: g, type: gpu}",
+    "  - {id: a, type: accelerator}",   // alias -> gpu
+  ].join("\n"));
+  const out = renderSVG(s, await elk.layout(buildElk(s)));
+  assert.ok(out.includes('M10.5 9.5 8.5 12'), "waf shield glyph drawn");
+  assert.ok(!out.includes('M3 9.3h18'), "waf no longer falls back to the firewall glyph");
+  assert.strictEqual([...out.matchAll(/<circle cx="8" cy="12" r="3\.2"/g)].length, 2,
+    "gpu card glyph for type gpu and the accelerator alias");
+  assert.strictEqual([...out.matchAll(/stroke-dasharray/g)].length, 0,
+    "waf and gpu keep the default solid border (no platform styling)");
+});
+
 test("equal labels share a color; distinct labels differ", () => {
   const hexFor = lbl =>
     [...svg.matchAll(new RegExp('fill="(#[0-9a-f]{6})"[^>]*>' + lbl + "</text>", "g"))]
       .map(m => m[1]);
-  const hssh = hexFor("ssh"), hsyslog = hexFor("syslog");
+  const hssh = hexFor("tcp/22 ssh"), hsyslog = hexFor("udp/514 syslog");
   assert.strictEqual(hssh.length, 2, "two ssh labels");
   assert.strictEqual(hssh[0], hssh[1], "ssh labels share color");
   assert.strictEqual(hsyslog.length, 2, "two syslog labels");
@@ -220,6 +236,38 @@ test("dist/netdiagram.html boots and renders in jsdom", async () => {
   assert.strictEqual(+rendered.getAttribute("width"), Math.round(w0 * 1.25), "zoom in scales the svg");
   dom.window.document.querySelector("#zoom-pct").click();
   assert.strictEqual(+rendered.getAttribute("width"), w0, "reset returns to natural size");
+});
+
+test("projects persist: draft restored on reload, Save writes a named project", async () => {
+  const { JSDOM } = require("jsdom");
+  const html = fs.readFileSync(path.join(root, "dist/netdiagram.html"), "utf8");
+  const DRAFT = "diagram:\n  title: Restored Draft\n  direction: down\nnodes:\n  - {id: solo, label: Solo, type: server}\n";
+  // a real origin enables localStorage; preseed a draft to simulate a prior session
+  const dom = new JSDOM(html, {
+    runScripts: "dangerously", pretendToBeVisual: true, url: "https://netdiagram.test/",
+    beforeParse(window) { try { window.localStorage.setItem("netdiagram:v1:draft", DRAFT); } catch (e) {} },
+  });
+  const win = dom.window, doc = win.document;
+  win.prompt = () => "my project";            // name supplied to Save
+  const errs = [];
+  win.addEventListener("error", (e) => errs.push(e.message));
+  const statusEl = doc.querySelector("#status");
+  const deadline = Date.now() + 5000;
+  while (Date.now() < deadline && !errs.length
+         && !/^OK/.test(statusEl.textContent) && !statusEl.classList.contains("error"))
+    await new Promise((r) => setTimeout(r, 100));
+  assert.deepStrictEqual(errs, [], "no page errors");
+  // the autosaved draft is restored on load (1-node spec), not the default example
+  assert.ok(/^OK — 1 nodes/.test(statusEl.textContent), "restored draft rendered, got: " + statusEl.textContent);
+  assert.ok(doc.querySelector("#canvas-pane svg").outerHTML.includes("Solo"), "draft node drawn");
+  assert.ok(!doc.querySelector("#project-picker").hidden, "project UI is live when storage works");
+  // Save persists the current buffer as a named project
+  doc.querySelector("#btn-save").click();
+  const projects = JSON.parse(win.localStorage.getItem("netdiagram:v1:projects") || "{}");
+  assert.ok(projects["my project"], "named project saved to localStorage");
+  assert.strictEqual(projects["my project"].yaml, DRAFT, "saved project holds the current buffer");
+  assert.strictEqual(win.localStorage.getItem("netdiagram:v1:active"), "my project", "saved project becomes active");
+  assert.ok(!doc.querySelector("#btn-del").hidden, "delete is offered for the active project");
 });
 
 // ---------- runner ----------

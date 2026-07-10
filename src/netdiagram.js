@@ -28,6 +28,7 @@ const GLYPHS = {
   router: `<circle cx="12" cy="12" r="10"/><path d="M7 9h7m0 0-2.4-2.4M14 9l-2.4 2.4M17 15h-7m0 0 2.4-2.4M10 15l2.4 2.4"/>`,
   switch: `<rect x="2" y="7" width="20" height="10" rx="1.5"/><path d="M6 10.5h6m0 0-2-2m2 2-2 2M18 13.5h-6m0 0 2-2m-2 2 2 2"/>`,
   firewall:`<rect x="3" y="4" width="18" height="16" rx="1"/><path d="M3 9.3h18M3 14.6h18M9 4v5.3M15 4v5.3M6 9.3v5.3M12 9.3v5.3M18 9.3v5.3M9 14.6V20M15 14.6V20"/>`,
+  waf:    `<path d="M12 2.5 19 5v6c0 4.5-3 8-7 9.5-4-1.5-7-5-7-9.5V5z"/><path d="M10.5 9.5 8.5 12l2 2.5M13.5 9.5 15.5 12l-2 2.5"/>`,
   server: `<rect x="5" y="3" width="14" height="18" rx="1.5"/><path d="M5 9h14M5 15h14"/><circle cx="8.2" cy="6" r=".9" fill="currentColor" stroke="none"/><circle cx="8.2" cy="12" r=".9" fill="currentColor" stroke="none"/><circle cx="8.2" cy="18" r=".9" fill="currentColor" stroke="none"/>`,
   db:     `<ellipse cx="12" cy="5.5" rx="8" ry="3"/><path d="M4 5.5v13c0 1.66 3.58 3 8 3s8-1.34 8-3v-13M4 12c0 1.66 3.58 3 8 3s8-1.34 8-3"/>`,
   lb:     `<rect x="9" y="2.5" width="6" height="5" rx="1"/><rect x="2" y="16.5" width="5" height="5" rx="1"/><rect x="9.5" y="16.5" width="5" height="5" rx="1"/><rect x="17" y="16.5" width="5" height="5" rx="1"/><path d="M12 7.5v4m0 0L4.5 16.5M12 11.5v5m0-5 7.5 5"/>`,
@@ -39,10 +40,11 @@ const GLYPHS = {
   storage:`<rect x="3" y="5" width="18" height="6" rx="1"/><rect x="3" y="13" width="18" height="6" rx="1"/><circle cx="7" cy="8" r=".9" fill="currentColor" stroke="none"/><circle cx="7" cy="16" r=".9" fill="currentColor" stroke="none"/>`,
   vm:     `<rect x="3" y="8" width="13" height="13" rx="1.5"/><path d="M8 8V5.5A1.5 1.5 0 0 1 9.5 4h9A1.5 1.5 0 0 1 20 5.5v9a1.5 1.5 0 0 1-1.5 1.5H16"/>`,
   container:`<rect x="2" y="7" width="20" height="11" rx="1.5"/><path d="M6.5 10v5M12 10v5M17.5 10v5"/>`,
-  metal:  `<rect x="6" y="6" width="12" height="12" rx="1"/><rect x="10" y="10" width="4" height="4"/><path d="M9.5 6V3M14.5 6V3M9.5 21v-3M14.5 21v-3M6 9.5H3M6 14.5H3M21 9.5h-3M21 14.5h-3"/>`
+  metal:  `<rect x="6" y="6" width="12" height="12" rx="1"/><rect x="10" y="10" width="4" height="4"/><path d="M9.5 6V3M14.5 6V3M9.5 21v-3M14.5 21v-3M6 9.5H3M6 14.5H3M21 9.5h-3M21 14.5h-3"/>`,
+  gpu:    `<rect x="2" y="6.5" width="20" height="11" rx="1.5"/><circle cx="8" cy="12" r="3.2"/><path d="M8 8.8v6.4M4.8 12h6.4"/><path d="M14 10h4.5M14 12.3h4.5M14 14.6h4.5"/><path d="M6.5 17.5v2.6M11 17.5v2.6"/>`
 };
 const GLYPH_ALIASES = {
-  fw:'firewall', waf:'firewall', ips:'firewall',
+  fw:'firewall', ips:'firewall',
   rtr:'router', gateway:'router', gw:'router',
   sw:'switch', l2:'switch', l3:'switch',
   host:'server', app:'server', web:'server',
@@ -58,7 +60,10 @@ const GLYPH_ALIASES = {
   /* "server" means a physical machine -> bare metal (rack glyph stays available via host/app/web) */
   server:'metal', baremetal:'metal', 'bare-metal':'metal', 'bare metal':'metal',
   bm:'metal', physical:'metal', 'physical server':'metal', 'physical-server':'metal',
-  physicalserver:'metal', dedicated:'metal', 'dedicated server':'metal'
+  physicalserver:'metal', dedicated:'metal', 'dedicated server':'metal',
+  /* GPU / accelerator hosts (own glyph, no platform border) */
+  'gpu-host':'gpu', gpuhost:'gpu', gpuserver:'gpu', 'gpu-server':'gpu',
+  accelerator:'gpu', cuda:'gpu'
 };
 
 /* ---------------- helpers ---------------- */

@@ -57,7 +57,7 @@
         },
         "type": {
           "type": "string",
-          "description": "Device type — picks the glyph and caption. Platform types vm/container/metal (and aliases like docker, baremetal, server, 'physical server', dedicated) also set the border style: dashed / fine-dotted / double. 'server' means a physical machine and maps to metal; the rack-server glyph is available via host/app/web. Canonical values and common aliases are accepted.",
+          "description": "Device type — picks the glyph and caption. Platform types vm/container/metal (and aliases like docker, baremetal, server, 'physical server', dedicated) also set the border style: dashed / fine-dotted / double. 'server' means a physical machine and maps to metal; the rack-server glyph is available via host/app/web. 'waf' draws a dedicated shield glyph; 'gpu' (aliases gpu-host, accelerator, cuda) draws a GPU-card glyph with the default border. Canonical values and common aliases are accepted.",
           "anyOf": [
             {
               "enum": [
@@ -77,7 +77,8 @@
                 "container", "ct", "docker", "pod", "lxc", "oci",
                 "metal", "baremetal", "bare-metal", "bare metal", "bm",
                 "physical", "physical server", "physical-server", "physicalserver",
-                "dedicated", "dedicated server"
+                "dedicated", "dedicated server",
+                "gpu", "gpu-host", "gpuhost", "gpu-server", "gpuserver", "accelerator", "cuda"
               ]
             },
             { "type": "string" }

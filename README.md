@@ -32,14 +32,15 @@ groups:
     nodes: [web1]
 
 connections:
-  - {from: fw1, to: web1, label: https,  protocol: tcp, port: 443}
-  - {from: dmz, to: fw1,  label: syslog, protocol: udp, port: 514}
+  - {from: fw1, to: web1, label: "tcp/443 https",  protocol: tcp, port: 443}
+  - {from: dmz, to: fw1,  label: "udp/514 syslog", protocol: udp, port: 514}
 ```
 
 …and get a graph-paper schematic with drawn device glyphs, tinted zone
 boundaries, color-coded connections, and a drafting title block — plus a
 firewall-rule table derived from the connections. Export as SVG with one
-click.
+click, or **Export PDF** (opens the browser print dialog — the diagram stays
+vector, and page orientation follows the diagram's aspect).
 
 ## Quick start
 
@@ -52,6 +53,13 @@ Open `dist/netdiagram.html` in a browser. The left pane is a YAML editor with
 live validation and schema-aware autocomplete — keys, enum values (`type: f…`
 → `firewall`), and node/group ids for connection endpoints; the right pane
 renders as you type.
+
+Your work is kept in the browser: the editor buffer is autosaved and restored
+on reload, and you can **Save** (or <kbd>Ctrl/Cmd-S</kbd>) the current YAML as a
+named **project** to switch between later. Projects live in the browser's local
+storage — nothing leaves your machine, and there's no server. (If the browser
+blocks local storage for the page, the project controls hide themselves and the
+editor still works from examples.)
 
 ### Prefer your own editor? (VS Code)
 
@@ -90,7 +98,7 @@ spec files outside this repo, put a modeline on the first line instead:
 |---|---|
 | `id` | required, unique across nodes and groups |
 | `label` | display name (defaults to id) |
-| `type` | glyph + caption: `router` `switch` `firewall` `db` `lb` `cloud` `internet` `user` `wifi` `siem` `storage` `vm` `container` `metal` (aliases like `waf`, `gw`, `docker`, `nas` work; the rack-server glyph is `host` / `app` / `web`). Platform types `vm` / `container` / `metal` also set the border style: dashed / fine-dotted / double. `server`, `physical [server]`, `dedicated`, `baremetal` are aliases of `metal` |
+| `type` | glyph + caption: `router` `switch` `firewall` `waf` `db` `lb` `cloud` `internet` `user` `wifi` `siem` `storage` `vm` `container` `metal` `gpu` (aliases like `gw`, `docker`, `nas`, and `gpu-host` / `accelerator` / `cuda` work; the rack-server glyph is `host` / `app` / `web`). Platform types `vm` / `container` / `metal` also set the border style: dashed / fine-dotted / double. `server`, `physical [server]`, `dedicated`, `baremetal` are aliases of `metal` |
 | `icon` | explicit glyph override — visual only, border styling follows `type` (e.g. `type: metal, icon: db`) |
 | `ip` / `ips` | one or many; rendered one per line |
 | `os` | free-form (`linux`, `windows`, `bsd`, …) |

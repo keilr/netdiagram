@@ -248,6 +248,8 @@ canvasEl.addEventListener('click', e => {
 const editor = makeEditor($('#editor'), SCHEMA, text => {
   clearTimeout(timer);
   timer = setTimeout(() => render(text), 350);
+  saveDraft(text);     // autosave the live buffer so a reload restores it
+  updateDirty();       // reflect unsaved changes vs the active project
 });
 
 /* example picker: choosing an entry loads it; Reset reloads the current choice */
@@ -259,9 +261,11 @@ EXAMPLES.forEach((ex, i)=>{
 });
 function loadExample(){
   const yaml = EXAMPLES[exampleSel.value].yaml;
+  setActive('');            // an example is a fresh, unsaved draft
   editor.setValue(yaml);
   clearTimeout(timer);
   render(yaml);
+  refreshProjects();
 }
 exampleSel.addEventListener('change', loadExample);
 $('#btn-example').addEventListener('click', loadExample);
@@ -280,6 +284,166 @@ $('#btn-download').addEventListener('click', ()=>{
   a.download = (t ? String(t).toLowerCase().replace(/[^a-z0-9]+/g,'-') : 'network-diagram') + '.svg';
   a.click(); URL.revokeObjectURL(a.href);
 });
+
+/* Export PDF — print a page holding just the diagram; the browser's print
+ * dialog does the SVG->PDF conversion (stays vector, no extra libraries).
+ * A hidden iframe avoids popup blockers; @page orientation follows the aspect. */
+$('#btn-pdf').addEventListener('click', ()=>{
+  const svg = canvasEl.querySelector('svg'); if (!svg) return;
+  const clone = svg.cloneNode(true);        // print at natural size, zoom-free
+  if (svg.dataset.w){
+    clone.setAttribute('width', svg.dataset.w);
+    clone.setAttribute('height', svg.dataset.h);
+  }
+  delete clone.dataset.w; delete clone.dataset.h;
+  const landscape = (+clone.getAttribute('width') || 1) >= (+clone.getAttribute('height') || 1);
+  const title = esc(String(lastSpec?.doc.diagram?.title || 'network diagram'));
+  const frame = document.createElement('iframe');
+  frame.setAttribute('aria-hidden', 'true');
+  frame.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0';
+  document.body.appendChild(frame);
+  const d = frame.contentDocument;
+  d.open();
+  d.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${title}</title>`
+    + `<style>@page{size:${landscape?'landscape':'portrait'};margin:8mm}`
+    + `html,body{margin:0;padding:0;height:100%}`
+    + `body{display:flex;align-items:center;justify-content:center}`
+    + `svg{max-width:100%;max-height:100%}</style></head>`
+    + `<body>${clone.outerHTML}</body></html>`);
+  d.close();
+  const win = frame.contentWindow;
+  const go = ()=>{ win.focus(); win.print(); setTimeout(()=>frame.remove(), 1000); };
+  if (d.readyState === 'complete') go(); else win.onload = go;
+});
 window.addEventListener('error', e=>{ statusEl.className='error'; statusEl.textContent = 'Runtime: ' + e.message; });
 
-loadExample();
+/* ---------------- local projects (autosave + named projects) ----------------
+ * Everything lives in localStorage, which may be unavailable (private mode, or
+ * an opaque file:// origin in some engines). Every access is guarded; when it is
+ * missing the feature hides itself and the app still works from examples. */
+const LS = (() => {
+  try { const s = window.localStorage, k = '__nd_probe__';
+        s.setItem(k, '1'); s.removeItem(k); return s; }
+  catch (e) { return null; }
+})();
+const K_PROJECTS = 'netdiagram:v1:projects';   // { name: {yaml, updated} }
+const K_DRAFT    = 'netdiagram:v1:draft';      // live editor buffer
+const K_ACTIVE   = 'netdiagram:v1:active';     // name of the open project ('' = draft)
+const NEW_ITEM   = '\x00new';                  // sentinel option value
+
+const projectSel = $('#sel-project'), btnSave = $('#btn-save'), btnDel = $('#btn-del');
+
+function readProjects(){
+  if (!LS) return {};
+  try { return JSON.parse(LS.getItem(K_PROJECTS) || '{}') || {}; } catch(e){ return {}; }
+}
+function writeProjects(p){ if (LS) try { LS.setItem(K_PROJECTS, JSON.stringify(p)); } catch(e){} }
+function getActive(){ try { return (LS && LS.getItem(K_ACTIVE)) || ''; } catch(e){ return ''; } }
+function setActive(name){ if (LS) try { name ? LS.setItem(K_ACTIVE, name) : LS.removeItem(K_ACTIVE); } catch(e){} }
+function saveDraft(text){ if (LS) try { LS.setItem(K_DRAFT, text); } catch(e){} }
+function readDraft(){ try { return LS ? LS.getItem(K_DRAFT) : null; } catch(e){ return null; } }
+
+function updateDirty(){
+  const active = getActive(), projects = readProjects();
+  const dirty = !!active && projects[active] != null && projects[active].yaml !== editor.value;
+  btnSave.classList.toggle('dirty', dirty);
+  btnSave.textContent = dirty ? 'Save •' : 'Save';
+}
+function refreshProjects(){
+  const projects = readProjects();
+  const names = Object.keys(projects).sort((a,b)=>a.localeCompare(b));
+  const active = getActive();
+  projectSel.innerHTML = '';
+  const draft = document.createElement('option');
+  draft.value = ''; draft.textContent = names.length ? '— Draft —' : 'No saved projects';
+  projectSel.appendChild(draft);
+  for (const n of names){
+    const o = document.createElement('option'); o.value = n; o.textContent = n;
+    projectSel.appendChild(o);
+  }
+  const add = document.createElement('option');
+  add.value = NEW_ITEM; add.textContent = '＋ New project…';
+  projectSel.appendChild(add);
+  projectSel.value = (active && projects[active]) ? active : '';
+  btnDel.hidden = !projectSel.value;
+  updateDirty();
+}
+function suggestName(){
+  const m = /^\s*title:\s*(.+?)\s*$/m.exec(editor.value);
+  return m ? m[1].replace(/^["']|["']$/g, '') : 'my-network';
+}
+function saveProject(){
+  if (!LS){ statusEl.className='error'; statusEl.textContent='This browser has no local storage available — cannot save.'; return; }
+  let name = getActive();
+  if (!name){
+    name = (window.prompt('Save project as:', suggestName()) || '').trim();
+    if (!name || name === NEW_ITEM) return;
+    if (readProjects()[name] && !window.confirm(`A project named "${name}" already exists — overwrite it?`)) return;
+  }
+  const projects = readProjects();
+  projects[name] = { yaml: editor.value, updated: Date.now() };
+  writeProjects(projects); setActive(name); refreshProjects();
+  btnSave.textContent = 'Saved';
+  setTimeout(updateDirty, 1100);
+}
+function openProject(name){
+  const p = readProjects()[name]; if (!p) return;
+  setActive(name);
+  editor.setValue(p.yaml);         // fires onChange -> saveDraft + updateDirty
+  clearTimeout(timer); render(p.yaml);
+  refreshProjects();
+}
+function newProject(){
+  const STARTER = 'diagram:\n  title: New project\n  direction: down\n\nnodes:\n  - id: n1\n    label: node-1\n    type: server\n';
+  setActive('');
+  editor.setValue(STARTER);
+  clearTimeout(timer); render(STARTER);
+  refreshProjects();
+}
+function deleteProject(){
+  const name = getActive(); if (!name) return;
+  if (!window.confirm(`Delete project "${name}"? This cannot be undone.`)) return;
+  const projects = readProjects(); delete projects[name];
+  writeProjects(projects); setActive('');   // keep the buffer, now an untitled draft
+  refreshProjects();
+}
+const dirtyVsActive = () => {
+  const a = getActive(), p = readProjects();
+  return a && p[a] && p[a].yaml !== editor.value;
+};
+projectSel.addEventListener('change', () => {
+  const v = projectSel.value;
+  if (v === NEW_ITEM){
+    if (dirtyVsActive() && !window.confirm('Start a new project? Unsaved changes will be lost.')){
+      refreshProjects(); return;
+    }
+    newProject(); return;
+  }
+  if (v === ''){ setActive(''); refreshProjects(); return; }   // detach to draft
+  if (dirtyVsActive() && !window.confirm('Discard unsaved changes to the current project?')){
+    projectSel.value = getActive(); return;
+  }
+  openProject(v);
+});
+btnSave.addEventListener('click', saveProject);
+btnDel.addEventListener('click', deleteProject);
+window.addEventListener('keydown', e => {
+  if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 's'){
+    e.preventDefault(); saveProject();
+  }
+});
+
+if (!LS){
+  for (const el of [$('#project-picker'), btnSave, btnDel]) if (el) el.hidden = true;
+}
+
+/* initial load: restore the autosaved draft if present, else the default example */
+refreshProjects();
+const draft = readDraft();
+if (draft && draft.trim()){
+  editor.setValue(draft);
+  clearTimeout(timer); render(draft);
+  refreshProjects();
+} else {
+  loadExample();
+}

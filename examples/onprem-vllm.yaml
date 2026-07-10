@@ -1,0 +1,81 @@
+# On-prem LLM serving — Open-WebUI frontend over a vLLM GPU cluster.
+# Users reach a WAF-protected Open-WebUI chat frontend; the UI calls an
+# OpenAI-compatible inference router, which load-balances across GPU hosts
+# running vLLM. Model weights are pulled from an on-prem model store over NFS.
+# GPU hosts use the dedicated `gpu` glyph; the edge WAF uses the `waf` glyph.
+diagram:
+  title: On-prem LLM — vLLM + Open-WebUI
+  direction: down
+  owner: ml-platform
+  environment: on-prem
+
+nodes:
+  - id: users
+    label: Users
+    type: user
+  - id: waf
+    label: WAF
+    type: waf
+    ip: 10.30.0.10
+  - id: webui
+    label: Open-WebUI
+    type: container       # dockerized chat frontend — dotted border
+    ip: 10.30.10.11
+    os: linux
+  - id: pg
+    label: webui-db
+    type: container
+    icon: db              # containerized Postgres (chat history)
+    ip: 10.30.10.21
+    os: linux
+  - id: router
+    label: Inference Router
+    type: lb              # OpenAI-compatible gateway, fans out to vLLM replicas
+    ip: 10.30.20.9
+    os: linux
+  - id: vllm1
+    label: vllm-01
+    type: gpu             # GPU inference host — dedicated gpu glyph
+    ip: 10.30.20.11
+    os: linux
+    model: llama-3.1-70b
+    tags: [a100]
+  - id: vllm2
+    label: vllm-02
+    type: gpu
+    ip: 10.30.20.12
+    os: linux
+    model: llama-3.1-70b
+    tags: [a100]
+  - id: models
+    label: Model Store
+    type: storage         # NFS export holding model weights
+    ip: 10.30.20.30
+
+groups:
+  - id: edge
+    label: Edge
+    class: zone
+    cidr: 10.30.0.0/24
+    nodes: [waf]
+  - id: app
+    label: App tier
+    class: subnet
+    cidr: 10.30.10.0/24
+    nodes: [webui, pg]
+  - id: gpu
+    label: GPU cluster
+    class: trust
+    cidr: 10.30.20.0/24
+    nodes: [router, vllm1, vllm2, models]
+
+connections:
+  # edge labels follow "<proto>/<port> <context>"
+  - {from: users, to: waf,    label: "tcp/443 https",       protocol: tcp, port: 443}
+  - {from: waf,   to: webui,  label: "tcp/8080 http",       protocol: tcp, port: 8080}
+  - {from: webui, to: pg,     label: "tcp/5432 postgres",   protocol: tcp, port: 5432}
+  - {from: webui, to: router, label: "tcp/8000 openai-api", protocol: tcp, port: 8000}
+  - {from: router, to: vllm1, label: "tcp/8000 vllm",       protocol: tcp, port: 8000}
+  - {from: router, to: vllm2, label: "tcp/8000 vllm",       protocol: tcp, port: 8000}
+  - {from: vllm1, to: models, label: "tcp/2049 nfs",        protocol: tcp, port: 2049}
+  - {from: vllm2, to: models, label: "tcp/2049 nfs",        protocol: tcp, port: 2049}

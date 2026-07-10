@@ -1,0 +1,96 @@
+# Cisco ACI — Endpoint Groups (EPGs) and contracts.
+# In ACI, endpoints are grouped into EPGs, and EPGs may only talk through a
+# *contract*. Here one Tenant holds three EPGs (web / app / db) plus an L3Out
+# to the outside; each contract is drawn as a connection from the consumer to
+# the provider, labelled "<proto>/<port> <contract>". Group info boxes show
+# ACI attributes (subnet + gateway, vrf); each endpoint carries its VMM/physical
+# domain, and endpoint pills note the EPG.
+diagram:
+  title: ACI tenant — EPGs & contracts
+  direction: down
+  tenant: prod
+  fabric: aci-fab-1
+
+nodes:
+  - id: inet
+    label: Internet
+    type: internet
+  - id: border
+    label: Border Leaf (L3Out)
+    type: router
+    tags: [l3out]
+  - id: web1
+    label: web-01
+    type: container       # containerized web endpoint — dotted border
+    ip: 10.20.10.11
+    os: linux
+    domain: vmm-k8s       # VMM/physical domain the endpoint binds to
+    tags: [epg-web]
+  - id: web2
+    label: web-02
+    type: container
+    ip: 10.20.10.12
+    os: linux
+    domain: vmm-k8s
+    tags: [epg-web]
+  - id: app1
+    label: app-01
+    type: vm              # app endpoint on a VM — dashed border
+    ip: 10.20.20.11
+    os: linux
+    domain: vmm-vmware
+    tags: [epg-app]
+  - id: app2
+    label: app-02
+    type: vm
+    ip: 10.20.20.12
+    os: linux
+    domain: vmm-vmware
+    tags: [epg-app]
+  - id: db1
+    label: pg-primary
+    type: metal           # bare-metal database — double border; db glyph
+    icon: db
+    ips: [10.20.30.11]
+    os: linux
+    domain: phys-dom
+    tags: [epg-db]
+
+groups:
+  - id: tenant
+    label: Tenant · prod
+    class: onprem
+    groups:
+      - id: ext
+        label: L3Out · internet
+        class: cloud
+        scope: external
+        nodes: [border]
+      - id: epg-web
+        label: EPG · web
+        class: zone
+        cidr: 10.20.10.0/24
+        gw: 10.20.10.1         # subnet anycast gateway
+        vrf: prod-vrf          # VRF (routing/tenant context)
+        nodes: [web1, web2]
+      - id: epg-app
+        label: EPG · app
+        class: subnet
+        cidr: 10.20.20.0/24
+        gw: 10.20.20.1
+        vrf: prod-vrf
+        nodes: [app1, app2]
+      - id: epg-db
+        label: EPG · db
+        class: trust
+        cidr: 10.20.30.0/24
+        gw: 10.20.30.1
+        vrf: prod-vrf
+        nodes: [db1]
+
+connections:
+  # contracts flow consumer -> provider, labelled "<proto>/<port> <contract>"
+  - {from: inet,    to: border,  label: internet,             protocol: any}
+  - {from: border,  to: epg-web, label: "tcp/443 web-https",  protocol: tcp, port: 443}
+  - {from: epg-web, to: epg-app, label: "tcp/8080 app-api",   protocol: tcp, port: 8080}
+  - {from: epg-app, to: epg-db,  label: "tcp/5432 db-sql",    protocol: tcp, port: 5432}

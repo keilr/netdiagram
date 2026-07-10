@@ -26,7 +26,7 @@
     display:flex;flex-direction:column;height:100vh;overflow:hidden;
   }
   header{
-    display:flex;align-items:center;gap:14px;
+    display:flex;align-items:center;gap:14px;flex-wrap:wrap;row-gap:9px;
     padding:10px 16px;background:var(--slate-2);
     border-bottom:1px solid #2c3542;flex-shrink:0;
   }
@@ -48,6 +48,10 @@
   }
   select:hover{border-color:#5b6b82;color:#e8eef6}
   select:focus-visible{outline:2px solid #2563eb;outline-offset:2px}
+  .picker{display:flex;align-items:center;gap:7px}
+  .picker-label{font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:#7d8da3;white-space:nowrap;cursor:pointer}
+  #sel-example,#sel-project{max-width:190px}
+  #btn-save.dirty{border-color:var(--accent);color:#f0c088}
   main{flex:1;display:flex;min-height:0}
   #editor-pane{
     width:var(--editor-w,38%);min-width:220px;display:flex;flex-direction:column;
@@ -120,8 +124,20 @@
 <header>
   <h1><b>netdiagram</b> · yaml → schematic</h1>
   <div class="spacer"></div>
-  <select id="sel-example" aria-label="Load example"></select>
+  <div class="picker" id="project-picker">
+    <label class="picker-label" for="sel-project">Project</label>
+    <select id="sel-project" title="Open or switch between projects saved in this browser"></select>
+  </div>
+  <button id="btn-save" title="Save the current YAML as a named project in this browser (Ctrl/Cmd+S)">Save</button>
+  <button id="btn-del" title="Delete the current project" hidden>Delete</button>
+  <div class="picker">
+    <label class="picker-label" for="sel-example">Load example</label>
+    <select id="sel-example"
+            aria-label="Load an example into the editor"
+            title="Loads the selected example into the editor (replaces the current contents)"></select>
+  </div>
   <button id="btn-example">Reset</button>
+  <button id="btn-pdf" title="Open the print dialog to save as PDF">Export PDF</button>
   <button id="btn-download" class="primary">Download SVG</button>
 </header>
 <main>

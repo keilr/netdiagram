@@ -28,8 +28,14 @@ src/netdiagram.js   Core library (browser + node). Pure pipeline:
                     renderSVG(spec, layout) -> SVG string
                     Also: CONNECTION_STYLES, GROUP_STYLES, GLYPHS, LABEL_PALETTE.
 src/app.js          Browser-only wire-up: textarea editor, debounced render,
-                    SVG download, example reset. Expects globals ELK, jsyaml,
-                    EXAMPLE (injected at build time).
+                    SVG download, PDF export (prints the SVG via a hidden
+                    iframe — the browser's print-to-PDF keeps it vector),
+                    example reset, and local project persistence (autosaves the
+                    editor buffer as a draft and stores named projects in
+                    localStorage under netdiagram:v1:* keys; every storage
+                    access is guarded, so an opaque/unavailable origin hides the
+                    project UI and degrades to no-op). Expects globals ELK,
+                    jsyaml, EXAMPLE (injected at build time).
 src/editor.js       CodeMirror 6 setup (bundled separately by esbuild):
                     YAML mode + json-schema lint/hover/key-completion, plus
                     valueCompletion() — value hints the library doesn't do:
@@ -61,9 +67,10 @@ diagram:
 nodes:
   - id: str                # required, unique across nodes AND groups
     label: str
-    type: str              # picks glyph: router switch firewall db lb cloud
-                           # internet user wifi siem storage vm container metal
-                           # (+aliases; the rack-server glyph is host|app|web).
+    type: str              # picks glyph: router switch firewall waf db lb cloud
+                           # internet user wifi siem storage vm container metal gpu
+                           # (+aliases; the rack-server glyph is host|app|web; gpu
+                           # aliases gpu-host|accelerator|cuda draw a GPU card).
                            # Platform types vm|container|metal also set the
                            # border style: dashed / fine-dotted / double (hwOf +
                            # HW_STYLES). server, physical [server], dedicated,
