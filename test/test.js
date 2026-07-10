@@ -27,6 +27,12 @@ test("example parses and renders", async () => {
   assert.strictEqual(edges, spec.doc.connections.length, "every connection rendered as an edge path");
 });
 
+test("title block stamps the netdiagram version", () => {
+  const version = require("../package.json").version;
+  assert.ok(svg.includes(`netdiagram v${version}</text>`),
+    `title block shows "netdiagram v${version}"`);
+});
+
 test("groups render cidr and classes", () => {
   assert.ok(svg.includes("10.0.10.0/24"), "cidr text");
   assert.ok(svg.includes("SERVER LAN"), "group label");

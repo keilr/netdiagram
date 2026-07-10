@@ -1,6 +1,11 @@
 "use strict";
 /* netdiagram core: YAML spec -> ELK graph -> SVG. Runs in browser (inlined) and node (tests). */
 const jsyaml = (typeof window !== "undefined" && window.jsyaml) ? window.jsyaml : require("js-yaml");
+/* Version stamped into the title block. The browser build injects
+ * window.NETDIAGRAM_VERSION; node reads package.json; '' if neither is available. */
+const VERSION = (typeof window !== "undefined")
+  ? (window.NETDIAGRAM_VERSION || "")
+  : (() => { try { return require("../package.json").version || ""; } catch (e) { return ""; } })();
 /* ---------------- connection + group semantics ---------------- */
 const CONNECTION_STYLES = {
   default: { hex:'#24344d', dash:null, width:1.8 },
@@ -463,7 +468,7 @@ function renderSVG(spec, layout){
     <path d="M${sx} ${sy+20} h${stampW} M${sx+150} ${sy+20} V${sy+54}" stroke="#24344d" stroke-width="1"/>
     <text x="${sx+9}" y="${sy+14.5}" font-family="ui-monospace,Menlo,monospace" font-size="10.5" font-weight="700" letter-spacing="1.2" fill="#24344d">${esc(title.toUpperCase())}</text>
     <text x="${sx+9}" y="${sy+37}" font-family="ui-monospace,Menlo,monospace" font-size="9" letter-spacing="1" fill="#7a8798">DRAWN</text>
-    <text x="${sx+9}" y="${sy+48}" font-family="ui-monospace,Menlo,monospace" font-size="10" fill="#24344d">netdiagram.yaml</text>
+    <text x="${sx+9}" y="${sy+48}" font-family="ui-monospace,Menlo,monospace" font-size="10" fill="#24344d">netdiagram${VERSION ? ' v' + esc(VERSION) : ''}</text>
     <text x="${sx+159}" y="${sy+37}" font-family="ui-monospace,Menlo,monospace" font-size="9" letter-spacing="1" fill="#7a8798">DATE</text>
     <text x="${sx+159}" y="${sy+48}" font-family="ui-monospace,Menlo,monospace" font-size="10" fill="#24344d">${today}</text>
     ${attrRows}

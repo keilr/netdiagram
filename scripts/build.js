@@ -64,7 +64,9 @@ const examples = fs.readdirSync(path.join(root, "examples"))
 const schema  = read("netdiagram-schema.json");
 const core = read("src/netdiagram.js");
 const app = read("src/app.js");
+const version = require(path.join(root, "package.json")).version;
 const payload =
+  `window.NETDIAGRAM_VERSION = ${JSON.stringify(version)};\n` +
   `const EXAMPLES = ${JSON.stringify(examples)};\nconst SCHEMA = ${schema};\n` + core + "\n" + app;
 
 // 5. assemble
