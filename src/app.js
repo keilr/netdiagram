@@ -125,6 +125,7 @@ splitter.addEventListener('dblclick', () => {
  * pane's native scrolling doubles as panning; drag-to-pan drives scrollLeft/Top. */
 const zoomPct = $('#zoom-pct');
 let zoom = 1;
+let fitNextRender = false;   // set when a whole new doc is loaded: fit it to the view once
 function applyZoom(){
   const svg = canvasEl.querySelector('svg'); if (!svg) return;
   if (!svg.dataset.w){   // natural size, stashed once per rendered SVG
@@ -216,7 +217,8 @@ async function render(text){
     activeLabel = null;
     lastSpec = spec;
     canvasEl.innerHTML = renderSVG(spec, layout);
-    applyZoom();                    // fresh SVG: re-apply the current zoom level
+    if (fitNextRender){ fitNextRender = false; fitZoom(); }  // a freshly loaded doc: show all of it
+    else applyZoom();               // an edit: keep the current zoom level
     renderConnections(spec);
     const n = spec.nodeMap.size, g = spec.groupMap.size, c = (spec.doc.connections||[]).length;
     statusEl.className = '';
@@ -252,7 +254,7 @@ const editor = makeEditor($('#editor'), SCHEMA, text => {
   updateDirty();       // reflect unsaved changes vs the active project
 });
 
-/* example picker: choosing an entry loads it; Reset reloads the current choice */
+/* example picker (below the editor): choosing an entry loads it into the editor */
 const exampleSel = $('#sel-example');
 EXAMPLES.forEach((ex, i)=>{
   const o = document.createElement('option');
@@ -264,11 +266,11 @@ function loadExample(){
   setActive('');            // an example is a fresh, unsaved draft
   editor.setValue(yaml);
   clearTimeout(timer);
+  fitNextRender = true;     // show the whole diagram on load
   render(yaml);
   refreshProjects();
 }
 exampleSel.addEventListener('change', loadExample);
-$('#btn-example').addEventListener('click', loadExample);
 $('#btn-download').addEventListener('click', ()=>{
   const svg = canvasEl.querySelector('svg'); if (!svg) return;
   const clone = svg.cloneNode(true);       // download at natural size, zoom-free
@@ -390,14 +392,14 @@ function openProject(name){
   const p = readProjects()[name]; if (!p) return;
   setActive(name);
   editor.setValue(p.yaml);         // fires onChange -> saveDraft + updateDirty
-  clearTimeout(timer); render(p.yaml);
+  clearTimeout(timer); fitNextRender = true; render(p.yaml);
   refreshProjects();
 }
 function newProject(){
   const STARTER = 'diagram:\n  title: New project\n  direction: down\n\nnodes:\n  - id: n1\n    label: node-1\n    type: server\n';
   setActive('');
   editor.setValue(STARTER);
-  clearTimeout(timer); render(STARTER);
+  clearTimeout(timer); fitNextRender = true; render(STARTER);
   refreshProjects();
 }
 function deleteProject(){
@@ -442,7 +444,7 @@ refreshProjects();
 const draft = readDraft();
 if (draft && draft.trim()){
   editor.setValue(draft);
-  clearTimeout(timer); render(draft);
+  clearTimeout(timer); fitNextRender = true; render(draft);
   refreshProjects();
 } else {
   loadExample();
