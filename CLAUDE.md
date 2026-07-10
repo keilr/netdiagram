@@ -28,9 +28,10 @@ src/netdiagram.js   Core library (browser + node). Pure pipeline:
                     renderSVG(spec, layout) -> SVG string
                     Also: CONNECTION_STYLES, GROUP_STYLES, GLYPHS, LABEL_PALETTE.
 src/app.js          Browser-only wire-up: textarea editor, debounced render,
-                    SVG download, PDF export (prints the SVG via a hidden
+                    SVG + YAML download, PDF export (prints the SVG via a hidden
                     iframe — the browser's print-to-PDF keeps it vector),
-                    example reset, and local project persistence (autosaves the
+                    example loading (picker below the editor), and local
+                    project persistence (autosaves the
                     editor buffer as a draft and stores named projects in
                     localStorage under netdiagram:v1:* keys; every storage
                     access is guarded, so an opaque/unavailable origin hides the

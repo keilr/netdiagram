@@ -38,9 +38,9 @@ connections:
 
 …and get a graph-paper schematic with drawn device glyphs, tinted zone
 boundaries, color-coded connections, and a drafting title block — plus a
-firewall-rule table derived from the connections. Export as SVG with one
-click, or **Export PDF** (opens the browser print dialog — the diagram stays
-vector, and page orientation follows the diagram's aspect).
+firewall-rule table derived from the connections. Download the diagram as
+**SVG**, the source as **YAML**, or **Export PDF** (opens the browser print
+dialog — the diagram stays vector, and page orientation follows its aspect).
 
 ## Quick start
 

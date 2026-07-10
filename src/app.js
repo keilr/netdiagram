@@ -287,6 +287,20 @@ $('#btn-download').addEventListener('click', ()=>{
   a.click(); URL.revokeObjectURL(a.href);
 });
 
+/* Download YAML — save the current editor source to a file (as typed, even if
+ * it doesn't parse). Name it after the active project, else the diagram title. */
+$('#btn-yaml').addEventListener('click', ()=>{
+  const text = editor.value;
+  const title = /^\s*title:\s*(.+?)\s*$/m.exec(text)?.[1]?.replace(/^["']|["']$/g,'');
+  const base = getActive() || title || 'network-diagram';
+  const name = base.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'') || 'network-diagram';
+  const blob = new Blob([text], {type:'text/yaml;charset=utf-8'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = name + '.yaml';
+  a.click(); URL.revokeObjectURL(a.href);
+});
+
 /* Export PDF — print a page holding just the diagram; the browser's print
  * dialog does the SVG->PDF conversion (stays vector, no extra libraries).
  * A hidden iframe avoids popup blockers; @page orientation follows the aspect. */
