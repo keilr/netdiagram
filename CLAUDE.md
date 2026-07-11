@@ -12,8 +12,9 @@ libraries) that works offline with no CDN and no server.
 ## Commands
 
 ```bash
-npm install        # deps: elkjs, js-yaml; dev: esbuild, jsdom
-npm run build      # -> dist/netdiagram.html (~1.5 MB, self-contained)
+npm install        # deps: elkjs, js-yaml; dev: esbuild, jsdom, eslint, codemirror
+npm run build      # -> dist/netdiagram.html (~2.7 MB, self-contained)
+npm run lint       # eslint (flat config; also runs first in CI)
 npm test           # builds, then runs test/test.js (pipeline, features, validation, jsdom boot)
 ```
 
@@ -28,7 +29,7 @@ src/netdiagram.js   Core library (browser + node). Pure pipeline:
                     renderSVG(spec, layout) -> SVG string
                     Also: CONNECTION_STYLES, GROUP_STYLES, GLYPHS, LABEL_PALETTE.
 src/app.js          Browser-only wire-up: textarea editor, debounced render,
-                    SVG + YAML download, PDF export (prints the SVG via a hidden
+                    SVG download, YAML import/download, PDF export (prints via a hidden
                     iframe — the browser's print-to-PDF keeps it vector),
                     example loading (picker below the editor), and local
                     project persistence (autosaves the

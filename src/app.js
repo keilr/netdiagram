@@ -301,6 +301,25 @@ $('#btn-yaml').addEventListener('click', ()=>{
   a.click(); URL.revokeObjectURL(a.href);
 });
 
+/* Import YAML — load a .yaml file from disk into the editor as a fresh draft */
+const fileInput = $('#file-yaml');
+$('#btn-import').addEventListener('click', ()=> fileInput.click());
+fileInput.addEventListener('change', ()=>{
+  const file = fileInput.files && fileInput.files[0];
+  fileInput.value = '';                 // let the same file be picked again later
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ()=>{
+    const text = String(reader.result);
+    setActive('');                      // imported content is a fresh, unsaved draft
+    editor.setValue(text);
+    clearTimeout(timer); fitNextRender = true; render(text);
+    refreshProjects();
+  };
+  reader.onerror = ()=>{ statusEl.className = 'error'; statusEl.textContent = 'Could not read the file.'; };
+  reader.readAsText(file);
+});
+
 /* Export PDF — print a page holding just the diagram; the browser's print
  * dialog does the SVG->PDF conversion (stays vector, no extra libraries).
  * A hidden iframe avoids popup blockers; @page orientation follows the aspect. */

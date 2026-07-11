@@ -33,6 +33,39 @@ test("title block stamps the netdiagram version", () => {
     `title block shows "netdiagram v${version}"`);
 });
 
+test("svg is accessible: role, title and desc", () => {
+  assert.ok(/<svg[^>]*role="img"/.test(svg), "svg has role=img");
+  assert.ok(/aria-labelledby="nd-title nd-desc"/.test(svg), "svg is labelled by title+desc");
+  assert.ok(/<title id="nd-title">HQ edge &amp; core<\/title>/.test(svg), "title is the diagram title (escaped)");
+  assert.ok(/<desc id="nd-desc">\d+ nodes?, \d+ groups?, \d+ connections?<\/desc>/.test(svg), "desc summarises counts");
+});
+
+test("user text is escaped everywhere it reaches the svg (no injection)", async () => {
+  const s = parseSpec([
+    'diagram:',
+    '  title: "<script>T</script>"',
+    '  owner: "a&b"',
+    'nodes:',
+    '  - id: n1',
+    '    label: "</text><script>x</script>"',
+    '    type: server',
+    '    note: "<b>bad</b>"',
+    '    tags: ["<u>tag</u>"]',
+    '  - {id: n2, label: n2, type: db}',
+    'groups:',
+    '  - id: g1',
+    '    label: "<i>grp</i>"',
+    '    cidr: "10/8<hack>"',
+    '    nodes: [n1]',
+    'connections:',
+    '  - {from: n1, to: n2, label: "<img onerror=1>"}',
+  ].join('\n'));
+  const out = renderSVG(s, await elk.layout(buildElk(s)));
+  for (const raw of ['<script', '<img', '<b>', '<u>', '<i>', '<hack>'])
+    assert.ok(!out.toLowerCase().includes(raw.toLowerCase()), `no raw "${raw}" from user input`);
+  assert.ok(out.includes('&lt;script&gt;'), "dangerous characters are HTML-escaped");
+});
+
 test("groups render cidr and classes", () => {
   assert.ok(svg.includes("10.0.10.0/24"), "cidr text");
   assert.ok(svg.includes("SERVER LAN"), "group label");

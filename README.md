@@ -38,9 +38,10 @@ connections:
 
 …and get a graph-paper schematic with drawn device glyphs, tinted zone
 boundaries, color-coded connections, and a drafting title block — plus a
-firewall-rule table derived from the connections. Download the diagram as
-**SVG**, the source as **YAML**, or **Export PDF** (opens the browser print
-dialog — the diagram stays vector, and page orientation follows its aspect).
+firewall-rule table derived from the connections. Import or download the source
+as **YAML**, download the diagram as **SVG**, or **Export PDF** (opens the
+browser print dialog — the diagram stays vector, and page orientation follows
+its aspect).
 
 ## Quick start
 
@@ -141,6 +142,7 @@ scripts/build.js     vendors js-yaml + elkjs, assembles dist/netdiagram.html
 scripts/render.js    CLI: YAML -> SVG (--watch), for external editors
 examples/            default example YAML (single source of truth)
 test/                npm test — pipeline, features, validation, jsdom boot
+eslint.config.js     npm run lint — flat config (runs first in CI)
 ```
 
 Layout is [ELK](https://eclipse.dev/elk/) (layered, orthogonal routing, real

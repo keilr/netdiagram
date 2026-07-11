@@ -474,7 +474,11 @@ function renderSVG(spec, layout){
     ${attrRows}
   </g>`;
 
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${totW}" height="${totH}" viewBox="0 0 ${totW} ${totH}" font-family="ui-monospace,Menlo,monospace">
+  const nc = nodeMap.size, gc = groupMap.size, cc = (doc.connections||[]).length;
+  const desc = `${nc} node${nc!==1?'s':''}, ${gc} group${gc!==1?'s':''}, ${cc} connection${cc!==1?'s':''}`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="nd-title nd-desc" width="${totW}" height="${totH}" viewBox="0 0 ${totW} ${totH}" font-family="ui-monospace,Menlo,monospace">
+    <title id="nd-title">${esc(title)}</title>
+    <desc id="nd-desc">${esc(desc)}</desc>
     <defs>${defs}</defs>
     <rect width="${totW}" height="${totH}" fill="#fafbf7"/>
     <rect width="${totW}" height="${totH}" fill="url(#gridL)"/>
@@ -489,4 +493,6 @@ function renderSVG(spec, layout){
 }
 
 if (typeof module !== "undefined" && module.exports)
-  module.exports = { parseSpec, buildElk, renderSVG, CONNECTION_STYLES, GROUP_STYLES, GLYPHS, LABEL_PALETTE };
+  module.exports = { parseSpec, buildElk, renderSVG, CONNECTION_STYLES, GROUP_STYLES, GLYPHS, LABEL_PALETTE,
+    // helpers the browser app (concatenated after this file at build time) reuses
+    esc, dirOf, ipsOf };

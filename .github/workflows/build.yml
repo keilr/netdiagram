@@ -22,6 +22,8 @@ jobs:
 
       - run: npm ci
 
+      - run: npm run lint
+
       # pretest builds dist/netdiagram.html, then the assertion suite runs
       - run: npm test
 
