@@ -103,13 +103,17 @@ connections:               # renamed from links: (parseSpec errors on the old ke
     label: str             # shown on edge; equal labels share a palette color
     protocol: str          # tcp|udp|… — shown in the Connections table
     port: int|str          # dest port or range — shown in the Connections table
-    direction: forward|both|none
+    direction: forward|both|none   # both -> two table rows (one per direction)
+    comment: str           # free-form note; Connections-table column only, not on the edge
 ```
 
 Connection color: shared-label palette color if the connection has a label,
 else default ink. The app (`src/app.js`) also renders a Connections tab: a
-firewall-rule table derived from the connections, excluding pairs whose
-endpoints share the same immediate group ("same zone" needs no rule). `netdiagram-schema.json` is the
+firewall-rule table derived from the connections (source + destination each with
+its address, protocol, port, label, and comment column when any is set),
+excluding pairs whose endpoints share the same immediate group ("same zone"
+needs no rule); a `direction: both` connection is emitted as two rows, one per
+direction. `netdiagram-schema.json` is the
 JSON Schema for this format — keep it and this section in sync when the
 format changes (the editor autocomplete derives its key AND value
 suggestions from the schema, so it follows automatically).

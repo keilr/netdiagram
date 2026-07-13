@@ -39,40 +39,54 @@ function renderConnections(spec){
     if (g) return { name: String(g.label ?? id), addr: g.cidr ? String(g.cidr) : '—' };
     return { name: id, addr: '—' };
   }
-  const csvRows = [['#','Source','Src Address','Dir','Destination','Dst Address','Protocol','Port','Label']];
-  const rows = filtered.map((l, i) => {
-    const from  = endpoint(l.from);
-    const to    = endpoint(l.to);
-    const dir   = dirOf(l);
-    const dirG  = dir === 'both' ? '↔' : dir === 'none' ? '─' : '→';
-    const proto = l.protocol != null ? String(l.protocol) : '';
-    const port  = l.port  != null ? String(l.port)  : '';
-    const label = l.label != null ? String(l.label) : '';
-    const dash  = '<span class="conn-dash">—</span>';
-    csvRows.push([i+1, from.name, from.addr, dirG, to.name, to.addr, proto, port, label]);
-    return `<tr>
-      <td class="conn-n">${i+1}</td>
-      <td>${esc(from.name)}</td><td class="conn-addr">${esc(from.addr)}</td>
-      <td class="conn-dir">${dirG}</td>
-      <td>${esc(to.name)}</td><td class="conn-addr">${esc(to.addr)}</td>
-      <td class="conn-proto">${proto ? esc(proto).toUpperCase() : dash}</td>
-      <td class="conn-port">${port ? esc(port) : dash}</td>
-      <td class="conn-label">${label ? esc(label) : ''}</td>
-    </tr>`;
-  }).join('');
+  // one directed row per connection; a bidirectional one (direction: both) yields two
+  const flows = [];
+  for (const l of filtered){
+    const meta = {
+      proto:   l.protocol != null ? String(l.protocol) : '',
+      port:    l.port     != null ? String(l.port)     : '',
+      label:   l.label    != null ? String(l.label)    : '',
+      comment: l.comment  != null ? String(l.comment)  : '',
+    };
+    flows.push({ src: endpoint(l.from), dst: endpoint(l.to), ...meta });
+    if (dirOf(l) === 'both')
+      flows.push({ src: endpoint(l.to), dst: endpoint(l.from), ...meta });
+  }
+  const hasComment = flows.some(f => f.comment.trim() !== '');
+  const dash = '<span class="conn-dash">—</span>';
+  // endpoint = name with its address beneath it, so the address is unambiguous
+  const epCell = ep =>
+    `<td class="conn-ep"><span class="conn-name">${esc(ep.name)}</span>${
+      ep.addr && ep.addr !== '—' ? `<span class="conn-addr">${esc(ep.addr)}</span>` : ''}</td>`;
 
+  const rows = flows.map((f, i) => `<tr>
+      <td class="conn-n">${i+1}</td>
+      ${epCell(f.src)}${epCell(f.dst)}
+      <td class="conn-proto">${f.proto ? esc(f.proto).toUpperCase() : dash}</td>
+      <td class="conn-port">${f.port ? esc(f.port) : dash}</td>
+      <td class="conn-label">${f.label ? esc(f.label) : ''}</td>
+      ${hasComment ? `<td class="conn-comment">${f.comment ? esc(f.comment) : ''}</td>` : ''}
+    </tr>`).join('');
+
+  const csvHead = ['#','Source','Source Address','Destination','Dest Address','Protocol','Port','Label'];
+  if (hasComment) csvHead.push('Comment');
+  const csvRows = [csvHead, ...flows.map((f, i) => {
+    const r = [i+1, f.src.name, f.src.addr, f.dst.name, f.dst.addr, f.proto, f.port, f.label];
+    if (hasComment) r.push(f.comment);
+    return r;
+  })];
   lastCsv = csvRows.map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
 
   const excl = excluded ? `<span class="conn-excl">${excluded} same-zone excluded</span>` : '';
   connEl.innerHTML = `
     <div class="conn-toolbar">
-      <h2>Connections &mdash; ${filtered.length} rule${filtered.length !== 1 ? 's' : ''} ${excl}</h2>
+      <h2>Connections &mdash; ${flows.length} rule${flows.length !== 1 ? 's' : ''} ${excl}</h2>
       <button id="btn-copy-csv">Copy CSV</button>
     </div>
     <table class="conn-table">
       <thead><tr>
-        <th>#</th><th>Source</th><th>Address</th><th></th>
-        <th>Destination</th><th>Address</th><th>Protocol</th><th>Port</th><th>Label</th>
+        <th>#</th><th>Source</th><th>Destination</th>
+        <th>Protocol</th><th>Port</th><th>Label</th>${hasComment ? '<th>Comment</th>' : ''}
       </tr></thead>
       <tbody>${rows}</tbody>
     </table>`;

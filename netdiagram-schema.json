@@ -223,7 +223,11 @@
           "type": "string",
           "enum": ["forward", "both", "bidirectional", "none"],
           "default": "forward",
-          "description": "Arrowhead placement: forward (→), both (↔), or none (—)"
+          "description": "Arrowhead placement: forward (→), both (↔), or none (—). A both connection produces two rows in the Connections table, one per direction"
+        },
+        "comment": {
+          "type": "string",
+          "description": "Free-form note (e.g. a rule justification). Not drawn on the edge; shown as a Comment column in the Connections table"
         }
       }
     }

@@ -333,6 +333,40 @@ test("projects persist: draft restored on reload, Save writes a named project", 
   assert.ok(!doc.querySelector("#btn-del").hidden, "delete is offered for the active project");
 });
 
+test("connections table: bidirectional yields two rows; comment column appears", async () => {
+  const { JSDOM } = require("jsdom");
+  const html = fs.readFileSync(path.join(root, "dist/netdiagram.html"), "utf8");
+  const DRAFT = [
+    "diagram: {title: conn test}",
+    "nodes:",
+    "  - {id: a, label: aaa, type: server, ip: 10.0.0.1}",
+    "  - {id: b, label: bbb, type: server, ip: 10.0.0.2}",
+    "  - {id: c, label: ccc, type: db, ip: 10.0.0.3}",
+    "connections:",
+    "  - {from: a, to: b, protocol: tcp, port: 22, direction: both, comment: mgmt SSH}",
+    "  - {from: b, to: c, protocol: tcp, port: 5432, label: pgsql}",
+  ].join("\n");
+  const dom = new JSDOM(html, {
+    runScripts: "dangerously", pretendToBeVisual: true, url: "https://netdiagram.test/",
+    beforeParse(w) { try { w.localStorage.setItem("netdiagram:v1:draft", DRAFT); } catch (e) {} },
+  });
+  const win = dom.window, doc = win.document;
+  const errs = []; win.addEventListener("error", (e) => errs.push(e.message));
+  const statusEl = doc.querySelector("#status");
+  const deadline = Date.now() + 5000;
+  while (Date.now() < deadline && !errs.length
+         && !/^OK/.test(statusEl.textContent) && !statusEl.classList.contains("error"))
+    await new Promise((r) => setTimeout(r, 100));
+  assert.deepStrictEqual(errs, [], "no page errors");
+  const t = doc.querySelector("#connections-pane").innerHTML;
+  assert.strictEqual((t.match(/class="conn-n"/g) || []).length, 3,
+    "a<->b (2 rows) + b->c (1 row) = 3 rows");
+  assert.ok(t.includes("<th>Comment</th>"), "comment column present when a comment exists");
+  assert.strictEqual((t.match(/mgmt SSH/g) || []).length, 2, "comment shown on both directions");
+  assert.ok(!t.includes("conn-dir"), "direction column removed");
+  assert.ok(t.includes('class="conn-ep"'), "endpoints render as name + address cells");
+});
+
 // ---------- runner ----------
 (async () => {
   let failed = 0;

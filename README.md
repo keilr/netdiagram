@@ -112,13 +112,16 @@ editor's completion and validation). The shape is `diagram`, `nodes`, `groups`,
 | `label` | shown at the edge midpoint (e.g. `"tcp/443 https"`) |
 | `protocol` | `tcp`, `udp`, … — shown in the Connections table |
 | `port` | destination port number or range — shown in the Connections table |
-| `direction` | `forward` (default), `both`, `none` |
+| `direction` | `forward` (default), `both`, `none`. A `both` connection is listed twice in the Connections table, once per direction |
+| `comment` | free-form note (e.g. a rule justification) — shown in the Connections table, not drawn on the edge |
 
 **Color rules:** a labeled connection gets a color from a categorical palette,
 and **equal labels share the same color** (every `tcp/443 https` renders
 identically); unlabeled connections use the default ink. The app's
-**Connections tab** turns the list into a firewall-rule table
-(protocol/port/direction per rule), skipping pairs that sit in the same zone.
+**Connections tab** turns the list into a firewall-rule table — source and
+destination (each with its address beneath it), protocol, port, label and any
+comment — skipping pairs that sit in the same zone; a `both` connection appears
+as two rows, one per direction.
 
 ## Use your own editor (CLI + VS Code)
 
