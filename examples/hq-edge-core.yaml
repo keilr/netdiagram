@@ -101,9 +101,9 @@ groups:
 
 connections:
   # edge labels follow "<proto>/<port> <context>"; any/vrrp/deny flows keep a plain note
-  - {from: inet,  to: fw1,  label: "tcp/443 https",   protocol: tcp,  port: 443}
+  - {from: inet,  to: fw1,  label: "tcp/443 https",   protocol: tcp,  port: 443, comment: "public HTTPS ingress"}
   - {from: inet,  to: fw2,  label: "tcp/443 https",   protocol: tcp,  port: 443}
-  - {from: fw1,   to: fw2,  label: "vrrp ha",         protocol: vrrp, direction: both}
+  - {from: fw1,   to: fw2,  label: "vrrp ha",         protocol: vrrp, direction: both, comment: "firewall HA heartbeat"}
   - {from: fw1,   to: waf,  label: "tcp/443 https",   protocol: tcp,  port: 443}
   - {from: waf,   to: web1, label: "tcp/8443 https",  protocol: tcp,  port: 8443}
   - {from: fw1,   to: core,                           protocol: any}
@@ -111,10 +111,10 @@ connections:
   - {from: core,  to: app1, label: "tcp/8080 app",    protocol: tcp,  port: 8080}
   - {from: core,  to: api1, label: "tcp/8080 api",    protocol: tcp,  port: 8080}
   - {from: web1,  to: app1, label: "tcp/8443 app",    protocol: tcp,  port: 8443}
-  - {from: app1,  to: db1,  label: "tcp/5432 pgsql",  protocol: tcp,  port: 5432, direction: both}
+  - {from: app1,  to: db1,  label: "tcp/5432 pgsql",  protocol: tcp,  port: 5432, direction: both, comment: "app read/write + replication"}
   - {from: api1,  to: db1,  label: "tcp/5432 pgsql",  protocol: tcp,  port: 5432}
   - {from: oob,   to: lan,  label: "tcp/22 ssh",      protocol: tcp,  port: 22}
-  - {from: oob,   to: fw1,  label: "tcp/22 ssh",      protocol: tcp,  port: 22}
+  - {from: oob,   to: fw1,  label: "tcp/22 ssh",      protocol: tcp,  port: 22, comment: "mgmt from the jump host"}
   - {from: dmz,   to: siem, label: "udp/514 syslog",  protocol: udp,  port: 514}
   - {from: lan,   to: siem, label: "udp/514 syslog",  protocol: udp,  port: 514}
-  - {from: web1,  to: db1,  label: "blocked",         direction: none}
+  - {from: web1,  to: db1,  label: "blocked",         direction: none, comment: "web tier must not reach the DB directly"}

@@ -80,10 +80,10 @@ groups:
 
 connections:
   # edge labels follow "<proto>/<port> <context>"
-  - {from: users,     to: authproxy, label: "tcp/443 https",   protocol: tcp, port: 443}
+  - {from: users,     to: authproxy, label: "tcp/443 https",   protocol: tcp, port: 443, comment: "all user traffic via the auth proxy"}
   - {from: authproxy, to: idp,       label: "tcp/443 oidc",    protocol: tcp, port: 443}
   - {from: authproxy, to: web1,      label: "tcp/8443 https",  protocol: tcp, port: 8443}
   - {from: authproxy, to: web2,      label: "tcp/8443 https",  protocol: tcp, port: 8443}
   - {from: web,       to: app,       label: "tcp/8080 api",    protocol: tcp, port: 8080}
   - {from: app,       to: db1,       label: "tcp/5432 pgsql",  protocol: tcp, port: 5432}
-  - {from: db1,       to: db2,       label: "tcp/5432 repl",   protocol: tcp, port: 5432, direction: both}
+  - {from: db1,       to: db2,       label: "tcp/5432 repl",   protocol: tcp, port: 5432, direction: both, comment: "streaming replication"}
