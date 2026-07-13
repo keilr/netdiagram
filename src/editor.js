@@ -18,10 +18,13 @@ function vocabularies(schema) {
   const defs = schema.$defs || {};
   const enums = s => (s ? s.enum || (s.anyOf || []).flatMap(a => a.enum || []) : []);
   const typeValues = enums(defs.node?.properties?.type);
+  const groupStyle = defs.group?.properties?.style?.properties || {};
+  const colorValues = enums(groupStyle.color);
   return {
     nodes:   { type: typeValues, icon: typeValues,
                os: defs.node?.properties?.os?.examples || [] },
-    groups:  { class: enums(defs.group?.properties?.class) },
+    groups:  { class: enums(defs.group?.properties?.class),
+               color: colorValues, colour: colorValues, border: enums(groupStyle.border) },
     connections: { protocol: defs.connection?.properties?.protocol?.examples || [],
                    direction: enums(defs.connection?.properties?.direction) },
     diagram: { direction: enums(schema.properties?.diagram?.properties?.direction) },

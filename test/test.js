@@ -66,6 +66,19 @@ test("user text is escaped everywhere it reaches the svg (no injection)", async 
   assert.ok(out.includes('&lt;script&gt;'), "dangerous characters are HTML-escaped");
 });
 
+test("group style overrides color and border", async () => {
+  const s = parseSpec([
+    "nodes:",
+    "  - {id: n, type: server}",
+    "groups:",
+    "  - {id: g, label: G, class: subnet, nodes: [n], style: {color: red, border: dashed}}",
+  ].join("\n"));
+  const out = renderSVG(s, await elk.layout(buildElk(s)));
+  assert.ok(out.includes('rgba(192,57,43,.05)'), "custom red fill applied");
+  assert.ok(!out.includes('rgba(71,105,155,.06)'), "class (subnet) fill is overridden");
+  assert.ok(out.includes('stroke-dasharray="8 5"'), "dashed border applied");
+});
+
 test("groups render cidr and classes", () => {
   assert.ok(svg.includes("10.0.10.0/24"), "cidr text");
   assert.ok(svg.includes("SERVER LAN"), "group label");
@@ -238,6 +251,10 @@ test("editor: value completion offers enum values and document ids", () => {
     "'type: f' offers firewall");
   assert.ok(labelsAt("groups:\n  - id: g\n    class: z").includes("zone"),
     "'class: z' offers zone");
+  assert.ok(labelsAt("groups:\n  - id: g\n    style:\n      color: bl").includes("blue"),
+    "'color: bl' offers blue (group style)");
+  assert.ok(labelsAt("groups:\n  - id: g\n    style:\n      border: da").includes("dashed"),
+    "'border: da' offers dashed (group style)");
   assert.ok(labelsAt("connections:\n  - {from: a, to: b, protocol: t").includes("tcp"),
     "protocol offers tcp (flow style)");
   assert.deepStrictEqual(labelsAt("nodes:\n  - id: fw1\n  - id: web1\nconnections:\n  - from: "),

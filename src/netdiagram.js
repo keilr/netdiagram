@@ -24,6 +24,26 @@ const GROUP_STYLES = {
 /* colors assigned to shared connection labels */
 const LABEL_PALETTE = ['#0f766e','#7c3aed','#1d4ed8','#9d174d','#4d7c0f','#0e7490','#a21caf','#b45309'];
 
+/* Named group colors (group style.color / style.colour) — a coordinated
+ * fill/stroke/label scheme derived from one base hex, so every color shares the
+ * same muted, blueprint feel. Names are CSS color names; the tint is toned down. */
+const hexToRgb = h => { const n = parseInt(h.slice(1), 16); return { r:(n>>16)&255, g:(n>>8)&255, b:n&255 }; };
+const mixHex = (hex, toHex, t) => {
+  const a = hexToRgb(hex), b = hexToRgb(toHex);
+  const c = k => Math.round(a[k] + (b[k] - a[k]) * t).toString(16).padStart(2, '0');
+  return '#' + c('r') + c('g') + c('b');
+};
+const groupColorScheme = hex => {
+  const { r, g, b } = hexToRgb(hex);
+  return { fill:`rgba(${r},${g},${b},.05)`, stroke: mixHex(hex, '#ffffff', .42), label: hex };
+};
+const GROUP_COLORS = Object.fromEntries(Object.entries({
+  gray:'#57636f', red:'#c0392b', orange:'#c2410c', yellow:'#a16207', green:'#15803d',
+  teal:'#0f766e', cyan:'#0e7490', blue:'#1d4ed8', indigo:'#4338ca', purple:'#7c3aed', pink:'#be185d'
+}).map(([name, hex]) => [name, groupColorScheme(hex)]));
+/* CSS border-style names -> SVG stroke-dasharray (null = solid) */
+const GROUP_BORDERS = { solid:null, dashed:'8 5', dotted:'2 4' };
+
 /* connection direction vocabulary — shared by the SVG arrows and the Connections table */
 const DIR_ALIASES = { both:'both', bidirectional:'both', none:'none' };
 const dirOf = l => DIR_ALIASES[String(l.direction || '').toLowerCase()] || 'forward';
@@ -138,7 +158,7 @@ function ipsOf(n){ return ipListOf(n).join(' · '); }
 const NODE_KNOWN_KEYS = new Set(['id','label','type','icon','ip','ips','addr','os','tags']);
 /* option keys control rendering; every other scalar key is a displayed attribute */
 const DIAGRAM_OPTION_KEYS = new Set(['title','direction']);
-const GROUP_KNOWN_KEYS = new Set(['id','label','class','cidr','nodes','groups']);
+const GROUP_KNOWN_KEYS = new Set(['id','label','class','cidr','nodes','groups','style']);
 function attrLines(obj, known){
   const out = [];
   for (const [k, val] of Object.entries(obj || {})){
@@ -373,8 +393,14 @@ function renderSVG(spec, layout){
   for (const [id, b] of abs){
     if (!b.isGroup) continue;
     const g = groupMap.get(id) || {};
-    const st = GROUP_STYLES[String(g.class||'').toLowerCase()] || GROUP_STYLES.default;
-    const dash = st.dash ? ` stroke-dasharray="${st.dash}"` : '';
+    let st = GROUP_STYLES[String(g.class||'').toLowerCase()] || GROUP_STYLES.default;
+    // style overrides: style.color/colour picks a palette scheme, style.border sets the line style
+    const gs = g.style || {};
+    const cName = String(gs.color ?? gs.colour ?? '').toLowerCase().trim();
+    if (GROUP_COLORS[cName]) st = { ...st, ...GROUP_COLORS[cName] };
+    const bName = String(gs.border ?? '').toLowerCase().trim();
+    const dashVal = (bName in GROUP_BORDERS) ? GROUP_BORDERS[bName] : st.dash;
+    const dash = dashVal ? ` stroke-dasharray="${dashVal}"` : '';
     const hdr = groupHeader(g);
     // cidr + attributes live in a small info box in the bottom-right corner
     let boxText = '';

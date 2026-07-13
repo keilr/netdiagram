@@ -111,6 +111,7 @@ spec files outside this repo, put a modeline on the first line instead:
 |---|---|
 | `id`, `label` | as for nodes |
 | `class` | `zone` `vlan` `subnet` `cloud` `onprem` `trust` — tint + border style (trust = red dashed) |
+| `style` | visual overrides: `color` (or `colour`) — one of `gray` `red` `orange` `yellow` `green` `teal` `cyan` `blue` `indigo` `purple` `pink`, overriding the class tint — and `border`: `solid` `dashed` `dotted` (CSS border-style names). E.g. `style: {color: blue, border: dashed}` |
 | `cidr` | rendered as `cidr: <value>` in the info box in the group's lower-right corner |
 | `nodes` | member node ids (a node belongs to at most one group) |
 | `groups` | nested groups, arbitrary depth |

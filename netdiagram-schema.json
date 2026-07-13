@@ -148,6 +148,32 @@
           "enum": ["zone", "vlan", "subnet", "cloud", "onprem", "trust"],
           "description": "Visual style: zone (orange), vlan (teal), subnet (blue), cloud (purple dashed), onprem (grey), trust (red dashed)"
         },
+        "style": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Visual overrides for the group box (extensible — color and border for now)",
+          "properties": {
+            "color": {
+              "description": "Group color, overriding the class color. A CSS color name from the palette, rendered as a toned-down blueprint tint (fill + border + label).",
+              "anyOf": [
+                { "enum": ["gray", "red", "orange", "yellow", "green", "teal", "cyan", "blue", "indigo", "purple", "pink"] },
+                { "type": "string" }
+              ]
+            },
+            "colour": {
+              "description": "British spelling of color (same values)",
+              "anyOf": [
+                { "enum": ["gray", "red", "orange", "yellow", "green", "teal", "cyan", "blue", "indigo", "purple", "pink"] },
+                { "type": "string" }
+              ]
+            },
+            "border": {
+              "type": "string",
+              "enum": ["solid", "dashed", "dotted"],
+              "description": "Border line style (CSS border-style names)"
+            }
+          }
+        },
         "cidr": {
           "type": "string",
           "description": "CIDR notation rendered as 'cidr: <value>' in the info box in the group's lower-right corner (e.g. 10.0.0.0/24)"

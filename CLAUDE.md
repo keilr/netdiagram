@@ -89,6 +89,11 @@ nodes:
 groups:
   - id, label, class: zone|vlan|subnet|cloud|onprem|trust, cidr,
     nodes: [ids], groups: [nested]   # a node may belong to at most one group
+    style:                 # optional visual overrides (extensible)
+      color: <name>        # gray red orange yellow green teal cyan blue indigo
+                           # purple pink (or colour); overrides the class color
+                           # with a toned-down tint (GROUP_COLORS in netdiagram.js)
+      border: solid|dashed|dotted   # CSS border-style names (GROUP_BORDERS)
     <any-scalar-key>: val  # cidr + attributes render as "key: value" lines in
                            # an info box in the group's bottom-right corner
                            # (bottom padding grows with the box — see

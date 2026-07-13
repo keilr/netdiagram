@@ -22,6 +22,7 @@ groups:
   - id: app                  # a boxed zone; a node belongs to at most one group
     label: App tier
     class: subnet            # zone | vlan | subnet | cloud | onprem | trust
+    # style: {color: blue, border: dashed}   # optional: override the class color/border
     cidr: 10.0.0.0/24
     nodes: [web, db]
 
