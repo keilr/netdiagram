@@ -1,6 +1,6 @@
 {
   "name": "netdiagram",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "YAML-described network architecture diagrams, rendered as blueprint-style SVG schematics. Ships as a single self-contained HTML file.",
   "license": "MIT",
   "type": "commonjs",
