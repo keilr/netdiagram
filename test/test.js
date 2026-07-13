@@ -345,6 +345,7 @@ test("connections table: bidirectional yields two rows; comment column appears",
     "connections:",
     "  - {from: a, to: b, protocol: tcp, port: 22, direction: both, comment: mgmt SSH}",
     "  - {from: b, to: c, protocol: tcp, port: 5432, label: pgsql}",
+    "  - {from: a, to: c, direction: none, label: DENYME}",
   ].join("\n");
   const dom = new JSDOM(html, {
     runScripts: "dangerously", pretendToBeVisual: true, url: "https://netdiagram.test/",
@@ -360,7 +361,8 @@ test("connections table: bidirectional yields two rows; comment column appears",
   assert.deepStrictEqual(errs, [], "no page errors");
   const t = doc.querySelector("#connections-pane").innerHTML;
   assert.strictEqual((t.match(/class="conn-n"/g) || []).length, 3,
-    "a<->b (2 rows) + b->c (1 row) = 3 rows");
+    "a<->b (2 rows) + b->c (1 row) = 3 rows; the direction:none flow is excluded");
+  assert.ok(!t.includes("DENYME"), "direction:none connection excluded from the table");
   assert.ok(t.includes("<th>Comment</th>"), "comment column present when a comment exists");
   assert.strictEqual((t.match(/mgmt SSH/g) || []).length, 2, "comment shown on both directions");
   assert.ok(!t.includes("conn-dir"), "direction column removed");

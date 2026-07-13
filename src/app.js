@@ -39,9 +39,12 @@ function renderConnections(spec){
     if (g) return { name: String(g.label ?? id), addr: g.cidr ? String(g.cidr) : '—' };
     return { name: id, addr: '—' };
   }
-  // one directed row per connection; a bidirectional one (direction: both) yields two
+  // one directed row per connection; a bidirectional one (direction: both) yields
+  // two; a blocked one (direction: none) is not a rule, so it is left out
   const flows = [];
   for (const l of filtered){
+    const dir = dirOf(l);
+    if (dir === 'none') continue;
     const meta = {
       proto:   l.protocol != null ? String(l.protocol) : '',
       port:    l.port     != null ? String(l.port)     : '',
@@ -49,8 +52,13 @@ function renderConnections(spec){
       comment: l.comment  != null ? String(l.comment)  : '',
     };
     flows.push({ src: endpoint(l.from), dst: endpoint(l.to), ...meta });
-    if (dirOf(l) === 'both')
+    if (dir === 'both')
       flows.push({ src: endpoint(l.to), dst: endpoint(l.from), ...meta });
+  }
+  if (!flows.length){
+    connEl.innerHTML = '<p class="conn-empty">No forwarding rules to list.</p>';
+    lastCsv = '';
+    return;
   }
   const hasComment = flows.some(f => f.comment.trim() !== '');
   const dash = '<span class="conn-dash">—</span>';

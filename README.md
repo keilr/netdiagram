@@ -112,7 +112,7 @@ editor's completion and validation). The shape is `diagram`, `nodes`, `groups`,
 | `label` | shown at the edge midpoint (e.g. `"tcp/443 https"`) |
 | `protocol` | `tcp`, `udp`, … — shown in the Connections table |
 | `port` | destination port number or range — shown in the Connections table |
-| `direction` | `forward` (default), `both`, `none`. A `both` connection is listed twice in the Connections table, once per direction |
+| `direction` | `forward` (default), `both`, `none`. In the Connections table a `both` connection is listed twice (once per direction) and a `none` (blocked) connection is left out |
 | `comment` | free-form note (e.g. a rule justification) — shown in the Connections table, not drawn on the edge |
 
 **Color rules:** a labeled connection gets a color from a categorical palette,

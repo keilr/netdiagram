@@ -103,7 +103,7 @@ connections:               # renamed from links: (parseSpec errors on the old ke
     label: str             # shown on edge; equal labels share a palette color
     protocol: str          # tcp|udp|… — shown in the Connections table
     port: int|str          # dest port or range — shown in the Connections table
-    direction: forward|both|none   # both -> two table rows (one per direction)
+    direction: forward|both|none   # table: both -> two rows; none -> excluded
     comment: str           # free-form note; Connections-table column only, not on the edge
 ```
 
@@ -113,7 +113,8 @@ firewall-rule table derived from the connections (source + destination each with
 its address, protocol, port, label, and comment column when any is set),
 excluding pairs whose endpoints share the same immediate group ("same zone"
 needs no rule); a `direction: both` connection is emitted as two rows, one per
-direction. `netdiagram-schema.json` is the
+direction, and a `direction: none` (blocked) connection is left out entirely.
+`netdiagram-schema.json` is the
 JSON Schema for this format — keep it and this section in sync when the
 format changes (the editor autocomplete derives its key AND value
 suggestions from the schema, so it follows automatically).
