@@ -79,7 +79,7 @@ editor's completion and validation). The shape is `diagram`, `nodes`, `groups`,
 | key | values |
 |---|---|
 | `title` | shown in the drafting title block |
-| `direction` | `right` (default) or `down` |
+| `direction` | `down` (default) or `right` |
 | *anything else* | any other scalar key (`author`, `revision`, `site`, …) is rendered as a row in the drafting title block |
 
 ### `nodes[]`

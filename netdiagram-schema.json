@@ -16,9 +16,9 @@
         },
         "direction": {
           "type": "string",
-          "enum": ["right", "down"],
-          "default": "right",
-          "description": "Option: layout direction — right (left→right) or down (top→bottom)"
+          "enum": ["down", "right"],
+          "default": "down",
+          "description": "Option: layout direction — down (top→bottom, default) or right (left→right)"
         }
       },
       "additionalProperties": {

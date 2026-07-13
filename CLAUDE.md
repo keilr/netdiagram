@@ -63,7 +63,7 @@ Layout is done by ELK (`elk.bundled.js`, layered algorithm, orthogonal routing,
 
 ```yaml
 diagram:
-  title: str, direction: right|down   # OPTIONS (control rendering)
+  title: str, direction: down|right   # OPTIONS (control rendering; down is default)
   <any-scalar-key>: val               # attributes; rendered as rows in the
                                       # drafting title block (author, revision, …)
 nodes:

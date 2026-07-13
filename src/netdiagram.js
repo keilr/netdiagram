@@ -278,8 +278,8 @@ const edgeIndex = id => parseInt(String(id).slice(1), 10);
 
 function buildElk(spec){
   const { doc, nodeMap, claimed } = spec;
-  const dirRaw = String(doc.diagram?.direction || 'right').toLowerCase();
-  const direction = /down|tb|top/.test(dirRaw) ? 'DOWN' : 'RIGHT';
+  const dirRaw = String(doc.diagram?.direction || 'down').toLowerCase();
+  const direction = /right|lr/.test(dirRaw) ? 'RIGHT' : 'DOWN';
 
   function elkNode(n){
     const m = nodeMetrics(n);

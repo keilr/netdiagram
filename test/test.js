@@ -66,6 +66,13 @@ test("user text is escaped everywhere it reaches the svg (no injection)", async 
   assert.ok(out.includes('&lt;script&gt;'), "dangerous characters are HTML-escaped");
 });
 
+test("diagram direction defaults to down; right is explicit", () => {
+  const dirOfSpec = yaml => buildElk(parseSpec(yaml)).layoutOptions['elk.direction'];
+  assert.strictEqual(dirOfSpec("nodes:\n  - {id: a}"), 'DOWN', "no direction -> DOWN");
+  assert.strictEqual(dirOfSpec("diagram: {direction: down}\nnodes:\n  - {id: a}"), 'DOWN', "down -> DOWN");
+  assert.strictEqual(dirOfSpec("diagram: {direction: right}\nnodes:\n  - {id: a}"), 'RIGHT', "right -> RIGHT");
+});
+
 test("group style overrides color and border", async () => {
   const s = parseSpec([
     "nodes:",
