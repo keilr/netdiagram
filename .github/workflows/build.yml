@@ -38,6 +38,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" dist/netdiagram.html \
+          # attach two copies: a versioned asset (non-colliding downloads) and the
+          # stable netdiagram.html name (for a releases/latest/download/... link)
+          cp dist/netdiagram.html "netdiagram-$GITHUB_REF_NAME.html"
+          gh release create "$GITHUB_REF_NAME" \
+            dist/netdiagram.html "netdiagram-$GITHUB_REF_NAME.html" \
             --title "$GITHUB_REF_NAME" \
             --generate-notes
