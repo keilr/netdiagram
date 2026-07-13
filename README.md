@@ -28,24 +28,29 @@ diagram:
   direction: right
 
 nodes:
-  - {id: net, label: Internet,   type: internet}
-  - {id: fw,  label: Edge FW,     type: firewall, ip: 203.0.113.1, os: bsd}
-  - {id: web, label: web-01,      type: server,   ip: 10.0.10.11, os: linux}
-  - {id: app, label: app-01,      type: container, ip: 10.0.20.11, os: linux, tags: [prod]}
-  - {id: db,  label: pg-primary,  type: metal, icon: db, ip: 10.0.20.21, os: linux}
+  - {id: net,  label: Internet,   type: internet}
+  - {id: fw,   label: Edge FW,     type: firewall, ip: 203.0.113.1, os: bsd}
+  - {id: lb,   label: web-lb,      type: lb, ip: 10.0.10.9}
+  - {id: web1, label: web-01,      type: server, ip: 10.0.10.11, os: linux}
+  - {id: web2, label: web-02,      type: server, ip: 10.0.10.12, os: linux}
+  - {id: app,  label: app-01,      type: container, ip: 10.0.20.11, os: linux, tags: [prod]}
+  - {id: db,   label: pg-primary,  type: metal, icon: db, ip: 10.0.20.21, os: linux}
 
 groups:
-  - {id: dmz, label: DMZ,      class: zone,  cidr: 10.0.10.0/24, nodes: [web]}
+  - {id: dmz, label: DMZ,      class: zone,  cidr: 10.0.10.0/24, nodes: [lb, web1, web2]}
   - {id: lan, label: App tier, class: trust, cidr: 10.0.20.0/24, nodes: [app, db]}
 
 connections:
-  - {from: net, to: fw,  label: "tcp/443 https",  protocol: tcp, port: 443}
-  - {from: fw,  to: web, label: "tcp/443 https",  protocol: tcp, port: 443}
-  - {from: web, to: app, label: "tcp/8080 api",   protocol: tcp, port: 8080}
-  - {from: app, to: db,  label: "tcp/5432 pgsql", protocol: tcp, port: 5432}
+  - {from: net,  to: fw,   label: "tcp/443 https",  protocol: tcp, port: 443}
+  - {from: fw,   to: lb,   label: "tcp/443 https",  protocol: tcp, port: 443}
+  - {from: lb,   to: web1, label: "tcp/8443 https", protocol: tcp, port: 8443}
+  - {from: lb,   to: web2, label: "tcp/8443 https", protocol: tcp, port: 8443}
+  - {from: web1, to: app,  label: "tcp/8080 api",   protocol: tcp, port: 8080}
+  - {from: web2, to: app,  label: "tcp/8080 api",   protocol: tcp, port: 8080}
+  - {from: app,  to: db,   label: "tcp/5432 pgsql", protocol: tcp, port: 5432}
 ```
 
-Drawn device glyphs, tinted zone boundaries, color-coded connections and a
+Drawn device icons, tinted zone boundaries, color-coded connections and a
 drafting title block — plus a firewall-rule table derived from the connections.
 Load one of the bundled examples from the picker below the editor to see more.
 
@@ -82,8 +87,8 @@ editor's completion and validation). The shape is `diagram`, `nodes`, `groups`,
 |---|---|
 | `id` | required, unique across nodes and groups |
 | `label` | display name (defaults to id) |
-| `type` | glyph + caption: `router` `switch` `firewall` `waf` `db` `lb` `cloud` `internet` `user` `wifi` `siem` `storage` `vm` `container` `metal` `gpu` (aliases like `gw`, `docker`, `nas`, and `gpu-host` / `accelerator` / `cuda` work; the rack-server glyph is `host` / `app` / `web`). Platform types `vm` / `container` / `metal` also set the border style: dashed / fine-dotted / double. `server`, `physical [server]`, `dedicated`, `baremetal` are aliases of `metal` |
-| `icon` | explicit glyph override — visual only, border styling follows `type` (e.g. `type: metal, icon: db`) |
+| `type` | icon + caption: `router` `switch` `firewall` `waf` `db` `lb` `cloud` `internet` `user` `wifi` `siem` `storage` `vm` `container` `metal` `gpu` (aliases like `gw`, `docker`, `nas`, and `gpu-host` / `accelerator` / `cuda` work; the rack-server icon is `host` / `app` / `web`). Platform types `vm` / `container` / `metal` also set the border style: dashed / fine-dotted / double. `server`, `physical [server]`, `dedicated`, `baremetal` are aliases of `metal` |
+| `icon` | explicit icon override — visual only, border styling follows `type` (e.g. `type: metal, icon: db`) |
 | `ip` / `ips` | one or many; rendered one per line |
 | `os` | free-form (`linux`, `windows`, `bsd`, …) |
 | `tags` | informational labels — list (or single string), shown as neutral pills top-right (two per row). Tags never affect styling |
