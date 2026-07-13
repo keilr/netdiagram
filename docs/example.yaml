@@ -1,0 +1,21 @@
+# Source for the README screenshot: npm run render -- docs/example.yaml docs/example.svg
+diagram:
+  title: Edge & app tier
+  direction: right
+
+nodes:
+  - {id: net, label: Internet,   type: internet}
+  - {id: fw,  label: Edge FW,     type: firewall, ip: 203.0.113.1, os: bsd}
+  - {id: web, label: web-01,      type: server,   ip: 10.0.10.11, os: linux}
+  - {id: app, label: app-01,      type: container, ip: 10.0.20.11, os: linux, tags: [prod]}
+  - {id: db,  label: pg-primary,  type: metal, icon: db, ip: 10.0.20.21, os: linux}
+
+groups:
+  - {id: dmz, label: DMZ,      class: zone,  cidr: 10.0.10.0/24, nodes: [web]}
+  - {id: lan, label: App tier, class: trust, cidr: 10.0.20.0/24, nodes: [app, db]}
+
+connections:
+  - {from: net, to: fw,  label: "tcp/443 https",  protocol: tcp, port: 443}
+  - {from: fw,  to: web, label: "tcp/443 https",  protocol: tcp, port: 443}
+  - {from: web, to: app, label: "tcp/8080 api",   protocol: tcp, port: 8080}
+  - {from: app, to: db,  label: "tcp/5432 pgsql", protocol: tcp, port: 5432}

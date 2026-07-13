@@ -1,91 +1,74 @@
 # netdiagram
 
 Network architecture diagrams from YAML, rendered as blueprint-style SVG
-schematics. Ships as a **single self-contained HTML file** — open it in any
-browser, no server, no CDN, works offline.
+schematics — a live editor and renderer in a **single self-contained HTML
+file**. No server, no CDN, no build step; works offline.
 
-Write this:
-
-```yaml
-diagram:
-  title: HQ edge & core
-  direction: right
-
-nodes:
-  - id: fw1
-    label: Edge FW A
-    type: firewall
-    ip: 203.0.113.1
-    os: bsd
-  - id: web1
-    label: web-01
-    type: server
-    ip: 10.0.10.11
-    os: linux
-    tags: [prod]
-
-groups:
-  - id: dmz
-    label: DMZ (VLAN 10)
-    class: zone
-    cidr: 10.0.10.0/24
-    nodes: [web1]
-
-connections:
-  - {from: fw1, to: web1, label: "tcp/443 https",  protocol: tcp, port: 443}
-  - {from: dmz, to: fw1,  label: "udp/514 syslog", protocol: udp, port: 514}
-```
-
-…and get a graph-paper schematic with drawn device glyphs, tinted zone
-boundaries, color-coded connections, and a drafting title block — plus a
-firewall-rule table derived from the connections. Import or download the source
-as **YAML**, download the diagram as **SVG**, or **Export PDF** (opens the
-browser print dialog — the diagram stays vector, and page orientation follows
-its aspect).
+![Example schematic rendered by netdiagram](docs/example.svg)
 
 ## Quick start
 
-```bash
-npm install
-npm run build          # -> dist/netdiagram.html
-```
+**Just use it.** Download
+**[`netdiagram.html`](https://github.com/keilr/netdiagram/releases/latest/download/netdiagram.html)**
+from the [latest release](https://github.com/keilr/netdiagram/releases/latest)
+and open it in any browser. That's the whole app: a YAML editor on the left, a
+live diagram on the right. Nothing to install, no network needed, and nothing
+leaves your machine.
 
-Open `dist/netdiagram.html` in a browser. The left pane is a YAML editor with
-live validation and schema-aware autocomplete — keys, enum values (`type: f…`
-→ `firewall`), and node/group ids for connection endpoints; the right pane
-renders as you type.
+> Building from source is only needed if you want to work on netdiagram itself —
+> see [Development](#development).
 
-Your work is kept in the browser: the editor buffer is autosaved and restored
-on reload, and you can **Save** (or <kbd>Ctrl/Cmd-S</kbd>) the current YAML as a
-named **project** to switch between later. Projects live in the browser's local
-storage — nothing leaves your machine, and there's no server. (If the browser
-blocks local storage for the page, the project controls hide themselves and the
-editor still works from examples.)
+## Write YAML, get a schematic
 
-### Prefer your own editor? (VS Code)
-
-You don't have to write the YAML in the browser app — a CLI renders any spec
-file straight to SVG:
-
-```bash
-npm run render -- mynet.yaml                     # -> mynet.svg
-npm run render -- mynet.yaml out.svg --watch     # re-render on every save
-```
-
-Opening this repo in VS Code gives you the same schema-driven IntelliSense
-through `.vscode/settings.json` and the recommended
-[YAML extension](https://marketplace.visualstudio.com/items?itemName=redhat.vscode-yaml):
-completion, hover docs, and validation for `examples/*.yaml` and
-`*.netdiagram.yaml` files. Two build tasks — *Render current YAML to SVG* and
-a `--watch` variant — feed the current file to the CLI; run the watch task
-and open the generated SVG in a side-by-side tab for a live preview. For
-spec files outside this repo, put a modeline on the first line instead:
+The diagram above is this spec:
 
 ```yaml
-# yaml-language-server: $schema=/path/to/netdiagram-schema.json
+diagram:
+  title: Edge & app tier
+  direction: right
+
+nodes:
+  - {id: net, label: Internet,   type: internet}
+  - {id: fw,  label: Edge FW,     type: firewall, ip: 203.0.113.1, os: bsd}
+  - {id: web, label: web-01,      type: server,   ip: 10.0.10.11, os: linux}
+  - {id: app, label: app-01,      type: container, ip: 10.0.20.11, os: linux, tags: [prod]}
+  - {id: db,  label: pg-primary,  type: metal, icon: db, ip: 10.0.20.21, os: linux}
+
+groups:
+  - {id: dmz, label: DMZ,      class: zone,  cidr: 10.0.10.0/24, nodes: [web]}
+  - {id: lan, label: App tier, class: trust, cidr: 10.0.20.0/24, nodes: [app, db]}
+
+connections:
+  - {from: net, to: fw,  label: "tcp/443 https",  protocol: tcp, port: 443}
+  - {from: fw,  to: web, label: "tcp/443 https",  protocol: tcp, port: 443}
+  - {from: web, to: app, label: "tcp/8080 api",   protocol: tcp, port: 8080}
+  - {from: app, to: db,  label: "tcp/5432 pgsql", protocol: tcp, port: 5432}
 ```
 
+Drawn device glyphs, tinted zone boundaries, color-coded connections and a
+drafting title block — plus a firewall-rule table derived from the connections.
+Load one of the bundled examples from the picker below the editor to see more.
+
+## What's in the page
+
+- **Live editor** — schema-aware autocomplete (keys, enum values like
+  `type: f…` → `firewall`, and node/group ids for connection endpoints), inline
+  validation, and hover docs; the diagram re-renders as you type.
+- **Projects, saved in your browser** — the editor autosaves and restores on
+  reload; **Save** (<kbd>Ctrl/Cmd-S</kbd>) named projects to switch between
+  later. All in local storage — nothing leaves your machine. (If the browser
+  blocks local storage, the project controls hide themselves and examples still
+  work.)
+- **Import / export** — import a `.yaml` file, download the source as **YAML**,
+  download the diagram as **SVG**, or **Export PDF** (opens the print dialog; the
+  diagram stays vector and page orientation follows its aspect).
+- **Navigate** — zoom, pan and fit-to-view; the diagram auto-fits when loaded.
+
 ## Schema
+
+`netdiagram-schema.json` is the JSON Schema for the format (it drives the
+editor's completion and validation). The shape is `diagram`, `nodes`, `groups`,
+`connections`:
 
 ### `diagram`
 | key | values |
@@ -103,7 +86,7 @@ spec files outside this repo, put a modeline on the first line instead:
 | `icon` | explicit glyph override — visual only, border styling follows `type` (e.g. `type: metal, icon: db`) |
 | `ip` / `ips` | one or many; rendered one per line |
 | `os` | free-form (`linux`, `windows`, `bsd`, …) |
-| `tags` | informational labels — list (or single string), shown as neutral pills top-right (tag text, two per row). Tags never affect styling |
+| `tags` | informational labels — list (or single string), shown as neutral pills top-right (two per row). Tags never affect styling |
 | *anything else* | unknown scalar keys render as `key: value` lines |
 
 ### `groups[]`
@@ -121,34 +104,66 @@ spec files outside this repo, put a modeline on the first line instead:
 | key | notes |
 |---|---|
 | `from`, `to` | node **or group** ids |
-| `label` | shown at the edge midpoint |
+| `label` | shown at the edge midpoint (e.g. `"tcp/443 https"`) |
 | `protocol` | `tcp`, `udp`, … — shown in the Connections table |
 | `port` | destination port number or range — shown in the Connections table |
 | `direction` | `forward` (default), `both`, `none` |
 
-**Color rules:** connections with a label get a color from a categorical
-palette, and **equal labels share the same color** (e.g. every `pgsql`
-connection renders identically); unlabeled connections use the default ink.
-The app's **Connections tab** turns the list into a firewall-rule table
+**Color rules:** a labeled connection gets a color from a categorical palette,
+and **equal labels share the same color** (every `tcp/443 https` renders
+identically); unlabeled connections use the default ink. The app's
+**Connections tab** turns the list into a firewall-rule table
 (protocol/port/direction per rule), skipping pairs that sit in the same zone.
+
+## Use your own editor (CLI + VS Code)
+
+You don't have to write YAML in the browser app — a CLI renders any spec file
+straight to SVG (this is also how the image above is produced):
+
+```bash
+npm run render -- mynet.yaml                  # -> mynet.svg
+npm run render -- mynet.yaml out.svg --watch  # re-render on every save
+```
+
+Opening this repo in VS Code gives the same schema-driven IntelliSense via
+`.vscode/settings.json` and the recommended
+[YAML extension](https://marketplace.visualstudio.com/items?itemName=redhat.vscode-yaml)
+for `examples/*.yaml` and `*.netdiagram.yaml` files. Two build tasks feed the
+current file to the CLI (one plain, one `--watch`); run the watch task and open
+the generated SVG in a side-by-side tab for a live preview. For spec files
+outside this repo, put a modeline on the first line instead:
+
+```yaml
+# yaml-language-server: $schema=/path/to/netdiagram-schema.json
+```
 
 ## Development
 
+Only needed to change netdiagram itself — the app ships as the prebuilt HTML.
+
+```bash
+npm install
+npm run build   # -> dist/netdiagram.html (self-contained)
+npm run lint    # eslint (flat config; runs first in CI)
+npm test        # builds, then the assertion suite (pipeline, features, jsdom boot)
+```
+
 ```
 src/netdiagram.js    core: parseSpec -> buildElk -> renderSVG (browser + node)
-src/app.js           browser wire-up (editor, debounce, download)
+src/app.js           browser wire-up (editor, render, projects, exports, zoom/pan)
 src/editor.js        CodeMirror setup: schema-driven completion, lint, hover
 src/template.html    page shell with injection placeholders
 scripts/build.js     vendors js-yaml + elkjs, assembles dist/netdiagram.html
 scripts/render.js    CLI: YAML -> SVG (--watch), for external editors
-examples/            default example YAML (single source of truth)
+examples/            bundled examples (injected into the app's picker at build)
+docs/example.yaml    source of the screenshot above
 test/                npm test — pipeline, features, validation, jsdom boot
-eslint.config.js     npm run lint — flat config (runs first in CI)
+eslint.config.js     npm run lint — flat config
 ```
 
 Layout is [ELK](https://eclipse.dev/elk/) (layered, orthogonal routing, real
-nested-group support). See `CLAUDE.md` for architecture notes and the list of
-sharp edges (ELK coordinate spaces, safe code inlining, etc.).
+nested-group support). See `CLAUDE.md` for architecture notes and the sharp
+edges (ELK coordinate spaces, safe code inlining, etc.).
 
 ## License
 
