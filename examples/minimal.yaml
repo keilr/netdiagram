@@ -1,0 +1,30 @@
+# Minimal starter — copy this and grow it.
+# Four sections: diagram (options + title-block attributes), nodes, groups,
+# connections. Delete what you don't need; only nodes are required.
+diagram:
+  title: Minimal starter     # rename to your network
+  direction: down            # right | down
+
+nodes:
+  - id: user                 # id: unique across nodes AND groups
+    label: User
+    type: user               # type picks the glyph (router, firewall, server, db, …)
+  - id: web
+    label: web-01
+    type: server
+    ip: 10.0.0.10            # ip / ips: [..] render as lines on the node
+  - id: db
+    label: database
+    type: db
+    ip: 10.0.0.20
+
+groups:
+  - id: app                  # a boxed zone; a node belongs to at most one group
+    label: App tier
+    class: subnet            # zone | vlan | subnet | cloud | onprem | trust
+    cidr: 10.0.0.0/24
+    nodes: [web, db]
+
+connections:                 # from/to are node or group ids
+  - {from: user, to: web, label: "tcp/443 https", protocol: tcp, port: 443}
+  - {from: web,  to: db,  label: "tcp/5432 sql",  protocol: tcp, port: 5432}
