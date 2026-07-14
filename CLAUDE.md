@@ -85,6 +85,8 @@ nodes:
                            # corner showing the tag text, max two per row
                            # (wraps below). Tags never affect styling — glyph
                            # and border come from type/icon
+    rank: int              # layout hint: lower = earlier in the flow; unranked
+                           # siblings sit at rank 0 (ELK partitioning)
     <any-scalar-key>: val  # unknown scalar keys render as "key: value" lines
 groups:
   - id, label, class: zone|vlan|subnet|cloud|onprem|trust (+ Cisco ACI:
@@ -92,6 +94,8 @@ groups:
     nodes: [ids], groups: [nested]   # a node may belong to at most one group
     tags: [str] | str      # pills in the top-right, tinted in the group's own
                            # class/style color (tagPills, reused from nodes)
+    rank: int              # as for nodes: -1 = above the unranked row, 1 = below;
+                           # same-rank siblings follow YAML order left->right
     style:                 # optional visual overrides (extensible)
       color: <name>        # gray red orange yellow green teal cyan blue indigo
                            # purple pink (or colour); overrides the class color
@@ -162,6 +166,12 @@ suggestions from the schema, so it follows automatically).
    INCLUDE_CHILDREN would silently disable that packing — which is exactly why
    it only applies to groups with no boundary-crossing member edges. Advise
    users to connect hub -> group (not each member) for compact fan-outs.
+10. **`elk.layered.considerModelOrder.strategy` is ROOT-ONLY.** Setting it on a
+    group's layoutOptions crashes ELK's hierarchical layout (undefined-property
+    TypeError deep in elk-worker). `MODEL_ORDER` in buildElk is spread into the
+    root options only; keep it that way. `rank` maps to ELK partitioning
+    (applyRanks), activated per hierarchy level only when a sibling sets one —
+    unranked siblings get partition 0 explicitly.
 
 ## Conventions
 

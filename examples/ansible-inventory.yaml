@@ -1,8 +1,10 @@
 # Ansible control node managing a large inventory.
-# The fan-out pattern: the control node connects to each inventory GROUP, not to
-# every host. Because no connection touches the members themselves, netdiagram
-# packs each group into a compact grid — with per-host edges the members would
-# all be forced onto one very wide row.
+# Two tricks keep this fan-out compact:
+# 1. The control node connects to each inventory GROUP, not to every host —
+#    groups untouched by member-level connections pack into grids.
+# 2. rank: places groups around the hub instead of all in one row below it —
+#    negative ranks lay out before the (unranked = rank 0) control node,
+#    positive after. Same-rank siblings follow YAML order left to right.
 diagram:
   title: Ansible inventory
   owner: platform-team
@@ -43,22 +45,26 @@ groups:
   - id: web
     label: webservers
     class: subnet
+    rank: -1               # above the control node
     cidr: 10.40.10.0/24
     nodes: [web1, web2, web3, web4, web5, web6]
   - id: db
     label: databases
     class: trust
+    rank: -1
     tags: [prod]
     cidr: 10.40.20.0/24
     nodes: [db1, db2, db3]
   - id: net
     label: network devices
     class: vlan
+    rank: 1                # below the control node
     cidr: 10.40.30.0/24
     nodes: [sw1, sw2, rtr1, rtr2]
   - id: win
     label: windows hosts
     class: zone
+    rank: 1
     cidr: 10.40.40.0/24
     nodes: [win1, win2, win3]
 

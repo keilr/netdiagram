@@ -131,6 +131,31 @@ test("hub->group fan-outs auto-pack into a grid instead of one wide row", async 
     "boundary-crossing edge still routes");
 });
 
+test("rank places siblings before/after the unranked row", async () => {
+  const yaml = (gup, gdn) => [
+    "nodes:",
+    "  - {id: hub, type: switch}",
+    "  - {id: a1, type: server}", "  - {id: a2, type: server}",
+    "  - {id: b1, type: server}", "  - {id: b2, type: server}",
+    "groups:",
+    `  - {id: gup, nodes: [a1, a2]${gup}}`,
+    `  - {id: gdn, nodes: [b1, b2]${gdn}}`,
+    "connections:",
+    "  - {from: hub, to: gup}",
+    "  - {from: hub, to: gdn}",
+  ].join("\n");
+  const plain = buildElk(parseSpec(yaml("", "")));
+  assert.strictEqual(plain.layoutOptions["elk.partitioning.activate"], undefined,
+    "partitioning stays off without ranks");
+  assert.strictEqual(plain.layoutOptions["elk.layered.considerModelOrder.strategy"], "NODES_AND_EDGES",
+    "in-layer order follows yaml order");
+  // rank -1 lays out before the unranked (rank 0) hub, rank 1 after it
+  const out = await elk.layout(buildElk(parseSpec(yaml(", rank: -1", ", rank: 1"))));
+  const y = Object.fromEntries(out.children.map((c) => [c.id, c.y]));
+  assert.ok(y.gup < y.hub && y.hub < y.gdn,
+    `expected gup above hub above gdn, got ${JSON.stringify(y)}`);
+});
+
 test("group style overrides color and border", async () => {
   const s = parseSpec([
     "nodes:",
@@ -282,6 +307,8 @@ test("validation: node in two groups", () =>
   expectError(
     "nodes:\n  - {id: a}\ngroups:\n  - {id: g1, nodes: [a]}\n  - {id: g2, nodes: [a]}",
     'is in both'));
+test("validation: rank must be numeric", () =>
+  expectError("nodes:\n  - {id: a, rank: upper}", "rank must be a number"));
 
 // ---------- editor value completion ----------
 test("editor: value completion offers enum values and document ids", () => {

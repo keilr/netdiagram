@@ -92,6 +92,7 @@ editor's completion and validation). The shape is `diagram`, `nodes`, `groups`,
 | `ip` / `ips` | one or many; rendered one per line |
 | `os` | free-form (`linux`, `windows`, `bsd`, …) |
 | `tags` | informational labels — list (or single string), shown as neutral pills top-right (two per row). Tags never affect styling |
+| `rank` | placement hint among siblings: lower rank lays out earlier in the flow (higher up in a `down` layout). Unranked siblings sit at rank 0 — use negative ranks to place before them, positive to place after |
 | *anything else* | unknown scalar keys render as `key: value` lines |
 
 ### `groups[]`
@@ -102,6 +103,7 @@ editor's completion and validation). The shape is `diagram`, `nodes`, `groups`,
 | `style` | visual overrides: `color` (or `colour`) — one of `gray` `red` `orange` `yellow` `green` `teal` `cyan` `blue` `indigo` `purple` `pink`, overriding the class tint — and `border`: `solid` `dashed` `dotted` (CSS border-style names). E.g. `style: {color: blue, border: dashed}` |
 | `cidr` | rendered as `cidr: <value>` in the info box in the group's lower-right corner |
 | `tags` | informational labels — pills in the group's top-right corner, tinted in the group's own class/style color (list or single string) |
+| `rank` | placement hint, as for nodes — e.g. `rank: -1` moves a group above the unranked row, `rank: 1` below it |
 | `nodes` | member node ids (a node belongs to at most one group) |
 | `groups` | nested groups, arbitrary depth |
 | *anything else* | any other scalar key (`owner`, `site`, …) is rendered as `key: value` in the same info box |
@@ -111,6 +113,12 @@ packed into a grid instead of one long row. So for hub-and-spoke topologies
 (one switch feeding 20 hosts), connect the hub **to the group** rather than to
 each member — the members pack compactly and the diagram stays near-square
 instead of growing extremely wide.
+
+**Controlling placement:** by default every neighbor of a hub lands in the row
+after it, which makes wide diagrams. Use `rank` to spread them around the hub
+instead — `rank: -1` groups lay out above it, `rank: 1` below (see
+`examples/ansible-inventory.yaml`). Siblings with the same rank are ordered
+**left to right by their YAML order**, so reordering the file reorders the row.
 
 ### `connections[]`
 | key | notes |

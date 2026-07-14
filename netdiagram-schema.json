@@ -120,6 +120,10 @@
             { "type": ["string", "number"] },
             { "type": "array", "items": { "type": ["string", "number", "boolean"] }, "minItems": 1 }
           ]
+        },
+        "rank": {
+          "type": "integer",
+          "description": "Placement hint among siblings: lower rank lays out earlier in the flow (higher up in a down layout, further left in a right layout). Unranked siblings sit at rank 0 — use negative ranks to place before them, positive to place after. Within the same rank, YAML order controls the side-by-side order."
         }
       },
       "additionalProperties": {
@@ -184,6 +188,10 @@
             { "type": ["string", "number"] },
             { "type": "array", "items": { "type": ["string", "number", "boolean"] }, "minItems": 1 }
           ]
+        },
+        "rank": {
+          "type": "integer",
+          "description": "Placement hint among siblings: lower rank lays out earlier in the flow (higher up in a down layout, further left in a right layout). Unranked siblings sit at rank 0 — use negative ranks to place before them, positive to place after. Within the same rank, YAML order controls the side-by-side order."
         },
         "nodes": {
           "type": "array",

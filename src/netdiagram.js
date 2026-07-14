@@ -163,10 +163,10 @@ function ipListOf(n){
   return v == null ? [] : (Array.isArray(v) ? v : [v]).map(String);
 }
 function ipsOf(n){ return ipListOf(n).join(' · '); }
-const NODE_KNOWN_KEYS = new Set(['id','label','type','icon','ip','ips','addr','os','tags']);
+const NODE_KNOWN_KEYS = new Set(['id','label','type','icon','ip','ips','addr','os','tags','rank']);
 /* option keys control rendering; every other scalar key is a displayed attribute */
 const DIAGRAM_OPTION_KEYS = new Set(['title','direction']);
-const GROUP_KNOWN_KEYS = new Set(['id','label','class','cidr','nodes','groups','style','tags']);
+const GROUP_KNOWN_KEYS = new Set(['id','label','class','cidr','nodes','groups','style','tags','rank']);
 function attrLines(obj, known){
   const out = [];
   for (const [k, val] of Object.entries(obj || {})){
@@ -235,6 +235,8 @@ function parseSpec(text){
         (typeof n.tags === 'object' && !Array.isArray(n.tags)) ||
         (Array.isArray(n.tags) && n.tags.some(t => t != null && typeof t === 'object'))))
       errors.push(`nodes[${i}] "${n.id}": tags must be a scalar or a list of scalars`);
+    if (n.rank != null && !Number.isFinite(Number(n.rank)))
+      errors.push(`nodes[${i}] "${n.id}": rank must be a number`);
     nodeMap.set(String(n.id), n);
   });
 
@@ -249,6 +251,8 @@ function parseSpec(text){
           (typeof g.tags === 'object' && !Array.isArray(g.tags)) ||
           (Array.isArray(g.tags) && g.tags.some(t => t != null && typeof t === 'object'))))
         errors.push(`group "${gid}": tags must be a scalar or a list of scalars`);
+      if (g.rank != null && !Number.isFinite(Number(g.rank)))
+        errors.push(`group "${gid}": rank must be a number`);
       groupMap.set(gid, g);
       (g.nodes||[]).forEach(nid=>{
         nid = String(nid);
@@ -313,42 +317,53 @@ function buildElk(spec){
     'elk.separateConnectedComponents':'true',
     'elk.aspectRatio':'1.6'
   };
+  /* in-layer order follows YAML order (left->right in a down layout), so
+   * authors can nudge siblings around without fighting crossing minimization.
+   * ROOT ONLY: setting this on group levels crashes ELK's hierarchical layout. */
+  const MODEL_ORDER = { 'elk.layered.considerModelOrder.strategy':'NODES_AND_EDGES' };
+  /* rank: pins siblings to ELK partitions — lower rank lays out earlier in the
+   * flow direction (higher up in a down layout), unranked siblings sit at rank
+   * 0. Only activated for levels where some sibling actually sets a rank. */
+  function applyRanks(owners, children, layoutOptions){
+    if (!owners.some(o => o && o.rank != null)) return;
+    layoutOptions['elk.partitioning.activate'] = 'true';
+    owners.forEach((o, i) => {
+      children[i].layoutOptions = { ...(children[i].layoutOptions || {}),
+        'elk.partitioning.partition': String(Math.trunc(Number(o?.rank ?? 0))) };
+    });
+  }
   function elkGroup(g){
     const hdr = groupHeader(g);
-    return {
-      id:String(g.id),
-      layoutOptions:{
-        'elk.padding': `[top=${hdr.padTop},left=22,bottom=${hdr.padBottom},right=22]`,
-        ...ELK_SPACING,
-        ...(touchesInterior(g) ? {} : PACK_OPTIONS)
-      },
-      children:[
-        ...(g.nodes||[]).map(id => elkNode(nodeMap.get(String(id)))),
-        ...(g.groups||[]).map(elkGroup)
-      ]
+    const members = (g.nodes||[]).map(id => nodeMap.get(String(id)));
+    const subs = g.groups||[];
+    const children = [...members.map(elkNode), ...subs.map(elkGroup)];
+    const layoutOptions = {
+      'elk.padding': `[top=${hdr.padTop},left=22,bottom=${hdr.padBottom},right=22]`,
+      ...ELK_SPACING,
+      ...(touchesInterior(g) ? {} : PACK_OPTIONS)
     };
+    applyRanks([...members, ...subs], children, layoutOptions);
+    return { id:String(g.id), layoutOptions, children };
   }
-  const rootChildren = [
-    ...(doc.groups||[]).map(elkGroup),
-    ...[...nodeMap.values()].filter(n=>!claimed.has(String(n.id))).map(elkNode)
-  ];
+  const topGroups = doc.groups||[];
+  const looseNodes = [...nodeMap.values()].filter(n=>!claimed.has(String(n.id)));
+  const rootChildren = [...topGroups.map(elkGroup), ...looseNodes.map(elkNode)];
   const edges = (doc.connections||[]).map((l,i)=>({ id:edgeId(i), sources:[String(l.from)], targets:[String(l.to)] }));
 
-  return {
-    id:'root',
-    layoutOptions:{
-      'elk.algorithm':'layered',
-      'elk.direction':direction,
-      'elk.hierarchyHandling':'INCLUDE_CHILDREN',
-      'elk.spacing.componentComponent':'64',
-      'elk.edgeRouting':'ORTHOGONAL',
-      'elk.spacing.edgeLabel':'8',
-      'elk.padding':'[top=16,left=16,bottom=16,right=16]',
-      ...ELK_SPACING
-    },
-    children:rootChildren,
-    edges
+  const rootOptions = {
+    'elk.algorithm':'layered',
+    'elk.direction':direction,
+    'elk.hierarchyHandling':'INCLUDE_CHILDREN',
+    'elk.spacing.componentComponent':'64',
+    'elk.edgeRouting':'ORTHOGONAL',
+    'elk.spacing.edgeLabel':'8',
+    'elk.padding':'[top=16,left=16,bottom=16,right=16]',
+    ...ELK_SPACING,
+    ...MODEL_ORDER
   };
+  applyRanks([...topGroups, ...looseNodes], rootChildren, rootOptions);
+
+  return { id:'root', layoutOptions: rootOptions, children:rootChildren, edges };
 }
 
 /* ---------------- render SVG ---------------- */
