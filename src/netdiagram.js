@@ -297,13 +297,30 @@ function buildElk(spec){
     const m = nodeMetrics(n);
     return { id:String(n.id), width:m.w, height:m.h };
   }
+  /* Auto-packing: layered assigns every neighbor of a hub to the same layer, so
+   * "hub -> group of N" renders the N members as one very wide row. When no
+   * connection touches a group's INTERIOR (edges may end at the group itself),
+   * the group can be laid out as SEPARATE_CHILDREN — safe because no edge
+   * crosses its boundary to a member — which re-enables ELK's component packing
+   * and grids the disconnected members near the root aspect ratio instead. */
+  const endpoints = new Set((doc.connections||[]).flatMap(l => [String(l.from), String(l.to)]));
+  function touchesInterior(g){
+    return (g.nodes||[]).some(id => endpoints.has(String(id)))
+        || (g.groups||[]).some(sub => sub && (endpoints.has(String(sub.id)) || touchesInterior(sub)));
+  }
+  const PACK_OPTIONS = {
+    'elk.hierarchyHandling':'SEPARATE_CHILDREN',
+    'elk.separateConnectedComponents':'true',
+    'elk.aspectRatio':'1.6'
+  };
   function elkGroup(g){
     const hdr = groupHeader(g);
     return {
       id:String(g.id),
       layoutOptions:{
         'elk.padding': `[top=${hdr.padTop},left=22,bottom=${hdr.padBottom},right=22]`,
-        ...ELK_SPACING
+        ...ELK_SPACING,
+        ...(touchesInterior(g) ? {} : PACK_OPTIONS)
       },
       children:[
         ...(g.nodes||[]).map(id => elkNode(nodeMap.get(String(id)))),

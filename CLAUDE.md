@@ -154,6 +154,14 @@ suggestions from the schema, so it follows automatically).
    The measuring font constants (`NODE_FONT`, `CAP_FONT`, `IP_FONT`) must still
    match the `font-size`/`font-weight` attributes written in `renderSVG`, or
    labels overflow their boxes.
+9. **Hub fan-outs auto-pack.** Layered layout puts every neighbor of a hub in
+   one layer, so hub -> N members = one very wide row. `buildElk` therefore
+   switches any group whose interior is untouched by connections (edges may end
+   at the group itself) to `SEPARATE_CHILDREN` + component packing
+   (`PACK_OPTIONS`), gridding its members near the 1.6 aspect ratio.
+   INCLUDE_CHILDREN would silently disable that packing — which is exactly why
+   it only applies to groups with no boundary-crossing member edges. Advise
+   users to connect hub -> group (not each member) for compact fan-outs.
 
 ## Conventions
 

@@ -106,6 +106,12 @@ editor's completion and validation). The shape is `diagram`, `nodes`, `groups`,
 | `groups` | nested groups, arbitrary depth |
 | *anything else* | any other scalar key (`owner`, `site`, …) is rendered as `key: value` in the same info box |
 
+**Compact fan-outs:** a group whose members have no connections of their own is
+packed into a grid instead of one long row. So for hub-and-spoke topologies
+(one switch feeding 20 hosts), connect the hub **to the group** rather than to
+each member — the members pack compactly and the diagram stays near-square
+instead of growing extremely wide.
+
 ### `connections[]`
 | key | notes |
 |---|---|

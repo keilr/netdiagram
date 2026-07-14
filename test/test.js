@@ -95,6 +95,42 @@ test("cisco ACI group classes render (e.g. epg)", async () => {
   assert.ok(out.includes('rgba(21,128,61,.05)'), "epg class draws the green ACI tint");
 });
 
+test("hub->group fan-outs auto-pack into a grid instead of one wide row", async () => {
+  const ids = Array.from({ length: 12 }, (_, i) => "n" + i);
+  const spec = parseSpec([
+    "nodes:",
+    "  - {id: hub, type: switch}",
+    ...ids.map((id) => `  - {id: ${id}, label: ${id}, type: server, ip: 10.0.0.9}`),
+    "groups:",
+    `  - {id: farm, label: farm, class: subnet, nodes: [${ids.join(", ")}]}`,
+    "connections:",
+    "  - {from: hub, to: farm}",
+  ].join("\n"));
+  const graph = buildElk(spec);
+  const farm = graph.children.find((c) => c.id === "farm");
+  assert.strictEqual(farm.layoutOptions["elk.hierarchyHandling"], "SEPARATE_CHILDREN",
+    "endpoint-free group gets packing options");
+  const out = await elk.layout(graph);
+  assert.ok(out.width < 1400, `packed star stays compact, got width ${Math.ceil(out.width)}`);
+  assert.ok(out.width / out.height < 3, "no single wide layer row");
+
+  // a group whose member is a connection endpoint must keep hierarchical layout
+  const spec2 = parseSpec([
+    "nodes:",
+    "  - {id: hub, type: switch}",
+    "  - {id: a, type: server}",
+    "groups:",
+    "  - {id: g, nodes: [a]}",
+    "connections:",
+    "  - {from: hub, to: a}",
+  ].join("\n"));
+  const g2 = buildElk(spec2).children.find((c) => c.id === "g");
+  assert.strictEqual(g2.layoutOptions["elk.hierarchyHandling"], undefined,
+    "member-endpoint group is not packed");
+  assert.ok(renderSVG(spec2, await elk.layout(buildElk(spec2))).includes("marker-end"),
+    "boundary-crossing edge still routes");
+});
+
 test("group style overrides color and border", async () => {
   const s = parseSpec([
     "nodes:",
