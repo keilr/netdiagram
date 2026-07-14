@@ -366,6 +366,81 @@ function buildElk(spec){
   return { id:'root', layoutOptions: rootOptions, children:rootChildren, edges };
 }
 
+/* ---------------- two-pass port assignment ---------------- */
+/* ELK's crossing minimization barely orders the attachment points of
+ * hierarchical edges, so a hub's edges leave in arbitrary order and cross.
+ * Fix: lay out once, then pin FIXED_ORDER ports on every leaf node with 2+
+ * edges — each edge on the side facing its counterpart, sides ordered by
+ * where the counterparts actually landed — and lay out again.
+ *   const pass1 = await elk.layout(buildElk(spec));
+ *   const graph = assignPorts(buildElk(spec), pass1);   // fresh graph!
+ *   const layout = graph ? await elk.layout(graph) : pass1;
+ * Returns null when no node needs ports (skip the second pass). */
+function assignPorts(graph, layout){
+  const abs = {};                          // id -> absolute box + center
+  (function walk(n, x, y){
+    for (const c of n.children||[]){
+      const x0 = x + (c.x||0), y0 = y + (c.y||0);
+      abs[c.id] = { x0, y0, x1: x0 + (c.width||0), y1: y0 + (c.height||0),
+                    x: x0 + (c.width||0)/2, y: y0 + (c.height||0)/2 };
+      walk(c, x0, y0);
+    }
+  })(layout, 0, 0);
+  const down = (graph.layoutOptions||{})['elk.direction'] !== 'RIGHT';
+
+  const leaves = {};                       // leaf node id -> graph node object
+  (function collect(n){
+    for (const c of n.children||[])
+      if (c.children && c.children.length) collect(c); else leaves[c.id] = c;
+  })(graph);
+
+  const incident = {};                     // leaf id -> [{e, end, other}]
+  for (const e of graph.edges||[]){
+    const s = e.sources[0], t = e.targets[0];
+    if (leaves[s]) (incident[s] = incident[s]||[]).push({ e, end:'sources', other:t });
+    if (leaves[t]) (incident[t] = incident[t]||[]).push({ e, end:'targets', other:s });
+  }
+
+  let assigned = false;
+  for (const id of Object.keys(incident)){
+    const list = incident[id];
+    if (list.length < 2 || !abs[id]) continue;
+    const c = abs[id];
+    const bySide = { NORTH:[], EAST:[], SOUTH:[], WEST:[] };
+    for (const it of list){
+      const o = abs[it.other];
+      if (!o) continue;                    // unknown counterpart: leave endpoint on the node
+      const dx = o.x - c.x, dy = o.y - c.y;
+      /* prefer the flow axis: a counterpart whose box lies wholly before/after
+       * the node goes on the flow-facing side, even when it is far off-axis;
+       * the perpendicular sides are only for counterparts level with it */
+      const side = down
+        ? (o.y1 < c.y ? 'NORTH' : o.y0 > c.y ? 'SOUTH' : dx < 0 ? 'WEST'  : 'EAST')
+        : (o.x1 < c.x ? 'WEST'  : o.x0 > c.x ? 'EAST'  : dy < 0 ? 'NORTH' : 'SOUTH');
+      /* sort key = clockwise position on that side (N: left->right,
+       * E: top->bottom, S: right->left, W: bottom->top) */
+      bySide[side].push({ it, k: side==='NORTH' ? dx : side==='EAST' ? dy
+                                : side==='SOUTH' ? -dx : -dy });
+    }
+    const node = leaves[id];
+    node.layoutOptions = { ...(node.layoutOptions||{}), 'elk.portConstraints':'FIXED_ORDER' };
+    node.ports = [];
+    let idx = 0;
+    for (const side of ['NORTH','EAST','SOUTH','WEST']){
+      bySide[side].sort((a,b)=>a.k-b.k);
+      for (const { it } of bySide[side]){
+        const pid = `${id}.p${idx}`;
+        node.ports.push({ id: pid, width: .1, height: .1,
+          layoutOptions: { 'elk.port.side': side, 'elk.port.index': String(idx) } });
+        it.e[it.end] = [pid];
+        idx++;
+      }
+    }
+    assigned = true;
+  }
+  return assigned ? graph : null;
+}
+
 /* ---------------- render SVG ---------------- */
 function midOfPolyline(pts){
   let total = 0;
@@ -649,6 +724,6 @@ function renderSVG(spec, layout){
 }
 
 if (typeof module !== "undefined" && module.exports)
-  module.exports = { parseSpec, buildElk, renderSVG, CONNECTION_STYLES, GROUP_STYLES, GLYPHS, LABEL_PALETTE,
+  module.exports = { parseSpec, buildElk, assignPorts, renderSVG, CONNECTION_STYLES, GROUP_STYLES, GLYPHS, LABEL_PALETTE,
     // helpers the browser app (concatenated after this file at build time) reuses
     esc, dirOf, ipsOf };

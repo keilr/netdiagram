@@ -26,6 +26,10 @@ There is no dev server; after `npm run build`, open `dist/netdiagram.html` in a 
 src/netdiagram.js   Core library (browser + node). Pure pipeline:
                     parseSpec(yamlText) -> {doc, nodeMap, groupMap, claimed}
                     buildElk(spec)      -> ELK graph JSON (layout is caller's job)
+                    assignPorts(graph, pass1) -> graph|null — two-pass layout:
+                      pins FIXED_ORDER ports on leaf nodes with 2+ edges so hub
+                      edges leave toward their targets (kills most crossings).
+                      Pass a FRESH buildElk graph; null = no hubs, skip pass 2.
                     renderSVG(spec, layout) -> SVG string
                     Also: CONNECTION_STYLES, GROUP_STYLES, GLYPHS, LABEL_PALETTE.
 src/app.js          Browser-only wire-up: textarea editor, debounced render,

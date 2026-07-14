@@ -6,7 +6,7 @@ const assert = require("assert");
 const fs = require("fs");
 const path = require("path");
 const ELK = require("elkjs");
-const { parseSpec, buildElk, renderSVG } = require("../src/netdiagram.js");
+const { parseSpec, buildElk, assignPorts, renderSVG } = require("../src/netdiagram.js");
 
 const root = path.join(__dirname, "..");
 const EXAMPLE = fs.readFileSync(path.join(root, "examples/hq-edge-core.yaml"), "utf8");
@@ -169,6 +169,40 @@ test("edge crossings render as hop arcs", async () => {
   assert.strictEqual(edgePaths.length, 9, "all K3,3 edges drawn");
   const arcs = edgePaths.join(" ").match(/A[\d.]+ [\d.]+ 0 0 [01]/g) || [];
   assert.ok(arcs.length >= 1, "at least one crossing drawn as a hop arc");
+});
+
+test("assignPorts pins hub edges toward their targets (two-pass layout)", async () => {
+  // ansible-style hub: two estates above (rank -1), four below (rank 1)
+  const groups = { gA: -1, gB: -1, gC: 1, gD: 1, gE: 1, gF: 1 };
+  const s = () => parseSpec([
+    "nodes:",
+    "  - {id: hub, type: vm}",
+    ...Object.keys(groups).flatMap((g) => [1, 2].map((i) => `  - {id: ${g}n${i}, type: server}`)),
+    "groups:",
+    ...Object.entries(groups).map(([g, r]) => `  - {id: ${g}, rank: ${r}, nodes: [${g}n1, ${g}n2]}`),
+    "connections:",
+    ...Object.keys(groups).map((g) => `  - {from: hub, to: ${g}}`),
+  ].join("\n"));
+  const pass1 = await elk.layout(buildElk(s()));
+  const graph = assignPorts(buildElk(s()), pass1);
+  assert.ok(graph, "hub with 6 edges gets ports");
+  const hub = graph.children.find((c) => c.id === "hub");
+  assert.strictEqual(hub.layoutOptions["elk.portConstraints"], "FIXED_ORDER");
+  assert.strictEqual(hub.ports.length, 6, "one port per edge");
+  const sides = hub.ports.map((p) => p.layoutOptions["elk.port.side"]);
+  assert.strictEqual(sides.filter((x) => x === "NORTH").length, 2, "rank -1 targets face north");
+  assert.strictEqual(sides.filter((x) => x === "SOUTH").length, 4, "rank 1 targets face south");
+  assert.ok(graph.edges.every((e) => e.sources[0].startsWith("hub.p")), "edges rewired to ports");
+  // second pass lays out and renders without hub-edge crossings
+  const out = renderSVG(s(), await elk.layout(graph));
+  const edgePaths = [...out.matchAll(/class="edge"[^>]*? d="([^"]*)"/g)].map((m) => m[1]);
+  assert.strictEqual(edgePaths.length, 6, "all edges drawn");
+  const arcs = edgePaths.join(" ").match(/A[\d.]+ [\d.]+ 0 0 [01]/g) || [];
+  assert.strictEqual(arcs.length, 0, "ordered ports leave no crossings");
+  // nothing to pin: every node has a single edge
+  const chain = parseSpec("nodes:\n  - {id: a}\n  - {id: b}\nconnections:\n  - {from: a, to: b}");
+  assert.strictEqual(assignPorts(buildElk(chain), await elk.layout(buildElk(chain))), null,
+    "returns null when no node has 2+ edges");
 });
 
 test("group style overrides color and border", async () => {

@@ -2,11 +2,12 @@
 "use strict";
 /* CLI renderer for external-editor workflows (VS Code etc.):
  *   node scripts/render.js <input.yaml> [output.svg] [--watch]
- * Same pipeline as the browser app: parseSpec -> buildElk -> ELK -> renderSVG.
+ * Same pipeline as the browser app: parseSpec -> buildElk -> ELK ->
+ * assignPorts -> ELK -> renderSVG (two passes: hub ports need pass-1 geometry).
  * --watch re-renders on save; pair it with an SVG preview in the editor. */
 const fs = require("fs");
 const ELK = require("elkjs");
-const { parseSpec, buildElk, renderSVG } = require("../src/netdiagram.js");
+const { parseSpec, buildElk, assignPorts, renderSVG } = require("../src/netdiagram.js");
 
 const watch = process.argv.includes("--watch");
 const [input, outArg] = process.argv.slice(2).filter(a => a !== "--watch");
@@ -20,7 +21,9 @@ const elk = new ELK();
 async function render() {
   try {
     const spec = parseSpec(fs.readFileSync(input, "utf8"));
-    const svg = renderSVG(spec, await elk.layout(buildElk(spec)));
+    const pass1 = await elk.layout(buildElk(spec));
+    const ported = assignPorts(buildElk(spec), pass1);
+    const svg = renderSVG(spec, ported ? await elk.layout(ported) : pass1);
     fs.writeFileSync(output, svg);
     console.log(`${output} — ${spec.nodeMap.size} nodes · ${spec.groupMap.size} groups · ${(spec.doc.connections || []).length} connections`);
   } catch (e) {

@@ -130,9 +130,11 @@ instead — `rank: -1` groups lay out above it, `rank: 1` below (see
 | `direction` | `forward` (default), `both`, `none`. In the Connections table a `both` connection is listed twice (once per direction) and a `none` (blocked) connection is left out |
 | `comment` | free-form note (e.g. a rule justification) — shown in the Connections table, not drawn on the edge |
 
-**Crossings:** where connections must cross, the later one hops over the
-earlier with a small arc — the classic schematic convention for "these wires
-don't connect".
+**Crossings:** connection points on a node are automatically ordered toward
+their targets (a second layout pass), so edges fan out of a hub without
+crossing each other. Where connections must still cross, the later one hops
+over the earlier with a small arc — the classic schematic convention for
+"these wires don't connect".
 
 **Color rules:** a labeled connection gets a color from a categorical palette,
 and **equal labels share the same color** (every `tcp/443 https` renders
