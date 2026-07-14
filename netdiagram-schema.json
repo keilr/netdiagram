@@ -178,6 +178,13 @@
           "type": "string",
           "description": "CIDR notation rendered as 'cidr: <value>' in the info box in the group's lower-right corner (e.g. 10.0.0.0/24)"
         },
+        "tags": {
+          "description": "Informational labels shown as pills in the group's top-right corner, tinted in the group's own class/style color (each pill shows the tag text, max two per row). Do not affect styling.",
+          "oneOf": [
+            { "type": ["string", "number"] },
+            { "type": "array", "items": { "type": ["string", "number", "boolean"] }, "minItems": 1 }
+          ]
+        },
         "nodes": {
           "type": "array",
           "items": { "type": "string" },

@@ -166,7 +166,7 @@ function ipsOf(n){ return ipListOf(n).join(' · '); }
 const NODE_KNOWN_KEYS = new Set(['id','label','type','icon','ip','ips','addr','os','tags']);
 /* option keys control rendering; every other scalar key is a displayed attribute */
 const DIAGRAM_OPTION_KEYS = new Set(['title','direction']);
-const GROUP_KNOWN_KEYS = new Set(['id','label','class','cidr','nodes','groups','style']);
+const GROUP_KNOWN_KEYS = new Set(['id','label','class','cidr','nodes','groups','style','tags']);
 function attrLines(obj, known){
   const out = [];
   for (const [k, val] of Object.entries(obj || {})){
@@ -245,6 +245,10 @@ function parseSpec(text){
       if (!g || !g.id) { errors.push(`${path}[${i}]: group missing id`); return; }
       const gid = String(g.id);
       if (groupMap.has(gid) || nodeMap.has(gid)) errors.push(`duplicate id "${gid}"`);
+      if (g.tags != null && (
+          (typeof g.tags === 'object' && !Array.isArray(g.tags)) ||
+          (Array.isArray(g.tags) && g.tags.some(t => t != null && typeof t === 'object'))))
+        errors.push(`group "${gid}": tags must be a scalar or a list of scalars`);
       groupMap.set(gid, g);
       (g.nodes||[]).forEach(nid=>{
         nid = String(nid);
@@ -418,9 +422,20 @@ function renderSVG(spec, layout){
         + hdr.box.lines.map(([k,v],i) =>
           `<text x="${bx+GBOX_PAD}" y="${by + 16 + i*GBOX_LINE_H}" font-family="ui-monospace,Menlo,monospace" font-size="10.5" fill="${st.label}"><tspan opacity=".6">${esc(k)}: </tspan><tspan opacity=".9">${esc(v)}</tspan></text>`).join('');
     }
+    // tag pills in the top-right corner, styled in the group's own class color
+    let gBadge = '';
+    tagPills(g).forEach((row, r) => {
+      let px = b.x + b.w - 10 - pillRowW(row);
+      const py = b.y + 8 + r * PILL_ROW_H;
+      for (const p of row){
+        gBadge += `<rect x="${px}" y="${py}" width="${p.w}" height="${PILL_H}" rx="6" fill="#ffffff" fill-opacity=".85" stroke="${st.stroke}" stroke-width=".9"/>
+      <text x="${px+p.w/2}" y="${py+9}" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8" font-weight="700" letter-spacing=".8" fill="${st.label}">${esc(p.text)}</text>`;
+        px += p.w + PILL_GAP;
+      }
+    });
     gGroups += `<rect x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" rx="8" fill="${st.fill}" stroke="${st.stroke}" stroke-width="1.4"${dash}/>
       <text x="${b.x+14}" y="${b.y+hdr.labelY}" font-family="ui-monospace,Menlo,monospace" font-size="11" font-weight="700" letter-spacing="1.6" fill="${st.label}">${esc(String(g.label||id).toUpperCase())}</text>
-      ${boxText}`;
+      ${boxText}${gBadge}`;
   }
 
   // nodes

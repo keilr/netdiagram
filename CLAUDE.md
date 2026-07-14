@@ -90,6 +90,8 @@ groups:
   - id, label, class: zone|vlan|subnet|cloud|onprem|trust (+ Cisco ACI:
     tenant|vrf|bd|ap|epg|l3out), cidr,
     nodes: [ids], groups: [nested]   # a node may belong to at most one group
+    tags: [str] | str      # pills in the top-right, tinted in the group's own
+                           # class/style color (tagPills, reused from nodes)
     style:                 # optional visual overrides (extensible)
       color: <name>        # gray red orange yellow green teal cyan blue indigo
                            # purple pink (or colour); overrides the class color

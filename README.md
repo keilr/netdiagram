@@ -101,6 +101,7 @@ editor's completion and validation). The shape is `diagram`, `nodes`, `groups`,
 | `class` | tint + border style. Generic: `zone` `vlan` `subnet` `cloud` `onprem` `trust` (trust = red dashed). Cisco ACI: `tenant` `vrf` `bd` `ap` `epg` `l3out` (l3out = orange dashed) |
 | `style` | visual overrides: `color` (or `colour`) — one of `gray` `red` `orange` `yellow` `green` `teal` `cyan` `blue` `indigo` `purple` `pink`, overriding the class tint — and `border`: `solid` `dashed` `dotted` (CSS border-style names). E.g. `style: {color: blue, border: dashed}` |
 | `cidr` | rendered as `cidr: <value>` in the info box in the group's lower-right corner |
+| `tags` | informational labels — pills in the group's top-right corner, tinted in the group's own class/style color (list or single string) |
 | `nodes` | member node ids (a node belongs to at most one group) |
 | `groups` | nested groups, arbitrary depth |
 | *anything else* | any other scalar key (`owner`, `site`, …) is rendered as `key: value` in the same info box |

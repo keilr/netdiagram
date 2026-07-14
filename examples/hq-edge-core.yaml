@@ -86,6 +86,7 @@ groups:
       - id: lan
         label: Server LAN (VLAN 20)
         class: trust
+        tags: [pci]            # group tags: pills tinted in the group's own color
         cidr: 10.0.20.0/24
         owner: netops
         nodes: [core, app1, api1, db1]
