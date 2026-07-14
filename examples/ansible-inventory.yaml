@@ -1,5 +1,5 @@
-# Ansible control node managing a large inventory.
-# Two tricks keep this fan-out compact:
+# Ansible control node managing a large inventory across cloud and on-prem.
+# Tricks that keep this fan-out compact:
 # 1. The control node connects to each inventory GROUP, not to every host —
 #    groups untouched by member-level connections pack into grids.
 # 2. rank: places groups around the hub instead of all in one row below it —
@@ -11,13 +11,13 @@ diagram:
 
 nodes:
   - id: awx
-    label: ansible-ctl
+    label: Ansible Control Node
     type: vm
     ip: 10.40.0.10
     os: linux
     tags: [awx]
 
-  # inventory: web servers
+  # inventory: web servers (cloud)
   - {id: web1, label: web-01, type: vm, ip: 10.40.10.11, os: linux}
   - {id: web2, label: web-02, type: vm, ip: 10.40.10.12, os: linux}
   - {id: web3, label: web-03, type: vm, ip: 10.40.10.13, os: linux}
@@ -25,52 +25,80 @@ nodes:
   - {id: web5, label: web-05, type: vm, ip: 10.40.10.15, os: linux}
   - {id: web6, label: web-06, type: vm, ip: 10.40.10.16, os: linux}
 
-  # inventory: databases
+  # inventory: kubernetes workers (cloud)
+  - {id: k8s1, label: k8s-node-01, type: container, ip: 10.40.50.11, os: linux}
+  - {id: k8s2, label: k8s-node-02, type: container, ip: 10.40.50.12, os: linux}
+  - {id: k8s3, label: k8s-node-03, type: container, ip: 10.40.50.13, os: linux}
+
+  # inventory: databases (on-prem)
   - {id: db1, label: pg-01, type: metal, icon: db, ip: 10.40.20.11, os: linux}
   - {id: db2, label: pg-02, type: metal, icon: db, ip: 10.40.20.12, os: linux}
   - {id: db3, label: pg-03, type: metal, icon: db, ip: 10.40.20.13, os: linux}
 
-  # inventory: network devices
+  # inventory: GPU nodes (on-prem ML rig)
+  - {id: gpu1, label: ml-gpu-01, type: gpu, ip: 10.40.60.11, os: linux, tags: [a100]}
+  - {id: gpu2, label: ml-gpu-02, type: gpu, ip: 10.40.60.12, os: linux, tags: [a100]}
+
+  # inventory: network devices (on-prem)
   - {id: sw1, label: access-sw-01, type: switch, ip: 10.40.30.11}
   - {id: sw2, label: access-sw-02, type: switch, ip: 10.40.30.12}
   - {id: rtr1, label: edge-rtr-01, type: router, ip: 10.40.30.21}
   - {id: rtr2, label: edge-rtr-02, type: router, ip: 10.40.30.22}
 
-  # inventory: windows hosts
+  # inventory: windows hosts (on-prem)
   - {id: win1, label: ad-dc-01, type: server, ip: 10.40.40.11, os: windows}
   - {id: win2, label: file-01, type: server, ip: 10.40.40.12, os: windows}
   - {id: win3, label: print-01, type: server, ip: 10.40.40.13, os: windows}
 
 groups:
-  - id: web
-    label: webservers
-    class: subnet
-    rank: -1               # above the control node
-    cidr: 10.40.10.0/24
-    nodes: [web1, web2, web3, web4, web5, web6]
-  - id: db
-    label: databases
-    class: trust
-    rank: -1
-    tags: [prod]
-    cidr: 10.40.20.0/24
-    nodes: [db1, db2, db3]
-  - id: net
-    label: network devices
-    class: vlan
-    rank: 1                # below the control node
-    cidr: 10.40.30.0/24
-    nodes: [sw1, sw2, rtr1, rtr2]
-  - id: win
-    label: windows hosts
-    class: zone
-    rank: 1
-    cidr: 10.40.40.0/24
-    nodes: [win1, win2, win3]
+  - id: cloud
+    label: Cloud — eu-central
+    class: cloud
+    rank: -1               # cloud estate above the control node
+    groups:
+      - id: web
+        label: webservers
+        class: subnet
+        cidr: 10.40.10.0/24
+        nodes: [web1, web2, web3, web4, web5, web6]
+      - id: k8s
+        label: k8s workers
+        class: vlan
+        cidr: 10.40.50.0/24
+        nodes: [k8s1, k8s2, k8s3]
+  - id: onprem
+    label: On-prem — DC1
+    class: onprem
+    rank: 1                # datacenter estate below it
+    groups:
+      - id: net
+        label: network devices
+        class: vlan
+        cidr: 10.40.30.0/24
+        nodes: [sw1, sw2, rtr1, rtr2]
+      - id: win
+        label: windows hosts
+        class: zone
+        cidr: 10.40.40.0/24
+        nodes: [win1, win2, win3]
+      - id: db
+        label: databases
+        class: trust
+        tags: [prod]
+        cidr: 10.40.20.0/24
+        nodes: [db1, db2, db3]
+      - id: gpu
+        label: gpu nodes
+        class: trust
+        style: {color: purple}
+        cidr: 10.40.60.0/24
+        nodes: [gpu1, gpu2]
 
 connections:
   # one edge per inventory group — this is what enables the compact grids
   - {from: awx, to: web, label: "tcp/22 ssh",     protocol: tcp, port: 22,   comment: "playbooks via ssh"}
+  - {from: awx, to: k8s, label: "tcp/22 ssh",     protocol: tcp, port: 22,   comment: "node bootstrap + upgrades"}
   - {from: awx, to: db,  label: "tcp/22 ssh",     protocol: tcp, port: 22,   comment: "playbooks via ssh"}
+  - {from: awx, to: gpu, label: "tcp/22 ssh",     protocol: tcp, port: 22,   comment: "driver + model rollouts"}
   - {from: awx, to: net, label: "tcp/22 ssh",     protocol: tcp, port: 22,   comment: "network_cli modules"}
   - {from: awx, to: win, label: "tcp/5986 winrm", protocol: tcp, port: 5986, comment: "winrm over https"}
