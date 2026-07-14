@@ -50,6 +50,25 @@ nodes:
   - {id: win2, label: file-01, type: server, ip: 10.40.40.12, os: windows}
   - {id: win3, label: print-01, type: server, ip: 10.40.40.13, os: windows}
 
+  # inventory: api servers (cloud US)
+  - {id: api1, label: api-01, type: vm, ip: 10.41.10.11, os: linux}
+  - {id: api2, label: api-02, type: vm, ip: 10.41.10.12, os: linux}
+  - {id: api3, label: api-03, type: vm, ip: 10.41.10.13, os: linux}
+  - {id: api4, label: api-04, type: vm, ip: 10.41.10.14, os: linux}
+
+  # inventory: monitoring stack (cloud US)
+  - {id: mon1, label: prometheus-01, type: container, ip: 10.41.70.11, os: linux}
+  - {id: mon2, label: grafana-01, type: container, ip: 10.41.70.12, os: linux}
+
+  # inventory: hypervisors (DC2)
+  - {id: esx1, label: esx-01, type: metal, ip: 10.42.30.11, os: esxi}
+  - {id: esx2, label: esx-02, type: metal, ip: 10.42.30.12, os: esxi}
+  - {id: esx3, label: esx-03, type: metal, ip: 10.42.30.13, os: esxi}
+
+  # inventory: backup & storage (DC2)
+  - {id: nas1, label: nas-01, type: storage, ip: 10.42.80.11, os: linux}
+  - {id: nas2, label: backup-01, type: storage, ip: 10.42.80.12, os: linux}
+
 groups:
   - id: cloud
     label: Cloud — eu-central
@@ -66,6 +85,21 @@ groups:
         class: vlan
         cidr: 10.40.50.0/24
         nodes: [k8s1, k8s2, k8s3]
+  - id: cloudus
+    label: Cloud — us-east
+    class: cloud
+    rank: -1               # same rank as the EU cloud: side by side, YAML order
+    groups:
+      - id: api
+        label: api servers
+        class: subnet
+        cidr: 10.41.10.0/24
+        nodes: [api1, api2, api3, api4]
+      - id: mon
+        label: monitoring
+        class: vlan
+        cidr: 10.41.70.0/24
+        nodes: [mon1, mon2]
   - id: onprem
     label: On-prem — DC1
     class: onprem
@@ -93,6 +127,21 @@ groups:
         style: {color: purple}
         cidr: 10.40.60.0/24
         nodes: [gpu1, gpu2]
+  - id: dc2
+    label: On-prem — DC2
+    class: onprem
+    rank: 1                # sits next to DC1 (same rank, YAML order)
+    groups:
+      - id: esx
+        label: hypervisors
+        class: zone
+        cidr: 10.42.30.0/24
+        nodes: [esx1, esx2, esx3]
+      - id: bak
+        label: backup & storage
+        class: subnet
+        cidr: 10.42.80.0/24
+        nodes: [nas1, nas2]
 
 connections:
   # one edge per inventory group — this is what enables the compact grids
@@ -102,3 +151,7 @@ connections:
   - {from: awx, to: gpu, label: "tcp/22 ssh",     protocol: tcp, port: 22,   comment: "driver + model rollouts"}
   - {from: awx, to: net, label: "tcp/22 ssh",     protocol: tcp, port: 22,   comment: "network_cli modules"}
   - {from: awx, to: win, label: "tcp/5986 winrm", protocol: tcp, port: 5986, comment: "winrm over https"}
+  - {from: awx, to: api, label: "tcp/22 ssh",     protocol: tcp, port: 22,   comment: "playbooks via ssh"}
+  - {from: awx, to: mon, label: "tcp/22 ssh",     protocol: tcp, port: 22,   comment: "exporter + dashboard rollout"}
+  - {from: awx, to: esx, label: "tcp/443 https",  protocol: tcp, port: 443,  comment: "community.vmware modules"}
+  - {from: awx, to: bak, label: "tcp/22 ssh",     protocol: tcp, port: 22,   comment: "snapshot + restore jobs"}
