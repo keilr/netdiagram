@@ -366,16 +366,22 @@ function buildElk(spec){
   return { id:'root', layoutOptions: rootOptions, children:rootChildren, edges };
 }
 
-/* ---------------- two-pass port assignment ---------------- */
-/* ELK's crossing minimization barely orders the attachment points of
- * hierarchical edges, so a hub's edges leave in arbitrary order and cross.
- * Fix: lay out once, then pin FIXED_ORDER ports on every leaf node with 2+
- * edges — each edge on the side facing its counterpart, sides ordered by
- * where the counterparts actually landed — and lay out again.
+/* ---------------- two-pass refinement (ports + edge direction) ---------------- */
+/* Two fixes that need pass-1 geometry, applied to a fresh graph for pass 2:
+ * 1. Against-flow edges (rank places the target BEFORE the source, e.g.
+ *    hub -> rank:-1 group) are handed to ELK reversed — otherwise ELK routes
+ *    them around the whole diagram and into the target's far side. renderSVG
+ *    detects the swap by comparing endpoints to the connection and flips the
+ *    drawn path back, so arrows still point from -> to.
+ * 2. ELK's crossing minimization barely orders the attachment points of
+ *    hierarchical edges, so a hub's edges leave in arbitrary order and cross.
+ *    Every leaf node with 2+ edges gets FIXED_ORDER ports — each edge on the
+ *    side facing its counterpart, sides ordered by where the counterparts
+ *    actually landed.
  *   const pass1 = await elk.layout(buildElk(spec));
  *   const graph = assignPorts(buildElk(spec), pass1);   // fresh graph!
  *   const layout = graph ? await elk.layout(graph) : pass1;
- * Returns null when no node needs ports (skip the second pass). */
+ * Returns null when nothing changed (skip the second pass). */
 function assignPorts(graph, layout){
   const abs = {};                          // id -> absolute box + center
   (function walk(n, x, y){
@@ -387,6 +393,18 @@ function assignPorts(graph, layout){
     }
   })(layout, 0, 0);
   const down = (graph.layoutOptions||{})['elk.direction'] !== 'RIGHT';
+
+  /* 1. reverse edges whose target landed wholly before the source in the
+   * flow direction — ELK then routes them short and direct */
+  let assigned = false;
+  for (const e of graph.edges||[]){
+    const s = abs[e.sources[0]], t = abs[e.targets[0]];
+    if (!s || !t) continue;
+    if (down ? t.y1 <= s.y0 : t.x1 <= s.x0){
+      [e.sources, e.targets] = [e.targets, e.sources];
+      assigned = true;
+    }
+  }
 
   const leaves = {};                       // leaf node id -> graph node object
   (function collect(n){
@@ -401,7 +419,7 @@ function assignPorts(graph, layout){
     if (leaves[t]) (incident[t] = incident[t]||[]).push({ e, end:'targets', other:s });
   }
 
-  let assigned = false;
+  /* 2. FIXED_ORDER ports on multi-edge leaf nodes */
   for (const id of Object.keys(incident)){
     const list = incident[id];
     if (list.length < 2 || !abs[id]) continue;
@@ -659,11 +677,18 @@ function renderSVG(spec, layout){
   // pass 1: absolute polylines, sorted to connection order so hop assignment
   // (later edge hops over earlier one) is stable regardless of ELK nesting
   const drawn = [];
+  const bare = id => String(id).replace(/\.p\d+$/, '');  // strip assignPorts port suffix
   allEdges.forEach(e=>{
     const sec = (e.sections||[])[0]; if (!sec) return;
     const off = offsetOf(e.container);
     const pts = [sec.startPoint, ...(sec.bendPoints||[]), sec.endPoint]
       .map(p => ({ x: p.x + off.x, y: p.y + off.y }));
+    // assignPorts feeds against-flow edges to ELK reversed; flip the drawn
+    // path back so markers still point from -> to
+    const l = (doc.connections||[])[edgeIndex(e.id)];
+    if (l && String(l.from) !== String(l.to)
+          && bare((e.sources||[])[0]) === String(l.to)
+          && bare((e.targets||[])[0]) === String(l.from)) pts.reverse();
     drawn.push({ idx: edgeIndex(e.id), pts });
   });
   drawn.sort((p, q) => p.idx - q.idx);

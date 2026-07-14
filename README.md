@@ -132,9 +132,11 @@ instead — `rank: -1` groups lay out above it, `rank: 1` below (see
 
 **Crossings:** connection points on a node are automatically ordered toward
 their targets (a second layout pass), so edges fan out of a hub without
-crossing each other. Where connections must still cross, the later one hops
-over the earlier with a small arc — the classic schematic convention for
-"these wires don't connect".
+crossing each other, and a connection to a group placed *before* the hub
+(negative `rank`) attaches to the group's near side instead of looping around
+it. Where connections must still cross, the later one hops over the earlier
+with a small arc — the classic schematic convention for "these wires don't
+connect".
 
 **Color rules:** a labeled connection gets a color from a categorical palette,
 and **equal labels share the same color** (every `tcp/443 https` renders

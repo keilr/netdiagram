@@ -192,7 +192,13 @@ test("assignPorts pins hub edges toward their targets (two-pass layout)", async 
   const sides = hub.ports.map((p) => p.layoutOptions["elk.port.side"]);
   assert.strictEqual(sides.filter((x) => x === "NORTH").length, 2, "rank -1 targets face north");
   assert.strictEqual(sides.filter((x) => x === "SOUTH").length, 4, "rank 1 targets face south");
-  assert.ok(graph.edges.every((e) => e.sources[0].startsWith("hub.p")), "edges rewired to ports");
+  // rank -1 targets sit before the hub in the flow: those edges go to ELK
+  // reversed (routed with the flow, drawn flipped back by renderSVG)
+  const rev = graph.edges.filter((e) => !e.sources[0].startsWith("hub.p"));
+  assert.deepStrictEqual(rev.map((e) => e.sources[0]).sort(), ["gA", "gB"],
+    "against-flow edges are reversed");
+  assert.ok(graph.edges.every((e) => e.sources[0].startsWith("hub.p") || e.targets[0].startsWith("hub.p")),
+    "every edge attaches to a hub port");
   // second pass lays out and renders without hub-edge crossings
   const out = renderSVG(s(), await elk.layout(graph));
   const edgePaths = [...out.matchAll(/class="edge"[^>]*? d="([^"]*)"/g)].map((m) => m[1]);
