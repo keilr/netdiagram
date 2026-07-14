@@ -382,6 +382,73 @@ function midOfPolyline(pts){
   return pts[Math.floor(pts.length/2)] || {x:0,y:0};
 }
 
+/* ---- crossing hops --------------------------------------------------------
+ * Layered layout minimizes crossings but cannot always avoid them. Where an
+ * edge crosses an earlier one (lower connection index) perpendicularly, its
+ * straight run is replaced by a small arc — the drafting convention for
+ * "these wires do not connect". Orthogonal routing makes detection exact:
+ * crossings are always one horizontal against one vertical segment. */
+const HOP_R = 4.5;          // hop radius
+const HOP_END_MARGIN = 8;   // keep hops clear of bends and terminals
+const AXIS_EPS = .75;       // tolerance for treating a segment as axis-aligned
+
+function segOrient(a, b){
+  if (Math.abs(a.y - b.y) < AXIS_EPS && Math.abs(a.x - b.x) >= AXIS_EPS) return 'h';
+  if (Math.abs(a.x - b.x) < AXIS_EPS && Math.abs(a.y - b.y) >= AXIS_EPS) return 'v';
+  return null;
+}
+/* crossing positions of segment a->b (along its travel axis) against every
+ * perpendicular segment of the earlier polylines */
+function segHops(a, b, lowerPolys){
+  const o = segOrient(a, b);
+  if (!o) return [];
+  const lo = o === 'h' ? Math.min(a.x, b.x) : Math.min(a.y, b.y);
+  const hi = o === 'h' ? Math.max(a.x, b.x) : Math.max(a.y, b.y);
+  const level = o === 'h' ? a.y : a.x;
+  const hops = [];
+  for (const pts of lowerPolys){
+    for (let i = 1; i < pts.length; i++){
+      const c = pts[i-1], d = pts[i];
+      if (segOrient(c, d) !== (o === 'h' ? 'v' : 'h')) continue;
+      const cross = o === 'h' ? c.x : c.y;   // where the other segment sits on our axis
+      const clo = o === 'h' ? Math.min(c.y, d.y) : Math.min(c.x, d.x);
+      const chi = o === 'h' ? Math.max(c.y, d.y) : Math.max(c.x, d.x);
+      if (cross <= lo + HOP_END_MARGIN || cross >= hi - HOP_END_MARGIN) continue; // near our bend/terminal
+      if (level <= clo + AXIS_EPS || level >= chi - AXIS_EPS) continue;           // T-junction, not a crossing
+      hops.push(cross);
+    }
+  }
+  return hops;
+}
+/* path data for a polyline with hop arcs; hops bulge up (horizontal runs)
+ * resp. right (vertical runs); overlapping hops merge into one wider arc */
+function hopPath(pts, lowerPolys){
+  let d = `M${pts[0].x} ${pts[0].y}`;
+  for (let i = 1; i < pts.length; i++){
+    const a = pts[i-1], b = pts[i];
+    const o = segOrient(a, b);
+    const hops = o && lowerPolys.length ? segHops(a, b, lowerPolys) : [];
+    if (!hops.length){ d += `L${b.x} ${b.y}`; continue; }
+    const dir = (o === 'h' ? b.x - a.x : b.y - a.y) > 0 ? 1 : -1;
+    hops.sort((p, q) => (p - q) * dir);
+    const runs = [];
+    for (const c of hops){
+      const run = runs[runs.length - 1];
+      if (run && Math.abs(c - run[run.length - 1]) <= HOP_R * 2 + 1) run.push(c);
+      else runs.push([c]);
+    }
+    const sweep = dir > 0 ? 1 : 0;
+    for (const run of runs){
+      const from = run[0] - HOP_R * dir, to = run[run.length - 1] + HOP_R * dir;
+      const rHalf = Math.abs(to - from) / 2;
+      if (o === 'h') d += `L${from} ${a.y}A${rHalf} ${HOP_R} 0 0 ${sweep} ${to} ${a.y}`;
+      else           d += `L${a.x} ${from}A${HOP_R} ${rHalf} 0 0 ${sweep} ${a.x} ${to}`;
+    }
+    d += `L${b.x} ${b.y}`;
+  }
+  return d;
+}
+
 function renderSVG(spec, layout){
   const { doc, nodeMap, groupMap } = spec;
   const title = String(doc.diagram?.title || 'untitled network');
@@ -514,15 +581,23 @@ function renderSVG(spec, layout){
     (node.children||[]).forEach(collectEdges);
   })(layout);
   const offsetOf = id => (!id || id==='root') ? {x:0,y:0} : (abs.get(id) || {x:0,y:0});
+  // pass 1: absolute polylines, sorted to connection order so hop assignment
+  // (later edge hops over earlier one) is stable regardless of ELK nesting
+  const drawn = [];
   allEdges.forEach(e=>{
-    const l = (doc.connections||[])[edgeIndex(e.id)] || {};
-    const st = styleOf(l);
-    const mk = 'ah-' + st.hex.slice(1);
     const sec = (e.sections||[])[0]; if (!sec) return;
     const off = offsetOf(e.container);
     const pts = [sec.startPoint, ...(sec.bendPoints||[]), sec.endPoint]
       .map(p => ({ x: p.x + off.x, y: p.y + off.y }));
-    const d = 'M' + pts.map(p=>`${p.x} ${p.y}`).join(' L');
+    drawn.push({ idx: edgeIndex(e.id), pts });
+  });
+  drawn.sort((p, q) => p.idx - q.idx);
+  // pass 2: draw, arcing over every crossing with an earlier edge
+  drawn.forEach((rec, k)=>{
+    const l = (doc.connections||[])[rec.idx] || {};
+    const st = styleOf(l);
+    const mk = 'ah-' + st.hex.slice(1);
+    const d = hopPath(rec.pts, drawn.slice(0, k).map(r => r.pts));
     const dirMode = dirOf(l);
     const mEnd = dirMode==='none' ? '' : ` marker-end="url(#${mk})"`;
     const mStart = dirMode==='both' ? ` marker-start="url(#${mk})"` : '';
@@ -530,7 +605,7 @@ function renderSVG(spec, layout){
     const lblAttr = l.label != null ? ` data-label="${esc(String(l.label))}"` : '';
     gEdges += `<path class="edge"${lblAttr} d="${d}" fill="none" stroke="${st.hex}" stroke-width="${st.width}"${dash}${mEnd}${mStart}/>`;
     if (l.label){
-      const m = midOfPolyline(pts);
+      const m = midOfPolyline(rec.pts);
       gLabels += `<text class="edge-lbl" data-label="${esc(String(l.label))}" x="${m.x}" y="${m.y-5}" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="11" fill="${st.hex}" stroke="#fafbf7" stroke-width="4" paint-order="stroke" stroke-linejoin="round">${esc(String(l.label))}</text>`;
     }
   });

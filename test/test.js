@@ -156,6 +156,21 @@ test("rank places siblings before/after the unranked row", async () => {
     `expected gup above hub above gdn, got ${JSON.stringify(y)}`);
 });
 
+test("edge crossings render as hop arcs", async () => {
+  // K3,3 is non-planar: whatever order ELK picks, some edges must cross
+  const s = parseSpec([
+    "nodes:",
+    ...["a1","a2","a3","b1","b2","b3"].map((id) => `  - {id: ${id}, label: ${id}, type: server}`),
+    "connections:",
+    ...["a1","a2","a3"].flatMap((a) => ["b1","b2","b3"].map((b) => `  - {from: ${a}, to: ${b}}`)),
+  ].join("\n"));
+  const out = renderSVG(s, await elk.layout(buildElk(s)));
+  const edgePaths = [...out.matchAll(/class="edge"[^>]*? d="([^"]*)"/g)].map((m) => m[1]);
+  assert.strictEqual(edgePaths.length, 9, "all K3,3 edges drawn");
+  const arcs = edgePaths.join(" ").match(/A[\d.]+ [\d.]+ 0 0 [01]/g) || [];
+  assert.ok(arcs.length >= 1, "at least one crossing drawn as a hop arc");
+});
+
 test("group style overrides color and border", async () => {
   const s = parseSpec([
     "nodes:",

@@ -184,7 +184,9 @@ suggestions from the schema, so it follows automatically).
   the platform glyph AND set the border style — VM = dashed, bare metal =
   double, container = fine-dotted (hwOf + HW_STYLES). Tags are informational
   neutral pills, two per row (tagPills), never styling. Trust boundaries =
-  red dashed group border.
+  red dashed group border. Edge crossings render as hop arcs: the connection
+  with the higher index arcs over the lower one (hopPath/segHops — exact
+  H-vs-V intersection tests, only possible because routing is orthogonal).
 - After changing rendering or layout, eyeball the example: render
   `examples/hq-edge-core.yaml` and check labels don't collide (there is no
   automated visual regression test).
