@@ -73,6 +73,17 @@ test("diagram direction defaults to down; right is explicit", () => {
   assert.strictEqual(dirOfSpec("diagram: {direction: right}\nnodes:\n  - {id: a}"), 'RIGHT', "right -> RIGHT");
 });
 
+test("cisco ACI group classes render (e.g. epg)", async () => {
+  const s = parseSpec([
+    "nodes:",
+    "  - {id: n, type: server}",
+    "groups:",
+    "  - {id: g, label: EPG web, class: epg, nodes: [n]}",
+  ].join("\n"));
+  const out = renderSVG(s, await elk.layout(buildElk(s)));
+  assert.ok(out.includes('rgba(21,128,61,.05)'), "epg class draws the green ACI tint");
+});
+
 test("group style overrides color and border", async () => {
   const s = parseSpec([
     "nodes:",

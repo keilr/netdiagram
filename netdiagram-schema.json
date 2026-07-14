@@ -145,8 +145,8 @@
         },
         "class": {
           "type": "string",
-          "enum": ["zone", "vlan", "subnet", "cloud", "onprem", "trust"],
-          "description": "Visual style: zone (orange), vlan (teal), subnet (blue), cloud (purple dashed), onprem (grey), trust (red dashed)"
+          "enum": ["zone", "vlan", "subnet", "cloud", "onprem", "trust", "tenant", "vrf", "bd", "ap", "epg", "l3out"],
+          "description": "Visual style. Generic: zone (orange), vlan (teal), subnet (blue), cloud (purple dashed), onprem (grey), trust (red dashed). Cisco ACI: tenant (grey), vrf (indigo), bd (cyan), ap (purple), epg (green), l3out (orange dashed)"
         },
         "style": {
           "type": "object",

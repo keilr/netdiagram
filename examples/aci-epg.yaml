@@ -59,30 +59,30 @@ nodes:
 groups:
   - id: tenant
     label: Tenant · prod
-    class: onprem
+    class: tenant
     groups:
       - id: ext
         label: L3Out · internet
-        class: cloud
+        class: l3out
         scope: external
         nodes: [border]
       - id: epg-web
         label: EPG · web
-        class: zone
+        class: epg
         cidr: 10.20.10.0/24
         gw: 10.20.10.1         # subnet anycast gateway
         vrf: prod-vrf          # VRF (routing/tenant context)
         nodes: [web1, web2]
       - id: epg-app
         label: EPG · app
-        class: subnet
+        class: epg
         cidr: 10.20.20.0/24
         gw: 10.20.20.1
         vrf: prod-vrf
         nodes: [app1, app2]
       - id: epg-db
         label: EPG · db
-        class: trust
+        class: epg
         cidr: 10.20.30.0/24
         gw: 10.20.30.1
         vrf: prod-vrf

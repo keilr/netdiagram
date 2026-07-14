@@ -11,22 +11,8 @@ const CONNECTION_STYLES = {
   default: { hex:'#24344d', dash:null, width:1.8 },
   labeled: { dash:null, width:2 }   // hex assigned per label from LABEL_PALETTE
 };
-const GROUP_STYLES = {
-  zone:   { fill:'rgba(180,83,9,.05)',   stroke:'#c98a4b', dash:null,  label:'#9a5b17' },
-  vlan:   { fill:'rgba(13,148,136,.05)', stroke:'#4fa9a0', dash:null,  label:'#0f766e' },
-  subnet: { fill:'rgba(71,105,155,.06)', stroke:'#8aa2c4', dash:null,  label:'#3f5e8c' },
-  cloud:  { fill:'rgba(124,58,237,.045)',stroke:'#a78bda', dash:'6 4', label:'#6d4fb3' },
-  onprem: { fill:'rgba(60,72,88,.045)',  stroke:'#9aa6b4', dash:null,  label:'#4b5866' },
-  trust:  { fill:'rgba(192,57,43,.03)',  stroke:'#d0685c', dash:'8 5', label:'#a83a2e' },
-  default:{ fill:'rgba(60,72,88,.04)',   stroke:'#a8b2bd', dash:null,  label:'#5b6874' }
-};
-
-/* colors assigned to shared connection labels */
-const LABEL_PALETTE = ['#0f766e','#7c3aed','#1d4ed8','#9d174d','#4d7c0f','#0e7490','#a21caf','#b45309'];
-
-/* Named group colors (group style.color / style.colour) — a coordinated
- * fill/stroke/label scheme derived from one base hex, so every color shares the
- * same muted, blueprint feel. Names are CSS color names; the tint is toned down. */
+/* color-scheme derivation from one base hex — shared by the group classes below
+ * and by named style.color overrides; the tint is toned down for the blueprint */
 const hexToRgb = h => { const n = parseInt(h.slice(1), 16); return { r:(n>>16)&255, g:(n>>8)&255, b:n&255 }; };
 const mixHex = (hex, toHex, t) => {
   const a = hexToRgb(hex), b = hexToRgb(toHex);
@@ -37,6 +23,28 @@ const groupColorScheme = hex => {
   const { r, g, b } = hexToRgb(hex);
   return { fill:`rgba(${r},${g},${b},.05)`, stroke: mixHex(hex, '#ffffff', .42), label: hex };
 };
+const GROUP_STYLES = {
+  zone:   { fill:'rgba(180,83,9,.05)',   stroke:'#c98a4b', dash:null,  label:'#9a5b17' },
+  vlan:   { fill:'rgba(13,148,136,.05)', stroke:'#4fa9a0', dash:null,  label:'#0f766e' },
+  subnet: { fill:'rgba(71,105,155,.06)', stroke:'#8aa2c4', dash:null,  label:'#3f5e8c' },
+  cloud:  { fill:'rgba(124,58,237,.045)',stroke:'#a78bda', dash:'6 4', label:'#6d4fb3' },
+  onprem: { fill:'rgba(60,72,88,.045)',  stroke:'#9aa6b4', dash:null,  label:'#4b5866' },
+  trust:  { fill:'rgba(192,57,43,.03)',  stroke:'#d0685c', dash:'8 5', label:'#a83a2e' },
+  /* Cisco ACI containers: tenant > vrf > bd > ap > epg, plus l3out (external) */
+  tenant: { ...groupColorScheme('#57636f'), dash:null  },
+  vrf:    { ...groupColorScheme('#4338ca'), dash:null  },
+  bd:     { ...groupColorScheme('#0e7490'), dash:null  },
+  ap:     { ...groupColorScheme('#7c3aed'), dash:null  },
+  epg:    { ...groupColorScheme('#15803d'), dash:null  },
+  l3out:  { ...groupColorScheme('#c2410c'), dash:'6 4' },
+  default:{ fill:'rgba(60,72,88,.04)',   stroke:'#a8b2bd', dash:null,  label:'#5b6874' }
+};
+
+/* colors assigned to shared connection labels */
+const LABEL_PALETTE = ['#0f766e','#7c3aed','#1d4ed8','#9d174d','#4d7c0f','#0e7490','#a21caf','#b45309'];
+
+/* Named group colors (group style.color / style.colour) — same derivation as the
+ * class styles above; names are CSS color names, tinted down for the blueprint. */
 const GROUP_COLORS = Object.fromEntries(Object.entries({
   gray:'#57636f', red:'#c0392b', orange:'#c2410c', yellow:'#a16207', green:'#15803d',
   teal:'#0f766e', cyan:'#0e7490', blue:'#1d4ed8', indigo:'#4338ca', purple:'#7c3aed', pink:'#be185d'

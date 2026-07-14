@@ -87,7 +87,8 @@ nodes:
                            # and border come from type/icon
     <any-scalar-key>: val  # unknown scalar keys render as "key: value" lines
 groups:
-  - id, label, class: zone|vlan|subnet|cloud|onprem|trust, cidr,
+  - id, label, class: zone|vlan|subnet|cloud|onprem|trust (+ Cisco ACI:
+    tenant|vrf|bd|ap|epg|l3out), cidr,
     nodes: [ids], groups: [nested]   # a node may belong to at most one group
     style:                 # optional visual overrides (extensible)
       color: <name>        # gray red orange yellow green teal cyan blue indigo
