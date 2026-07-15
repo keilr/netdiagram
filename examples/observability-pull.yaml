@@ -1,0 +1,84 @@
+# Grafana / Prometheus / Mimir — PULL architecture: a central Prometheus
+# scrapes every target (it connects OUT to the exporters — that is the
+# firewall-rule direction), then remote-writes to Mimir. Each target group is
+# one edge per scrape job — untouched interiors pack into grids.
+# Compare with observability-push.yaml (agent mode, remote-write from nodes).
+# rank: splits the wide target fan-out into two rows below the stack, and
+# the mimir group members are never addressed directly, so they grid too.
+diagram:
+  title: Metrics — pull architecture
+  owner: sre-team
+
+nodes:
+  - {id: sre, label: SRE, type: user}
+
+  # observability core
+  - {id: graf, label: grafana, type: container, icon: monitoring, ip: 10.70.0.3}
+  - {id: prom, label: prometheus, type: container, ip: 10.70.0.9, tags: [scraper]}
+  - {id: mimir1, label: mimir-01, type: container, ip: 10.70.0.11}
+  - {id: mimir2, label: mimir-02, type: container, ip: 10.70.0.12}
+  - {id: mimir3, label: mimir-03, type: container, ip: 10.70.0.13}
+  - {id: s3, label: minio-s3, type: storage, ip: 10.70.0.20, tags: [blocks]}
+
+  # scrape targets
+  - {id: kafka1, label: kafka-01, type: metal, ip: 10.70.10.11, os: linux, tags: [jmx]}
+  - {id: kafka2, label: kafka-02, type: metal, ip: 10.70.10.12, os: linux, tags: [jmx]}
+  - {id: kafka3, label: kafka-03, type: metal, ip: 10.70.10.13, os: linux, tags: [jmx]}
+  - {id: os1, label: opensearch-01, type: vm, ip: 10.70.20.11, os: linux}
+  - {id: os2, label: opensearch-02, type: vm, ip: 10.70.20.12, os: linux}
+  - {id: os3, label: opensearch-03, type: vm, ip: 10.70.20.13, os: linux}
+  - {id: vec1, label: vector-01, type: container, ip: 10.70.30.11}
+  - {id: vec2, label: vector-02, type: container, ip: 10.70.30.12}
+  - {id: webui, label: open-webui, type: container, ip: 10.70.40.5}
+  - {id: dcgm, label: dcgm-exporter, type: container, ip: 10.70.40.6, tags: [nvidia]}
+  - {id: vllm1, label: vllm-01, type: gpu, ip: 10.70.40.11, os: linux, tags: [h100]}
+  - {id: vllm2, label: vllm-02, type: gpu, ip: 10.70.40.12, os: linux, tags: [h100]}
+  - {id: lx1, label: app-01, type: vm, ip: 10.70.50.11, os: linux, tags: [node-exporter]}
+  - {id: lx2, label: app-02, type: vm, ip: 10.70.50.12, os: linux, tags: [node-exporter]}
+  - {id: lx3, label: db-01, type: metal, icon: db, ip: 10.70.50.13, os: linux, tags: [node-exporter]}
+
+groups:
+  - id: obs
+    label: Observability
+    class: zone
+    cidr: 10.70.0.0/24
+    nodes: [graf, prom]
+    groups:
+      - id: mimir
+        label: mimir (HA)
+        class: subnet
+        nodes: [mimir1, mimir2, mimir3, s3]
+
+  # first target row — ml gets three scrape edges, so it sits directly below
+  # the stack where the drops stay vertical and the labels stay apart
+  - id: ml
+    label: ML inference
+    class: trust
+    style: {color: purple}
+    rank: 1
+    cidr: 10.70.40.0/24
+    nodes: [webui, dcgm]
+    groups:
+      - {id: gpus, label: vllm pool, class: nodepool, nodes: [vllm1, vllm2]}
+  - {id: logs, label: log pipeline, class: subnet, rank: 1, cidr: 10.70.30.0/24, nodes: [vec1, vec2]}
+
+  # second target row — one edge each
+  - {id: kafka, label: kafka — streaming, class: vlan, rank: 2, cidr: 10.70.10.0/24, nodes: [kafka1, kafka2, kafka3]}
+  - {id: search, label: opensearch, class: vlan, rank: 2, cidr: 10.70.20.0/24, nodes: [os1, os2, os3]}
+  - {id: fleet, label: linux fleet, class: onprem, rank: 2, cidr: 10.70.50.0/24, nodes: [lx1, lx2, lx3]}
+
+connections:
+  - {from: sre,  to: graf,   label: "tcp/3000 grafana",      protocol: tcp, port: 3000}
+  - {from: graf, to: mimir,  label: "tcp/8080 promql",       protocol: tcp, port: 8080, comment: "dashboards query mimir"}
+  - {from: prom, to: mimir,  label: "tcp/8080 remote-write", protocol: tcp, port: 8080, comment: "long-term storage"}
+  # scrapes — prometheus connects out to the exporters
+  - {from: prom, to: kafka,  label: "tcp/7071 jmx",          protocol: tcp, port: 7071, comment: "jmx-exporter javaagent"}
+  - {from: prom, to: search, label: "tcp/9200 metrics",      protocol: tcp, port: 9200, comment: "prometheus-exporter plugin"}
+  - {from: prom, to: logs,   label: "tcp/9598 vector",       protocol: tcp, port: 9598, comment: "vector internal metrics"}
+  - {from: prom, to: webui,  label: "tcp/8080 open-webui",   protocol: tcp, port: 8080}
+  - {from: prom, to: dcgm,   label: "tcp/9400 dcgm",         protocol: tcp, port: 9400, comment: "nvidia gpu telemetry"}
+  - {from: prom, to: gpus,   label: "tcp/8000 vllm",         protocol: tcp, port: 8000, comment: "vllm /metrics"}
+  - {from: prom, to: fleet,  label: "tcp/9100 node",         protocol: tcp, port: 9100, comment: "node-exporter on every host"}
+  # host metrics also come from node-exporter on the kafka and search nodes
+  - {from: prom, to: kafka,  label: "tcp/9100 node",         protocol: tcp, port: 9100, comment: "node-exporter"}
+  - {from: prom, to: search, label: "tcp/9100 node",         protocol: tcp, port: 9100, comment: "node-exporter"}

@@ -295,6 +295,10 @@ function loadExample(){
   refreshProjects();
 }
 exampleSel.addEventListener('change', loadExample);
+/* dash-concatenated file name from the diagram title (or any base string) */
+const slugName = s => String(s ?? '').toLowerCase().replace(/[^a-z0-9]+/g,'-')
+  .replace(/^-+|-+$/g,'') || 'network-diagram';
+
 $('#btn-download').addEventListener('click', ()=>{
   const svg = canvasEl.querySelector('svg'); if (!svg) return;
   const clone = svg.cloneNode(true);       // download at natural size, zoom-free
@@ -306,8 +310,7 @@ $('#btn-download').addEventListener('click', ()=>{
   const blob = new Blob([clone.outerHTML], {type:'image/svg+xml'});
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  const t = lastSpec?.doc.diagram?.title;   // the SVG on screen came from lastSpec
-  a.download = (t ? String(t).toLowerCase().replace(/[^a-z0-9]+/g,'-') : 'network-diagram') + '.svg';
+  a.download = slugName(lastSpec?.doc.diagram?.title) + '.svg';  // the SVG on screen came from lastSpec
   a.click(); URL.revokeObjectURL(a.href);
 });
 
@@ -316,8 +319,7 @@ $('#btn-download').addEventListener('click', ()=>{
 $('#btn-yaml').addEventListener('click', ()=>{
   const text = editor.value;
   const title = /^\s*title:\s*(.+?)\s*$/m.exec(text)?.[1]?.replace(/^["']|["']$/g,'');
-  const base = getActive() || title || 'network-diagram';
-  const name = base.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'') || 'network-diagram';
+  const name = slugName(getActive() || title);
   const blob = new Blob([text], {type:'text/yaml;charset=utf-8'});
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
@@ -346,7 +348,9 @@ fileInput.addEventListener('change', ()=>{
 
 /* Export PDF — print a page holding just the diagram; the browser's print
  * dialog does the SVG->PDF conversion (stays vector, no extra libraries).
- * A hidden iframe avoids popup blockers; @page orientation follows the aspect. */
+ * A hidden iframe avoids popup blockers. @page pins A4 as the default paper,
+ * oriented by the diagram's aspect; the frame's <title> is the slugged
+ * diagram title, which browsers suggest as the PDF file name. */
 $('#btn-pdf').addEventListener('click', ()=>{
   const svg = canvasEl.querySelector('svg'); if (!svg) return;
   const clone = svg.cloneNode(true);        // print at natural size, zoom-free
@@ -356,7 +360,7 @@ $('#btn-pdf').addEventListener('click', ()=>{
   }
   delete clone.dataset.w; delete clone.dataset.h;
   const landscape = (+clone.getAttribute('width') || 1) >= (+clone.getAttribute('height') || 1);
-  const title = esc(String(lastSpec?.doc.diagram?.title || 'network diagram'));
+  const title = esc(slugName(lastSpec?.doc.diagram?.title));
   const frame = document.createElement('iframe');
   frame.setAttribute('aria-hidden', 'true');
   frame.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0';
@@ -364,7 +368,7 @@ $('#btn-pdf').addEventListener('click', ()=>{
   const d = frame.contentDocument;
   d.open();
   d.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${title}</title>`
-    + `<style>@page{size:${landscape?'landscape':'portrait'};margin:8mm}`
+    + `<style>@page{size:A4 ${landscape?'landscape':'portrait'};margin:8mm}`
     + `html,body{margin:0;padding:0;height:100%}`
     + `body{display:flex;align-items:center;justify-content:center}`
     + `svg{max-width:100%;max-height:100%}</style></head>`

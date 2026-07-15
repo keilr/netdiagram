@@ -65,8 +65,10 @@ Load one of the bundled examples from the picker below the editor to see more.
   blocks local storage, the project controls hide themselves and examples still
   work.)
 - **Import / export** — import a `.yaml` file, download the source as **YAML**,
-  download the diagram as **SVG**, or **Export PDF** (opens the print dialog; the
-  diagram stays vector and page orientation follows its aspect).
+  download the diagram as **SVG**, or **Export PDF** (opens the print dialog;
+  the diagram stays vector, A4 is preselected with orientation following the
+  diagram's aspect, and the suggested file name is the diagram title,
+  dash-concatenated — as for the SVG/YAML downloads).
 - **Navigate** — zoom, pan and fit-to-view; the diagram auto-fits when loaded.
 
 ## Schema

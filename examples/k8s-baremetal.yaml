@@ -21,6 +21,8 @@ nodes:
   - {id: be, label: shop-backend, type: pod, ip: 10.244.4.22}
   - {id: train, label: llm-train, type: pod, ip: 10.244.7.11, tags: [gpu]}
   - {id: serve, label: llm-serve, type: pod, ip: 10.244.7.12, tags: [gpu]}
+  # a legacy VM workload virtualized on the cluster via KubeVirt
+  - {id: legdb, label: legacy-erp-db, type: vm, ip: 10.244.9.21, os: windows, tags: [kubevirt]}
 
   # machines (bare metal)
   - {id: cp1, label: cp-01, type: metal, ip: 10.60.0.11, os: linux, etcd: member}
@@ -44,6 +46,10 @@ groups:
         class: namespace
         quota: gpu=8
         nodes: [train, serve]
+      - id: legacy
+        label: ns legacy
+        class: namespace
+        nodes: [legdb]
       - {id: cp, label: control plane, class: zone, rank: 1, cidr: 10.60.0.0/24, nodes: [cp1, cp2, cp3]}
       - {id: workers, label: workers, class: nodepool, rank: 1, cidr: 10.60.1.0/24, nodes: [w1, w2, w3]}
       - id: gpuw
@@ -59,6 +65,7 @@ connections:
   - {from: ing,  to: shop,  label: "tcp/8443 https",    protocol: tcp, port: 8443, comment: "ingress route shop.example.com"}
   - {from: fe,   to: be,    label: "tcp/9090 api",      protocol: tcp, port: 9090}
   - {from: be,   to: ml,    label: "tcp/8000 inference", protocol: tcp, port: 8000, comment: "model serving"}
+  - {from: be,   to: legdb, label: "tcp/1433 mssql",     protocol: tcp, port: 1433, comment: "legacy ERP db on a kubevirt vm"}
   - {from: eg,   to: inet,  label: "tcp/443 egress",    protocol: tcp, port: 443,  comment: "snat via pinned egress ip 203.0.113.41"}
   # associations tie the machine pools into the flow (and below the workloads)
   - {from: shop, to: workers, label: "scheduled on", direction: none}

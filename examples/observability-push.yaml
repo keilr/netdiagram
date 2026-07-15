@@ -1,0 +1,73 @@
+# Grafana / Mimir — PUSH architecture: no central Prometheus. Every node runs
+# a local agent (prometheus agent mode / grafana alloy) that remote-writes its
+# metrics to Mimir over https (tcp/443 -> TLS-terminating mimir gateway), so
+# the only rule needed is node -> mimir on one well-known port. All push edges
+# share a label and therefore a color. The SRE sits below the stack
+# (rank: 1) — that edge runs against the flow and attaches to grafana's near
+# side. Compare with observability-pull.yaml (central Prometheus scraping).
+diagram:
+  title: Metrics — push architecture
+  owner: sre-team
+
+nodes:
+  - {id: sre, label: SRE, type: user, rank: 1}
+
+  # observability core — grafana + mimir only; agents replace the scraper
+  - {id: graf, label: grafana, type: container, icon: monitoring, ip: 10.70.0.3}
+  - {id: mimir1, label: mimir-01, type: container, ip: 10.70.0.11}
+  - {id: mimir2, label: mimir-02, type: container, ip: 10.70.0.12}
+  - {id: mimir3, label: mimir-03, type: container, ip: 10.70.0.13}
+  - {id: s3, label: minio-s3, type: storage, ip: 10.70.0.20, tags: [blocks]}
+
+  # metric sources — every host/pod carries its own agent
+  - {id: kafka1, label: kafka-01, type: metal, ip: 10.70.10.11, os: linux, tags: [agent]}
+  - {id: kafka2, label: kafka-02, type: metal, ip: 10.70.10.12, os: linux, tags: [agent]}
+  - {id: kafka3, label: kafka-03, type: metal, ip: 10.70.10.13, os: linux, tags: [agent]}
+  - {id: os1, label: opensearch-01, type: vm, ip: 10.70.20.11, os: linux, tags: [agent]}
+  - {id: os2, label: opensearch-02, type: vm, ip: 10.70.20.12, os: linux, tags: [agent]}
+  - {id: os3, label: opensearch-03, type: vm, ip: 10.70.20.13, os: linux, tags: [agent]}
+  - {id: vec1, label: vector-01, type: container, ip: 10.70.30.11, tags: [agent]}
+  - {id: vec2, label: vector-02, type: container, ip: 10.70.30.12, tags: [agent]}
+  - {id: webui, label: open-webui, type: container, ip: 10.70.40.5, tags: [agent]}
+  - {id: dcgm, label: dcgm-exporter, type: container, ip: 10.70.40.6, tags: [nvidia]}
+  - {id: vllm1, label: vllm-01, type: gpu, ip: 10.70.40.11, os: linux, tags: [h100, agent]}
+  - {id: vllm2, label: vllm-02, type: gpu, ip: 10.70.40.12, os: linux, tags: [h100, agent]}
+  - {id: lx1, label: app-01, type: vm, ip: 10.70.50.11, os: linux, tags: [agent]}
+  - {id: lx2, label: app-02, type: vm, ip: 10.70.50.12, os: linux, tags: [agent]}
+  - {id: lx3, label: db-01, type: metal, icon: db, ip: 10.70.50.13, os: linux, tags: [agent]}
+
+groups:
+  # sources above the stack (rank: -1); the agents push DOWN into mimir
+  - {id: kafka, label: kafka — streaming, class: vlan, rank: -1, cidr: 10.70.10.0/24, nodes: [kafka1, kafka2, kafka3]}
+  - {id: search, label: opensearch, class: vlan, rank: -1, cidr: 10.70.20.0/24, nodes: [os1, os2, os3]}
+  - {id: logs, label: log pipeline, class: subnet, rank: -1, cidr: 10.70.30.0/24, nodes: [vec1, vec2]}
+  - id: ml
+    label: ML inference
+    class: trust
+    style: {color: purple}
+    rank: -1
+    cidr: 10.70.40.0/24
+    nodes: [webui, dcgm, vllm1, vllm2]
+  - {id: fleet, label: linux fleet, class: onprem, rank: -1, cidr: 10.70.50.0/24, nodes: [lx1, lx2, lx3]}
+
+  - id: obs
+    label: Observability
+    class: zone
+    cidr: 10.70.0.0/24
+    nodes: [graf]
+    groups:
+      - id: mimir
+        label: mimir (HA)
+        class: subnet
+        nodes: [mimir1, mimir2, mimir3, s3]
+
+connections:
+  # one rule per source: agent -> mimir remote-write (same label = same color)
+  - {from: kafka,  to: mimir, label: "tcp/443 remote-write", protocol: tcp, port: 443, comment: "prometheus agent mode, https"}
+  - {from: search, to: mimir, label: "tcp/443 remote-write", protocol: tcp, port: 443, comment: "prometheus agent mode, https"}
+  - {from: logs,   to: mimir, label: "tcp/443 remote-write", protocol: tcp, port: 443, comment: "vector prometheus_remote_write sink, https"}
+  - {from: ml,     to: mimir, label: "tcp/443 remote-write", protocol: tcp, port: 443, comment: "agent ships vllm + dcgm + node metrics"}
+  - {from: fleet,  to: mimir, label: "tcp/443 remote-write", protocol: tcp, port: 443, comment: "prometheus agent mode, https"}
+  # dashboards
+  - {from: graf, to: mimir, label: "tcp/8080 promql", protocol: tcp, port: 8080, comment: "dashboards query mimir"}
+  - {from: sre,  to: graf,  label: "tcp/3000 grafana", protocol: tcp, port: 3000}

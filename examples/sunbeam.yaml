@@ -1,0 +1,78 @@
+# Canonical Sunbeam — OpenStack deployed on MicroK8s, driven by Juju.
+# The OpenStack control plane runs as pods in the "openstack" namespace on a
+# MicroK8s cluster that itself runs on the control machines ("runs on"
+# association). Compute nodes run the openstack-hypervisor snap and connect
+# UP into the control plane (agents initiate) — those against-flow edges
+# attach to the pods' near side. Tenant VMs live on the hypervisors.
+diagram:
+  title: Canonical Sunbeam
+  owner: cloud-team
+
+nodes:
+  - {id: admin, label: Cloud Admin, type: user, rank: -1}
+  # the juju controller sits beside the stack (rank: 1, next to compute);
+  # every machine agent phones home to it
+  - {id: juju, label: juju-controller, type: vm, ip: 10.80.0.5, os: linux, tags: [lxd], rank: 1}
+
+  # openstack control plane (pods on microk8s)
+  - {id: horizon, label: horizon, type: pod, ip: 10.152.183.10, tags: [traefik]}
+  - {id: keystone, label: keystone, type: pod, ip: 10.152.183.11}
+  - {id: rabbit, label: rabbitmq, type: pod, ip: 10.152.183.12}
+  - {id: ovn, label: ovn-central, type: pod, ip: 10.152.183.13}
+
+  # machines
+  - {id: ctl1, label: sunbeam-01, type: metal, ip: 10.80.0.11, os: ubuntu, tags: [microk8s]}
+  - {id: ctl2, label: sunbeam-02, type: metal, ip: 10.80.0.12, os: ubuntu, tags: [microk8s]}
+  - {id: ctl3, label: sunbeam-03, type: metal, ip: 10.80.0.13, os: ubuntu, tags: [microk8s]}
+  - {id: comp1, label: compute-01, type: hypervisor, ip: 10.80.1.11, os: ubuntu, tags: [nova, ovn]}
+  - {id: comp2, label: compute-02, type: hypervisor, ip: 10.80.1.12, os: ubuntu, tags: [nova, ovn]}
+
+  # tenant workloads
+  - {id: vm1, label: web-vm-01, type: vm, ip: 192.168.100.11, os: linux}
+  - {id: vm2, label: db-vm-01, type: vm, ip: 192.168.100.12, os: linux}
+
+groups:
+  - id: sunbeam
+    label: Sunbeam — control plane
+    class: cloud
+    groups:
+      - id: mk8s
+        label: microk8s
+        class: k8s
+        groups:
+          - id: osns
+            label: ns openstack
+            class: namespace
+            services: glance · nova · neutron · cinder …
+            nodes: [horizon, keystone, rabbit, ovn]
+      - id: ctl
+        label: control machines
+        class: nodepool
+        cidr: 10.80.0.0/24
+        nodes: [ctl1, ctl2, ctl3]
+  - id: compute
+    label: compute — openstack-hypervisor
+    class: zone
+    rank: 1
+    cidr: 10.80.1.0/24
+    nodes: [comp1, comp2]
+  - id: tenant
+    label: tenant VMs
+    class: tenant
+    rank: 1
+    cidr: 192.168.100.0/24
+    nodes: [vm1, vm2]
+
+connections:
+  - {from: admin, to: horizon,  label: "tcp/443 dashboard", protocol: tcp, port: 443,   comment: "via traefik ingress"}
+  - {from: admin, to: keystone, label: "tcp/5000 keystone", protocol: tcp, port: 5000,  comment: "openstack cli"}
+  - {from: admin, to: juju,     label: "tcp/17070 juju",    protocol: tcp, port: 17070, comment: "juju status / deploy"}
+  # compute agents connect up into the control plane
+  - {from: compute, to: rabbit, label: "tcp/5672 amqp",     protocol: tcp, port: 5672,  comment: "nova-compute -> conductor"}
+  - {from: compute, to: ovn,    label: "tcp/6642 ovsdb",    protocol: tcp, port: 6642,  comment: "ovn southbound"}
+  # juju agents on every machine phone home to the controller
+  - {from: ctl,     to: juju,   label: "tcp/17070 juju",    protocol: tcp, port: 17070, comment: "machine agents"}
+  - {from: compute, to: juju,   label: "tcp/17070 juju",    protocol: tcp, port: 17070, comment: "machine agents"}
+  # placement associations
+  - {from: mk8s,   to: ctl,     label: "runs on", direction: none}
+  - {from: tenant, to: compute, label: "runs on", direction: none}

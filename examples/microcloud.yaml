@@ -1,0 +1,70 @@
+# Canonical MicroCloud — a hyperconverged LXD cluster: every member runs LXD
+# plus MicroCeph (storage) and MicroOVN (networking), set up by the microcloud
+# snap. Instances (containers and VMs) live on an OVN network that reaches the
+# outside world through the uplink — that edge runs against the flow and
+# attaches to the uplink's near side. The intra-cluster meshes (geneve, ceph
+# replication) are member<->member traffic, noted in the group's info box
+# rather than drawn as edges.
+diagram:
+  title: Canonical MicroCloud
+  owner: cloud-team
+
+nodes:
+  - {id: admin, label: Cloud Admin, type: user, rank: -1}
+  - {id: uplink, label: uplink network, type: internet, rank: -1}
+
+  # instances on the OVN tenant network
+  - {id: ct1, label: web-ct-01, type: container, ip: 10.100.0.11, os: ubuntu}
+  - {id: ct2, label: web-ct-02, type: container, ip: 10.100.0.12, os: ubuntu}
+  - {id: vm1, label: db-vm-01, type: vm, ip: 10.100.0.21, os: ubuntu}
+  - {id: vm2, label: win-vm-01, type: vm, ip: 10.100.0.22, os: windows}
+
+  # cluster members — LXD + MicroCeph + MicroOVN on every machine
+  - id: mc1
+    label: micro-01
+    type: hypervisor
+    ip: 10.90.0.11
+    os: ubuntu
+    ceph: mon + osd
+    ovn: central + chassis
+    tags: [lxd]
+  - id: mc2
+    label: micro-02
+    type: hypervisor
+    ip: 10.90.0.12
+    os: ubuntu
+    ceph: mon + osd
+    ovn: central + chassis
+    tags: [lxd]
+  - id: mc3
+    label: micro-03
+    type: hypervisor
+    ip: 10.90.0.13
+    os: ubuntu
+    ceph: mon + osd
+    ovn: central + chassis
+    tags: [lxd]
+
+groups:
+  - id: microcloud
+    label: MicroCloud
+    class: cloud
+    groups:
+      - id: instances
+        label: instances — ovn network
+        class: vlan
+        cidr: 10.100.0.0/24
+        nodes: [ct1, ct2, vm1, vm2]
+      - id: members
+        label: cluster members
+        class: nodepool
+        cidr: 10.90.0.0/24
+        geneve: udp/6081 member mesh
+        ceph: tcp/3300 mon · tcp/6800+ osd
+        nodes: [mc1, mc2, mc3]
+
+connections:
+  - {from: admin, to: members,   label: "tcp/8443 lxd-api", protocol: tcp, port: 8443, comment: "lxc + microcloud cli"}
+  - {from: admin, to: instances, label: "tcp/22 ssh",       protocol: tcp, port: 22,   comment: "instance access"}
+  - {from: instances, to: uplink, label: "ovn uplink",      comment: "snat via br-uplink"}
+  - {from: instances, to: members, label: "runs on", direction: none}
