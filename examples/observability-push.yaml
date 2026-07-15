@@ -70,4 +70,4 @@ connections:
   - {from: fleet,  to: mimir, label: "tcp/443 remote-write", protocol: tcp, port: 443, comment: "prometheus agent mode, https"}
   # dashboards
   - {from: graf, to: mimir, label: "tcp/8080 promql", protocol: tcp, port: 8080, comment: "dashboards query mimir"}
-  - {from: sre,  to: graf,  label: "tcp/3000 grafana", protocol: tcp, port: 3000}
+  - {from: sre,  to: graf,  label: "tcp/443 grafana", protocol: tcp, port: 443, comment: "dashboards over https"}
