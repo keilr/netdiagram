@@ -37,6 +37,13 @@ const GROUP_STYLES = {
   ap:     { ...groupColorScheme('#7c3aed'), dash:null  },
   epg:    { ...groupColorScheme('#15803d'), dash:null  },
   l3out:  { ...groupColorScheme('#c2410c'), dash:'6 4' },
+  /* Kubernetes containers: cluster (alias k8s) > namespace (alias ns);
+   * nodepool for machine pools (worker / gpu pools) */
+  cluster:  { ...groupColorScheme('#1d4ed8'), dash:null },
+  k8s:      { ...groupColorScheme('#1d4ed8'), dash:null },
+  namespace:{ ...groupColorScheme('#15803d'), dash:null },
+  ns:       { ...groupColorScheme('#15803d'), dash:null },
+  nodepool: { ...groupColorScheme('#57636f'), dash:null },
   default:{ fill:'rgba(60,72,88,.04)',   stroke:'#a8b2bd', dash:null,  label:'#5b6874' }
 };
 
@@ -96,7 +103,14 @@ const GLYPH_ALIASES = {
   physicalserver:'metal', dedicated:'metal', 'dedicated server':'metal',
   /* GPU / accelerator hosts (own glyph, no platform border) */
   'gpu-host':'gpu', gpuhost:'gpu', gpuserver:'gpu', 'gpu-server':'gpu',
-  accelerator:'gpu', cuda:'gpu'
+  accelerator:'gpu', cuda:'gpu',
+  /* Kubernetes / virtualization vocabulary. Hypervisors are physical ->
+   * metal (double border); the rest are visual-only aliases */
+  hypervisor:'metal', esx:'metal', esxi:'metal', kvm:'metal', proxmox:'metal',
+  ingress:'lb', service:'lb', svc:'lb',
+  egress:'router', 'egress-ip':'router', egressip:'router', 'egress-gw':'router',
+  etcd:'db',
+  'control-plane':'server', controlplane:'server', master:'server'
 };
 
 /* ---------------- helpers ---------------- */
@@ -163,10 +177,10 @@ function ipListOf(n){
   return v == null ? [] : (Array.isArray(v) ? v : [v]).map(String);
 }
 function ipsOf(n){ return ipListOf(n).join(' · '); }
-const NODE_KNOWN_KEYS = new Set(['id','label','type','icon','ip','ips','addr','os','tags']);
+const NODE_KNOWN_KEYS = new Set(['id','label','type','icon','ip','ips','addr','os','tags','rank']);
 /* option keys control rendering; every other scalar key is a displayed attribute */
 const DIAGRAM_OPTION_KEYS = new Set(['title','direction']);
-const GROUP_KNOWN_KEYS = new Set(['id','label','class','cidr','nodes','groups','style','tags']);
+const GROUP_KNOWN_KEYS = new Set(['id','label','class','cidr','nodes','groups','style','tags','rank']);
 function attrLines(obj, known){
   const out = [];
   for (const [k, val] of Object.entries(obj || {})){
@@ -235,6 +249,8 @@ function parseSpec(text){
         (typeof n.tags === 'object' && !Array.isArray(n.tags)) ||
         (Array.isArray(n.tags) && n.tags.some(t => t != null && typeof t === 'object'))))
       errors.push(`nodes[${i}] "${n.id}": tags must be a scalar or a list of scalars`);
+    if (n.rank != null && !Number.isFinite(Number(n.rank)))
+      errors.push(`nodes[${i}] "${n.id}": rank must be a number`);
     nodeMap.set(String(n.id), n);
   });
 
@@ -249,6 +265,8 @@ function parseSpec(text){
           (typeof g.tags === 'object' && !Array.isArray(g.tags)) ||
           (Array.isArray(g.tags) && g.tags.some(t => t != null && typeof t === 'object'))))
         errors.push(`group "${gid}": tags must be a scalar or a list of scalars`);
+      if (g.rank != null && !Number.isFinite(Number(g.rank)))
+        errors.push(`group "${gid}": rank must be a number`);
       groupMap.set(gid, g);
       (g.nodes||[]).forEach(nid=>{
         nid = String(nid);
@@ -297,41 +315,166 @@ function buildElk(spec){
     const m = nodeMetrics(n);
     return { id:String(n.id), width:m.w, height:m.h };
   }
+  /* Auto-packing: layered assigns every neighbor of a hub to the same layer, so
+   * "hub -> group of N" renders the N members as one very wide row. When no
+   * connection touches a group's INTERIOR (edges may end at the group itself),
+   * the group can be laid out as SEPARATE_CHILDREN — safe because no edge
+   * crosses its boundary to a member — which re-enables ELK's component packing
+   * and grids the disconnected members near the root aspect ratio instead. */
+  const endpoints = new Set((doc.connections||[]).flatMap(l => [String(l.from), String(l.to)]));
+  function touchesInterior(g){
+    return (g.nodes||[]).some(id => endpoints.has(String(id)))
+        || (g.groups||[]).some(sub => sub && (endpoints.has(String(sub.id)) || touchesInterior(sub)));
+  }
+  /* aspectRatio feeds ELK's component-row packer (row width ~ ar*sqrt(area)):
+   * 1.6 tips groups of wide nodes (long captions like HYPERVISOR) into
+   * one-per-row columns; 2.0 keeps 2-3 column grids without flattening
+   * everything into rows (2.4 does) */
+  const PACK_OPTIONS = {
+    'elk.hierarchyHandling':'SEPARATE_CHILDREN',
+    'elk.separateConnectedComponents':'true',
+    'elk.aspectRatio':'2.0'
+  };
+  /* in-layer order follows YAML order (left->right in a down layout), so
+   * authors can nudge siblings around without fighting crossing minimization.
+   * ROOT ONLY: setting this on group levels crashes ELK's hierarchical layout. */
+  const MODEL_ORDER = { 'elk.layered.considerModelOrder.strategy':'NODES_AND_EDGES' };
+  /* rank: pins siblings to ELK partitions — lower rank lays out earlier in the
+   * flow direction (higher up in a down layout), unranked siblings sit at rank
+   * 0. Only activated for levels where some sibling actually sets a rank. */
+  function applyRanks(owners, children, layoutOptions){
+    if (!owners.some(o => o && o.rank != null)) return;
+    layoutOptions['elk.partitioning.activate'] = 'true';
+    owners.forEach((o, i) => {
+      children[i].layoutOptions = { ...(children[i].layoutOptions || {}),
+        'elk.partitioning.partition': String(Math.trunc(Number(o?.rank ?? 0))) };
+    });
+  }
   function elkGroup(g){
     const hdr = groupHeader(g);
-    return {
-      id:String(g.id),
-      layoutOptions:{
-        'elk.padding': `[top=${hdr.padTop},left=22,bottom=${hdr.padBottom},right=22]`,
-        ...ELK_SPACING
-      },
-      children:[
-        ...(g.nodes||[]).map(id => elkNode(nodeMap.get(String(id)))),
-        ...(g.groups||[]).map(elkGroup)
-      ]
+    const members = (g.nodes||[]).map(id => nodeMap.get(String(id)));
+    const subs = g.groups||[];
+    const children = [...members.map(elkNode), ...subs.map(elkGroup)];
+    const layoutOptions = {
+      'elk.padding': `[top=${hdr.padTop},left=22,bottom=${hdr.padBottom},right=22]`,
+      ...ELK_SPACING,
+      ...(touchesInterior(g) ? {} : PACK_OPTIONS)
     };
+    applyRanks([...members, ...subs], children, layoutOptions);
+    return { id:String(g.id), layoutOptions, children };
   }
-  const rootChildren = [
-    ...(doc.groups||[]).map(elkGroup),
-    ...[...nodeMap.values()].filter(n=>!claimed.has(String(n.id))).map(elkNode)
-  ];
+  const topGroups = doc.groups||[];
+  const looseNodes = [...nodeMap.values()].filter(n=>!claimed.has(String(n.id)));
+  const rootChildren = [...topGroups.map(elkGroup), ...looseNodes.map(elkNode)];
   const edges = (doc.connections||[]).map((l,i)=>({ id:edgeId(i), sources:[String(l.from)], targets:[String(l.to)] }));
 
-  return {
-    id:'root',
-    layoutOptions:{
-      'elk.algorithm':'layered',
-      'elk.direction':direction,
-      'elk.hierarchyHandling':'INCLUDE_CHILDREN',
-      'elk.spacing.componentComponent':'64',
-      'elk.edgeRouting':'ORTHOGONAL',
-      'elk.spacing.edgeLabel':'8',
-      'elk.padding':'[top=16,left=16,bottom=16,right=16]',
-      ...ELK_SPACING
-    },
-    children:rootChildren,
-    edges
+  const rootOptions = {
+    'elk.algorithm':'layered',
+    'elk.direction':direction,
+    'elk.hierarchyHandling':'INCLUDE_CHILDREN',
+    'elk.spacing.componentComponent':'64',
+    'elk.edgeRouting':'ORTHOGONAL',
+    'elk.spacing.edgeLabel':'8',
+    'elk.padding':'[top=16,left=16,bottom=16,right=16]',
+    ...ELK_SPACING,
+    ...MODEL_ORDER
   };
+  applyRanks([...topGroups, ...looseNodes], rootChildren, rootOptions);
+
+  return { id:'root', layoutOptions: rootOptions, children:rootChildren, edges };
+}
+
+/* ---------------- two-pass refinement (ports + edge direction) ---------------- */
+/* Two fixes that need pass-1 geometry, applied to a fresh graph for pass 2:
+ * 1. Against-flow edges (rank places the target BEFORE the source, e.g.
+ *    hub -> rank:-1 group) are handed to ELK reversed — otherwise ELK routes
+ *    them around the whole diagram and into the target's far side. renderSVG
+ *    detects the swap by comparing endpoints to the connection and flips the
+ *    drawn path back, so arrows still point from -> to.
+ * 2. ELK's crossing minimization barely orders the attachment points of
+ *    hierarchical edges, so a hub's edges leave in arbitrary order and cross.
+ *    Every leaf node with 2+ edges gets FIXED_ORDER ports — each edge on the
+ *    side facing its counterpart, sides ordered by where the counterparts
+ *    actually landed.
+ *   const pass1 = await elk.layout(buildElk(spec));
+ *   const graph = assignPorts(buildElk(spec), pass1);   // fresh graph!
+ *   const layout = graph ? await elk.layout(graph) : pass1;
+ * Returns null when nothing changed (skip the second pass). */
+function assignPorts(graph, layout){
+  const abs = {};                          // id -> absolute box + center
+  (function walk(n, x, y){
+    for (const c of n.children||[]){
+      const x0 = x + (c.x||0), y0 = y + (c.y||0);
+      abs[c.id] = { x0, y0, x1: x0 + (c.width||0), y1: y0 + (c.height||0),
+                    x: x0 + (c.width||0)/2, y: y0 + (c.height||0)/2 };
+      walk(c, x0, y0);
+    }
+  })(layout, 0, 0);
+  const down = (graph.layoutOptions||{})['elk.direction'] !== 'RIGHT';
+
+  /* 1. reverse edges whose target landed wholly before the source in the
+   * flow direction — ELK then routes them short and direct */
+  let assigned = false;
+  for (const e of graph.edges||[]){
+    const s = abs[e.sources[0]], t = abs[e.targets[0]];
+    if (!s || !t) continue;
+    if (down ? t.y1 <= s.y0 : t.x1 <= s.x0){
+      [e.sources, e.targets] = [e.targets, e.sources];
+      assigned = true;
+    }
+  }
+
+  const leaves = {};                       // leaf node id -> graph node object
+  (function collect(n){
+    for (const c of n.children||[])
+      if (c.children && c.children.length) collect(c); else leaves[c.id] = c;
+  })(graph);
+
+  const incident = {};                     // leaf id -> [{e, end, other}]
+  for (const e of graph.edges||[]){
+    const s = e.sources[0], t = e.targets[0];
+    if (leaves[s]) (incident[s] = incident[s]||[]).push({ e, end:'sources', other:t });
+    if (leaves[t]) (incident[t] = incident[t]||[]).push({ e, end:'targets', other:s });
+  }
+
+  /* 2. FIXED_ORDER ports on multi-edge leaf nodes */
+  for (const id of Object.keys(incident)){
+    const list = incident[id];
+    if (list.length < 2 || !abs[id]) continue;
+    const c = abs[id];
+    const bySide = { NORTH:[], EAST:[], SOUTH:[], WEST:[] };
+    for (const it of list){
+      const o = abs[it.other];
+      if (!o) continue;                    // unknown counterpart: leave endpoint on the node
+      const dx = o.x - c.x, dy = o.y - c.y;
+      /* prefer the flow axis: a counterpart whose box lies wholly before/after
+       * the node goes on the flow-facing side, even when it is far off-axis;
+       * the perpendicular sides are only for counterparts level with it */
+      const side = down
+        ? (o.y1 < c.y ? 'NORTH' : o.y0 > c.y ? 'SOUTH' : dx < 0 ? 'WEST'  : 'EAST')
+        : (o.x1 < c.x ? 'WEST'  : o.x0 > c.x ? 'EAST'  : dy < 0 ? 'NORTH' : 'SOUTH');
+      /* sort key = clockwise position on that side (N: left->right,
+       * E: top->bottom, S: right->left, W: bottom->top) */
+      bySide[side].push({ it, k: side==='NORTH' ? dx : side==='EAST' ? dy
+                                : side==='SOUTH' ? -dx : -dy });
+    }
+    const node = leaves[id];
+    node.layoutOptions = { ...(node.layoutOptions||{}), 'elk.portConstraints':'FIXED_ORDER' };
+    node.ports = [];
+    let idx = 0;
+    for (const side of ['NORTH','EAST','SOUTH','WEST']){
+      bySide[side].sort((a,b)=>a.k-b.k);
+      for (const { it } of bySide[side]){
+        const pid = `${id}.p${idx}`;
+        node.ports.push({ id: pid, width: .1, height: .1,
+          layoutOptions: { 'elk.port.side': side, 'elk.port.index': String(idx) } });
+        it.e[it.end] = [pid];
+        idx++;
+      }
+    }
+    assigned = true;
+  }
+  return assigned ? graph : null;
 }
 
 /* ---------------- render SVG ---------------- */
@@ -348,6 +491,73 @@ function midOfPolyline(pts){
     half -= seg;
   }
   return pts[Math.floor(pts.length/2)] || {x:0,y:0};
+}
+
+/* ---- crossing hops --------------------------------------------------------
+ * Layered layout minimizes crossings but cannot always avoid them. Where an
+ * edge crosses an earlier one (lower connection index) perpendicularly, its
+ * straight run is replaced by a small arc — the drafting convention for
+ * "these wires do not connect". Orthogonal routing makes detection exact:
+ * crossings are always one horizontal against one vertical segment. */
+const HOP_R = 4.5;          // hop radius
+const HOP_END_MARGIN = 8;   // keep hops clear of bends and terminals
+const AXIS_EPS = .75;       // tolerance for treating a segment as axis-aligned
+
+function segOrient(a, b){
+  if (Math.abs(a.y - b.y) < AXIS_EPS && Math.abs(a.x - b.x) >= AXIS_EPS) return 'h';
+  if (Math.abs(a.x - b.x) < AXIS_EPS && Math.abs(a.y - b.y) >= AXIS_EPS) return 'v';
+  return null;
+}
+/* crossing positions of segment a->b (along its travel axis) against every
+ * perpendicular segment of the earlier polylines */
+function segHops(a, b, lowerPolys){
+  const o = segOrient(a, b);
+  if (!o) return [];
+  const lo = o === 'h' ? Math.min(a.x, b.x) : Math.min(a.y, b.y);
+  const hi = o === 'h' ? Math.max(a.x, b.x) : Math.max(a.y, b.y);
+  const level = o === 'h' ? a.y : a.x;
+  const hops = [];
+  for (const pts of lowerPolys){
+    for (let i = 1; i < pts.length; i++){
+      const c = pts[i-1], d = pts[i];
+      if (segOrient(c, d) !== (o === 'h' ? 'v' : 'h')) continue;
+      const cross = o === 'h' ? c.x : c.y;   // where the other segment sits on our axis
+      const clo = o === 'h' ? Math.min(c.y, d.y) : Math.min(c.x, d.x);
+      const chi = o === 'h' ? Math.max(c.y, d.y) : Math.max(c.x, d.x);
+      if (cross <= lo + HOP_END_MARGIN || cross >= hi - HOP_END_MARGIN) continue; // near our bend/terminal
+      if (level <= clo + AXIS_EPS || level >= chi - AXIS_EPS) continue;           // T-junction, not a crossing
+      hops.push(cross);
+    }
+  }
+  return hops;
+}
+/* path data for a polyline with hop arcs; hops bulge up (horizontal runs)
+ * resp. right (vertical runs); overlapping hops merge into one wider arc */
+function hopPath(pts, lowerPolys){
+  let d = `M${pts[0].x} ${pts[0].y}`;
+  for (let i = 1; i < pts.length; i++){
+    const a = pts[i-1], b = pts[i];
+    const o = segOrient(a, b);
+    const hops = o && lowerPolys.length ? segHops(a, b, lowerPolys) : [];
+    if (!hops.length){ d += `L${b.x} ${b.y}`; continue; }
+    const dir = (o === 'h' ? b.x - a.x : b.y - a.y) > 0 ? 1 : -1;
+    hops.sort((p, q) => (p - q) * dir);
+    const runs = [];
+    for (const c of hops){
+      const run = runs[runs.length - 1];
+      if (run && Math.abs(c - run[run.length - 1]) <= HOP_R * 2 + 1) run.push(c);
+      else runs.push([c]);
+    }
+    const sweep = dir > 0 ? 1 : 0;
+    for (const run of runs){
+      const from = run[0] - HOP_R * dir, to = run[run.length - 1] + HOP_R * dir;
+      const rHalf = Math.abs(to - from) / 2;
+      if (o === 'h') d += `L${from} ${a.y}A${rHalf} ${HOP_R} 0 0 ${sweep} ${to} ${a.y}`;
+      else           d += `L${a.x} ${from}A${HOP_R} ${rHalf} 0 0 ${sweep} ${a.x} ${to}`;
+    }
+    d += `L${b.x} ${b.y}`;
+  }
+  return d;
 }
 
 function renderSVG(spec, layout){
@@ -482,15 +692,30 @@ function renderSVG(spec, layout){
     (node.children||[]).forEach(collectEdges);
   })(layout);
   const offsetOf = id => (!id || id==='root') ? {x:0,y:0} : (abs.get(id) || {x:0,y:0});
+  // pass 1: absolute polylines, sorted to connection order so hop assignment
+  // (later edge hops over earlier one) is stable regardless of ELK nesting
+  const drawn = [];
+  const bare = id => String(id).replace(/\.p\d+$/, '');  // strip assignPorts port suffix
   allEdges.forEach(e=>{
-    const l = (doc.connections||[])[edgeIndex(e.id)] || {};
-    const st = styleOf(l);
-    const mk = 'ah-' + st.hex.slice(1);
     const sec = (e.sections||[])[0]; if (!sec) return;
     const off = offsetOf(e.container);
     const pts = [sec.startPoint, ...(sec.bendPoints||[]), sec.endPoint]
       .map(p => ({ x: p.x + off.x, y: p.y + off.y }));
-    const d = 'M' + pts.map(p=>`${p.x} ${p.y}`).join(' L');
+    // assignPorts feeds against-flow edges to ELK reversed; flip the drawn
+    // path back so markers still point from -> to
+    const l = (doc.connections||[])[edgeIndex(e.id)];
+    if (l && String(l.from) !== String(l.to)
+          && bare((e.sources||[])[0]) === String(l.to)
+          && bare((e.targets||[])[0]) === String(l.from)) pts.reverse();
+    drawn.push({ idx: edgeIndex(e.id), pts });
+  });
+  drawn.sort((p, q) => p.idx - q.idx);
+  // pass 2: draw, arcing over every crossing with an earlier edge
+  drawn.forEach((rec, k)=>{
+    const l = (doc.connections||[])[rec.idx] || {};
+    const st = styleOf(l);
+    const mk = 'ah-' + st.hex.slice(1);
+    const d = hopPath(rec.pts, drawn.slice(0, k).map(r => r.pts));
     const dirMode = dirOf(l);
     const mEnd = dirMode==='none' ? '' : ` marker-end="url(#${mk})"`;
     const mStart = dirMode==='both' ? ` marker-start="url(#${mk})"` : '';
@@ -498,7 +723,7 @@ function renderSVG(spec, layout){
     const lblAttr = l.label != null ? ` data-label="${esc(String(l.label))}"` : '';
     gEdges += `<path class="edge"${lblAttr} d="${d}" fill="none" stroke="${st.hex}" stroke-width="${st.width}"${dash}${mEnd}${mStart}/>`;
     if (l.label){
-      const m = midOfPolyline(pts);
+      const m = midOfPolyline(rec.pts);
       gLabels += `<text class="edge-lbl" data-label="${esc(String(l.label))}" x="${m.x}" y="${m.y-5}" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="11" fill="${st.hex}" stroke="#fafbf7" stroke-width="4" paint-order="stroke" stroke-linejoin="round">${esc(String(l.label))}</text>`;
     }
   });
@@ -542,6 +767,6 @@ function renderSVG(spec, layout){
 }
 
 if (typeof module !== "undefined" && module.exports)
-  module.exports = { parseSpec, buildElk, renderSVG, CONNECTION_STYLES, GROUP_STYLES, GLYPHS, LABEL_PALETTE,
+  module.exports = { parseSpec, buildElk, assignPorts, renderSVG, CONNECTION_STYLES, GROUP_STYLES, GLYPHS, LABEL_PALETTE,
     // helpers the browser app (concatenated after this file at build time) reuses
     esc, dirOf, ipsOf };

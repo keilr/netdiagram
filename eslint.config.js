@@ -40,7 +40,7 @@ module.exports = [
         // from src/editor.js
         makeEditor: "readonly",
         // from src/netdiagram.js (concatenated ahead of app.js at build time)
-        parseSpec: "readonly", buildElk: "readonly", renderSVG: "readonly",
+        parseSpec: "readonly", buildElk: "readonly", assignPorts: "readonly", renderSVG: "readonly",
         esc: "readonly", dirOf: "readonly", ipsOf: "readonly",
       },
     },

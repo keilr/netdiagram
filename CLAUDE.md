@@ -26,6 +26,10 @@ There is no dev server; after `npm run build`, open `dist/netdiagram.html` in a 
 src/netdiagram.js   Core library (browser + node). Pure pipeline:
                     parseSpec(yamlText) -> {doc, nodeMap, groupMap, claimed}
                     buildElk(spec)      -> ELK graph JSON (layout is caller's job)
+                    assignPorts(graph, pass1) -> graph|null — two-pass layout:
+                      pins FIXED_ORDER ports on leaf nodes with 2+ edges so hub
+                      edges leave toward their targets (kills most crossings).
+                      Pass a FRESH buildElk graph; null = no hubs, skip pass 2.
                     renderSVG(spec, layout) -> SVG string
                     Also: CONNECTION_STYLES, GROUP_STYLES, GLYPHS, LABEL_PALETTE.
 src/app.js          Browser-only wire-up: textarea editor, debounced render,
@@ -76,7 +80,10 @@ nodes:
                            # Platform types vm|container|metal also set the
                            # border style: dashed / fine-dotted / double (hwOf +
                            # HW_STYLES). server, physical [server], dedicated,
-                           # baremetal … are metal aliases (GLYPH_ALIASES)
+                           # baremetal, hypervisor|esx[i]|kvm|proxmox … are metal
+                           # aliases (GLYPH_ALIASES). K8s: ingress|service -> lb,
+                           # egress[-ip] -> router, etcd -> db, pod -> container,
+                           # control-plane|master -> rack server
     icon: str              # explicit glyph override (visual only — border
                            # styling always follows type)
     ip: str | ips: [str]   # rendered one per line as "ip: <value>"
@@ -85,13 +92,17 @@ nodes:
                            # corner showing the tag text, max two per row
                            # (wraps below). Tags never affect styling — glyph
                            # and border come from type/icon
+    rank: int              # layout hint: lower = earlier in the flow; unranked
+                           # siblings sit at rank 0 (ELK partitioning)
     <any-scalar-key>: val  # unknown scalar keys render as "key: value" lines
 groups:
   - id, label, class: zone|vlan|subnet|cloud|onprem|trust (+ Cisco ACI:
-    tenant|vrf|bd|ap|epg|l3out), cidr,
+    tenant|vrf|bd|ap|epg|l3out; + K8s: cluster|k8s|namespace|ns|nodepool), cidr,
     nodes: [ids], groups: [nested]   # a node may belong to at most one group
     tags: [str] | str      # pills in the top-right, tinted in the group's own
                            # class/style color (tagPills, reused from nodes)
+    rank: int              # as for nodes: -1 = above the unranked row, 1 = below;
+                           # same-rank siblings follow YAML order left->right
     style:                 # optional visual overrides (extensible)
       color: <name>        # gray red orange yellow green teal cyan blue indigo
                            # purple pink (or colour); overrides the class color
@@ -154,6 +165,22 @@ suggestions from the schema, so it follows automatically).
    The measuring font constants (`NODE_FONT`, `CAP_FONT`, `IP_FONT`) must still
    match the `font-size`/`font-weight` attributes written in `renderSVG`, or
    labels overflow their boxes.
+9. **Hub fan-outs auto-pack.** Layered layout puts every neighbor of a hub in
+   one layer, so hub -> N members = one very wide row. `buildElk` therefore
+   switches any group whose interior is untouched by connections (edges may end
+   at the group itself) to `SEPARATE_CHILDREN` + component packing
+   (`PACK_OPTIONS`), gridding its members near the 2.0 aspect ratio (the
+   packer's row width is ~ar*sqrt(area); 1.6 tipped groups of wide nodes —
+   long captions like HYPERVISOR — into one-per-row columns).
+   INCLUDE_CHILDREN would silently disable that packing — which is exactly why
+   it only applies to groups with no boundary-crossing member edges. Advise
+   users to connect hub -> group (not each member) for compact fan-outs.
+10. **`elk.layered.considerModelOrder.strategy` is ROOT-ONLY.** Setting it on a
+    group's layoutOptions crashes ELK's hierarchical layout (undefined-property
+    TypeError deep in elk-worker). `MODEL_ORDER` in buildElk is spread into the
+    root options only; keep it that way. `rank` maps to ELK partitioning
+    (applyRanks), activated per hierarchy level only when a sibling sets one —
+    unranked siblings get partition 0 explicitly.
 
 ## Conventions
 
@@ -166,7 +193,9 @@ suggestions from the schema, so it follows automatically).
   the platform glyph AND set the border style — VM = dashed, bare metal =
   double, container = fine-dotted (hwOf + HW_STYLES). Tags are informational
   neutral pills, two per row (tagPills), never styling. Trust boundaries =
-  red dashed group border.
+  red dashed group border. Edge crossings render as hop arcs: the connection
+  with the higher index arcs over the lower one (hopPath/segHops — exact
+  H-vs-V intersection tests, only possible because routing is orthogonal).
 - After changing rendering or layout, eyeball the example: render
   `examples/hq-edge-core.yaml` and check labels don't collide (there is no
   automated visual regression test).

@@ -233,8 +233,10 @@ async function render(text){
   const seq = ++renderSeq;
   try{
     const spec = parseSpec(text);
-    const graph = buildElk(spec);
-    const layout = await elk.layout(graph);
+    const pass1 = await elk.layout(buildElk(spec));
+    /* second pass with FIXED_ORDER hub ports (fresh graph — pass 1 mutated its own) */
+    const ported = assignPorts(buildElk(spec), pass1);
+    const layout = ported ? await elk.layout(ported) : pass1;
     if (seq !== renderSeq) return;
     activeLabel = null;
     lastSpec = spec;

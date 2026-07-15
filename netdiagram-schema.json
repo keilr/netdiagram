@@ -57,7 +57,7 @@
         },
         "type": {
           "type": "string",
-          "description": "Device type — picks the glyph and caption. Platform types vm/container/metal (and aliases like docker, baremetal, server, 'physical server', dedicated) also set the border style: dashed / fine-dotted / double. 'server' means a physical machine and maps to metal; the rack-server glyph is available via host/app/web. 'waf' draws a dedicated shield glyph; 'gpu' (aliases gpu-host, accelerator, cuda) draws a GPU-card glyph with the default border. Canonical values and common aliases are accepted.",
+          "description": "Device type — picks the glyph and caption. Platform types vm/container/metal (and aliases like docker, baremetal, server, 'physical server', dedicated) also set the border style: dashed / fine-dotted / double. 'server' means a physical machine and maps to metal; the rack-server glyph is available via host/app/web. 'waf' draws a dedicated shield glyph; 'gpu' (aliases gpu-host, accelerator, cuda) draws a GPU-card glyph with the default border. Kubernetes/virtualization vocabulary: hypervisor (esx, esxi, kvm, proxmox) is physical -> metal border; ingress/service map to the load-balancer glyph, egress/egress-ip to the gateway glyph, etcd to the database glyph, control-plane/master to the rack-server glyph. Canonical values and common aliases are accepted.",
           "anyOf": [
             {
               "enum": [
@@ -78,7 +78,11 @@
                 "metal", "baremetal", "bare-metal", "bare metal", "bm",
                 "physical", "physical server", "physical-server", "physicalserver",
                 "dedicated", "dedicated server",
-                "gpu", "gpu-host", "gpuhost", "gpu-server", "gpuserver", "accelerator", "cuda"
+                "gpu", "gpu-host", "gpuhost", "gpu-server", "gpuserver", "accelerator", "cuda",
+                "hypervisor", "esx", "esxi", "kvm", "proxmox",
+                "ingress", "service", "svc",
+                "egress", "egress-ip", "egressip", "egress-gw",
+                "etcd", "control-plane", "controlplane", "master"
               ]
             },
             { "type": "string" }
@@ -120,6 +124,10 @@
             { "type": ["string", "number"] },
             { "type": "array", "items": { "type": ["string", "number", "boolean"] }, "minItems": 1 }
           ]
+        },
+        "rank": {
+          "type": "integer",
+          "description": "Placement hint among siblings: lower rank lays out earlier in the flow (higher up in a down layout, further left in a right layout). Unranked siblings sit at rank 0 — use negative ranks to place before them, positive to place after. Within the same rank, YAML order controls the side-by-side order."
         }
       },
       "additionalProperties": {
@@ -145,8 +153,8 @@
         },
         "class": {
           "type": "string",
-          "enum": ["zone", "vlan", "subnet", "cloud", "onprem", "trust", "tenant", "vrf", "bd", "ap", "epg", "l3out"],
-          "description": "Visual style. Generic: zone (orange), vlan (teal), subnet (blue), cloud (purple dashed), onprem (grey), trust (red dashed). Cisco ACI: tenant (grey), vrf (indigo), bd (cyan), ap (purple), epg (green), l3out (orange dashed)"
+          "enum": ["zone", "vlan", "subnet", "cloud", "onprem", "trust", "tenant", "vrf", "bd", "ap", "epg", "l3out", "cluster", "k8s", "namespace", "ns", "nodepool"],
+          "description": "Visual style. Generic: zone (orange), vlan (teal), subnet (blue), cloud (purple dashed), onprem (grey), trust (red dashed). Cisco ACI: tenant (grey), vrf (indigo), bd (cyan), ap (purple), epg (green), l3out (orange dashed). Kubernetes: cluster / k8s (blue), namespace / ns (green), nodepool (grey)"
         },
         "style": {
           "type": "object",
@@ -184,6 +192,10 @@
             { "type": ["string", "number"] },
             { "type": "array", "items": { "type": ["string", "number", "boolean"] }, "minItems": 1 }
           ]
+        },
+        "rank": {
+          "type": "integer",
+          "description": "Placement hint among siblings: lower rank lays out earlier in the flow (higher up in a down layout, further left in a right layout). Unranked siblings sit at rank 0 — use negative ranks to place before them, positive to place after. Within the same rank, YAML order controls the side-by-side order."
         },
         "nodes": {
           "type": "array",

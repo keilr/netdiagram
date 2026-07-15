@@ -1,0 +1,66 @@
+# Bare-metal Kubernetes with GPU workers. Workloads (namespaces) sit in the
+# request flow; the machine pools carry rank: 1, pinning them below the
+# namespaces inside the cluster. Egress leaves through a pinned egress IP —
+# that edge runs against the flow and attaches to the Internet node's near
+# side automatically. "scheduled on" is drawn with direction: none (no arrow,
+# not a firewall rule).
+diagram:
+  title: K8s bare metal + GPU
+  owner: ml-platform
+
+nodes:
+  - {id: inet, label: Internet, type: internet}
+  - {id: ing, label: ingress-lb, type: ingress, ip: 203.0.113.40}
+  # rank: -1 lifts the egress gateway into the cluster's first row, next to
+  # the ingress — its edge to the Internet stays short instead of wrapping
+  # around the whole cluster
+  - {id: eg, label: egress-gw, type: egress-ip, ip: 203.0.113.41, tags: [snat], rank: -1}
+
+  # workloads
+  - {id: fe, label: shop-frontend, type: pod, ip: 10.244.4.21}
+  - {id: be, label: shop-backend, type: pod, ip: 10.244.4.22}
+  - {id: train, label: llm-train, type: pod, ip: 10.244.7.11, tags: [gpu]}
+  - {id: serve, label: llm-serve, type: pod, ip: 10.244.7.12, tags: [gpu]}
+
+  # machines (bare metal)
+  - {id: cp1, label: cp-01, type: metal, ip: 10.60.0.11, os: linux, etcd: member}
+  - {id: cp2, label: cp-02, type: metal, ip: 10.60.0.12, os: linux, etcd: member}
+  - {id: cp3, label: cp-03, type: metal, ip: 10.60.0.13, os: linux, etcd: member}
+  - {id: w1, label: worker-01, type: metal, ip: 10.60.1.11, os: linux}
+  - {id: w2, label: worker-02, type: metal, ip: 10.60.1.12, os: linux}
+  - {id: w3, label: worker-03, type: metal, ip: 10.60.1.13, os: linux}
+  - {id: g1, label: gpu-01, type: gpu, ip: 10.60.2.11, os: linux, tags: [h100]}
+  - {id: g2, label: gpu-02, type: gpu, ip: 10.60.2.12, os: linux, tags: [h100]}
+
+groups:
+  - id: cluster
+    label: K8s — ml-prod
+    class: k8s
+    nodes: [ing, eg]
+    groups:
+      - {id: shop, label: ns shop, class: namespace, nodes: [fe, be]}
+      - id: ml
+        label: ns ml
+        class: namespace
+        quota: gpu=8
+        nodes: [train, serve]
+      - {id: cp, label: control plane, class: zone, rank: 1, cidr: 10.60.0.0/24, nodes: [cp1, cp2, cp3]}
+      - {id: workers, label: workers, class: nodepool, rank: 1, cidr: 10.60.1.0/24, nodes: [w1, w2, w3]}
+      - id: gpuw
+        label: gpu workers
+        class: nodepool
+        style: {color: purple}
+        rank: 1
+        cidr: 10.60.2.0/24
+        nodes: [g1, g2]
+
+connections:
+  - {from: inet, to: ing,   label: "tcp/443 https",     protocol: tcp, port: 443}
+  - {from: ing,  to: shop,  label: "tcp/8443 https",    protocol: tcp, port: 8443, comment: "ingress route shop.example.com"}
+  - {from: fe,   to: be,    label: "tcp/9090 api",      protocol: tcp, port: 9090}
+  - {from: be,   to: ml,    label: "tcp/8000 inference", protocol: tcp, port: 8000, comment: "model serving"}
+  - {from: eg,   to: inet,  label: "tcp/443 egress",    protocol: tcp, port: 443,  comment: "snat via pinned egress ip 203.0.113.41"}
+  # associations tie the machine pools into the flow (and below the workloads)
+  - {from: shop, to: workers, label: "scheduled on", direction: none}
+  - {from: ml,   to: gpuw,  label: "scheduled on", direction: none}
+  - {from: workers, to: cp, label: "tcp/6443 kube-api", protocol: tcp, port: 6443, comment: "kubelet <-> control plane"}

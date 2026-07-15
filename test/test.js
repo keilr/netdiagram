@@ -6,7 +6,7 @@ const assert = require("assert");
 const fs = require("fs");
 const path = require("path");
 const ELK = require("elkjs");
-const { parseSpec, buildElk, renderSVG } = require("../src/netdiagram.js");
+const { parseSpec, buildElk, assignPorts, renderSVG } = require("../src/netdiagram.js");
 
 const root = path.join(__dirname, "..");
 const EXAMPLE = fs.readFileSync(path.join(root, "examples/hq-edge-core.yaml"), "utf8");
@@ -93,6 +93,145 @@ test("cisco ACI group classes render (e.g. epg)", async () => {
   ].join("\n"));
   const out = renderSVG(s, await elk.layout(buildElk(s)));
   assert.ok(out.includes('rgba(21,128,61,.05)'), "epg class draws the green ACI tint");
+});
+
+test("k8s group classes and type aliases render", async () => {
+  const s = parseSpec([
+    "nodes:",
+    "  - {id: hv, type: hypervisor}",
+    "  - {id: ing, type: ingress}",
+    "  - {id: eg, type: egress-ip}",
+    "groups:",
+    "  - {id: c, label: prod, class: cluster, groups: [{id: n, label: ns web, class: namespace, nodes: [ing, eg]}]}",
+    "  - {id: p, label: pool, class: nodepool, nodes: [hv]}",
+  ].join("\n"));
+  const out = renderSVG(s, await elk.layout(buildElk(s)));
+  assert.ok(out.includes('rgba(29,78,216,.05)'), "cluster class draws the blue tint");
+  assert.ok(out.includes('rgba(21,128,61,.05)'), "namespace class draws the green tint");
+  assert.ok(out.includes('rgba(87,99,111,.05)'), "nodepool class draws the grey tint");
+  assert.ok(out.includes('>HYPERVISOR<'), "hypervisor caption renders");
+  assert.strictEqual([...out.matchAll(/rx="4" fill="none"/g)].length, 1,
+    "hypervisor is physical -> bare-metal double border");
+  assert.ok(out.includes('M9.5 6V3'), "hypervisor draws the metal chip glyph");
+  assert.ok(out.includes('>INGRESS<') && out.includes('>EGRESS-IP<'), "ingress/egress captions render");
+  assert.ok(out.includes('M12 7.5v4'), "ingress draws the lb glyph");
+  assert.ok(out.includes('M7 9h7'), "egress-ip draws the router glyph");
+});
+
+test("hub->group fan-outs auto-pack into a grid instead of one wide row", async () => {
+  const ids = Array.from({ length: 12 }, (_, i) => "n" + i);
+  const spec = parseSpec([
+    "nodes:",
+    "  - {id: hub, type: switch}",
+    ...ids.map((id) => `  - {id: ${id}, label: ${id}, type: server, ip: 10.0.0.9}`),
+    "groups:",
+    `  - {id: farm, label: farm, class: subnet, nodes: [${ids.join(", ")}]}`,
+    "connections:",
+    "  - {from: hub, to: farm}",
+  ].join("\n"));
+  const graph = buildElk(spec);
+  const farm = graph.children.find((c) => c.id === "farm");
+  assert.strictEqual(farm.layoutOptions["elk.hierarchyHandling"], "SEPARATE_CHILDREN",
+    "endpoint-free group gets packing options");
+  const out = await elk.layout(graph);
+  assert.ok(out.width < 1400, `packed star stays compact, got width ${Math.ceil(out.width)}`);
+  assert.ok(out.width / out.height < 3, "no single wide layer row");
+
+  // a group whose member is a connection endpoint must keep hierarchical layout
+  const spec2 = parseSpec([
+    "nodes:",
+    "  - {id: hub, type: switch}",
+    "  - {id: a, type: server}",
+    "groups:",
+    "  - {id: g, nodes: [a]}",
+    "connections:",
+    "  - {from: hub, to: a}",
+  ].join("\n"));
+  const g2 = buildElk(spec2).children.find((c) => c.id === "g");
+  assert.strictEqual(g2.layoutOptions["elk.hierarchyHandling"], undefined,
+    "member-endpoint group is not packed");
+  assert.ok(renderSVG(spec2, await elk.layout(buildElk(spec2))).includes("marker-end"),
+    "boundary-crossing edge still routes");
+});
+
+test("rank places siblings before/after the unranked row", async () => {
+  const yaml = (gup, gdn) => [
+    "nodes:",
+    "  - {id: hub, type: switch}",
+    "  - {id: a1, type: server}", "  - {id: a2, type: server}",
+    "  - {id: b1, type: server}", "  - {id: b2, type: server}",
+    "groups:",
+    `  - {id: gup, nodes: [a1, a2]${gup}}`,
+    `  - {id: gdn, nodes: [b1, b2]${gdn}}`,
+    "connections:",
+    "  - {from: hub, to: gup}",
+    "  - {from: hub, to: gdn}",
+  ].join("\n");
+  const plain = buildElk(parseSpec(yaml("", "")));
+  assert.strictEqual(plain.layoutOptions["elk.partitioning.activate"], undefined,
+    "partitioning stays off without ranks");
+  assert.strictEqual(plain.layoutOptions["elk.layered.considerModelOrder.strategy"], "NODES_AND_EDGES",
+    "in-layer order follows yaml order");
+  // rank -1 lays out before the unranked (rank 0) hub, rank 1 after it
+  const out = await elk.layout(buildElk(parseSpec(yaml(", rank: -1", ", rank: 1"))));
+  const y = Object.fromEntries(out.children.map((c) => [c.id, c.y]));
+  assert.ok(y.gup < y.hub && y.hub < y.gdn,
+    `expected gup above hub above gdn, got ${JSON.stringify(y)}`);
+});
+
+test("edge crossings render as hop arcs", async () => {
+  // K3,3 is non-planar: whatever order ELK picks, some edges must cross
+  const s = parseSpec([
+    "nodes:",
+    ...["a1","a2","a3","b1","b2","b3"].map((id) => `  - {id: ${id}, label: ${id}, type: server}`),
+    "connections:",
+    ...["a1","a2","a3"].flatMap((a) => ["b1","b2","b3"].map((b) => `  - {from: ${a}, to: ${b}}`)),
+  ].join("\n"));
+  const out = renderSVG(s, await elk.layout(buildElk(s)));
+  const edgePaths = [...out.matchAll(/class="edge"[^>]*? d="([^"]*)"/g)].map((m) => m[1]);
+  assert.strictEqual(edgePaths.length, 9, "all K3,3 edges drawn");
+  const arcs = edgePaths.join(" ").match(/A[\d.]+ [\d.]+ 0 0 [01]/g) || [];
+  assert.ok(arcs.length >= 1, "at least one crossing drawn as a hop arc");
+});
+
+test("assignPorts pins hub edges toward their targets (two-pass layout)", async () => {
+  // ansible-style hub: two estates above (rank -1), four below (rank 1)
+  const groups = { gA: -1, gB: -1, gC: 1, gD: 1, gE: 1, gF: 1 };
+  const s = () => parseSpec([
+    "nodes:",
+    "  - {id: hub, type: vm}",
+    ...Object.keys(groups).flatMap((g) => [1, 2].map((i) => `  - {id: ${g}n${i}, type: server}`)),
+    "groups:",
+    ...Object.entries(groups).map(([g, r]) => `  - {id: ${g}, rank: ${r}, nodes: [${g}n1, ${g}n2]}`),
+    "connections:",
+    ...Object.keys(groups).map((g) => `  - {from: hub, to: ${g}}`),
+  ].join("\n"));
+  const pass1 = await elk.layout(buildElk(s()));
+  const graph = assignPorts(buildElk(s()), pass1);
+  assert.ok(graph, "hub with 6 edges gets ports");
+  const hub = graph.children.find((c) => c.id === "hub");
+  assert.strictEqual(hub.layoutOptions["elk.portConstraints"], "FIXED_ORDER");
+  assert.strictEqual(hub.ports.length, 6, "one port per edge");
+  const sides = hub.ports.map((p) => p.layoutOptions["elk.port.side"]);
+  assert.strictEqual(sides.filter((x) => x === "NORTH").length, 2, "rank -1 targets face north");
+  assert.strictEqual(sides.filter((x) => x === "SOUTH").length, 4, "rank 1 targets face south");
+  // rank -1 targets sit before the hub in the flow: those edges go to ELK
+  // reversed (routed with the flow, drawn flipped back by renderSVG)
+  const rev = graph.edges.filter((e) => !e.sources[0].startsWith("hub.p"));
+  assert.deepStrictEqual(rev.map((e) => e.sources[0]).sort(), ["gA", "gB"],
+    "against-flow edges are reversed");
+  assert.ok(graph.edges.every((e) => e.sources[0].startsWith("hub.p") || e.targets[0].startsWith("hub.p")),
+    "every edge attaches to a hub port");
+  // second pass lays out and renders without hub-edge crossings
+  const out = renderSVG(s(), await elk.layout(graph));
+  const edgePaths = [...out.matchAll(/class="edge"[^>]*? d="([^"]*)"/g)].map((m) => m[1]);
+  assert.strictEqual(edgePaths.length, 6, "all edges drawn");
+  const arcs = edgePaths.join(" ").match(/A[\d.]+ [\d.]+ 0 0 [01]/g) || [];
+  assert.strictEqual(arcs.length, 0, "ordered ports leave no crossings");
+  // nothing to pin: every node has a single edge
+  const chain = parseSpec("nodes:\n  - {id: a}\n  - {id: b}\nconnections:\n  - {from: a, to: b}");
+  assert.strictEqual(assignPorts(buildElk(chain), await elk.layout(buildElk(chain))), null,
+    "returns null when no node has 2+ edges");
 });
 
 test("group style overrides color and border", async () => {
@@ -246,6 +385,8 @@ test("validation: node in two groups", () =>
   expectError(
     "nodes:\n  - {id: a}\ngroups:\n  - {id: g1, nodes: [a]}\n  - {id: g2, nodes: [a]}",
     'is in both'));
+test("validation: rank must be numeric", () =>
+  expectError("nodes:\n  - {id: a, rank: upper}", "rank must be a number"));
 
 // ---------- editor value completion ----------
 test("editor: value completion offers enum values and document ids", () => {
