@@ -80,7 +80,10 @@ nodes:
                            # Platform types vm|container|metal also set the
                            # border style: dashed / fine-dotted / double (hwOf +
                            # HW_STYLES). server, physical [server], dedicated,
-                           # baremetal … are metal aliases (GLYPH_ALIASES)
+                           # baremetal, hypervisor|esx[i]|kvm|proxmox … are metal
+                           # aliases (GLYPH_ALIASES). K8s: ingress|service -> lb,
+                           # egress[-ip] -> router, etcd -> db, pod -> container,
+                           # control-plane|master -> rack server
     icon: str              # explicit glyph override (visual only — border
                            # styling always follows type)
     ip: str | ips: [str]   # rendered one per line as "ip: <value>"
@@ -94,7 +97,7 @@ nodes:
     <any-scalar-key>: val  # unknown scalar keys render as "key: value" lines
 groups:
   - id, label, class: zone|vlan|subnet|cloud|onprem|trust (+ Cisco ACI:
-    tenant|vrf|bd|ap|epg|l3out), cidr,
+    tenant|vrf|bd|ap|epg|l3out; + K8s: cluster|k8s|namespace|ns|nodepool), cidr,
     nodes: [ids], groups: [nested]   # a node may belong to at most one group
     tags: [str] | str      # pills in the top-right, tinted in the group's own
                            # class/style color (tagPills, reused from nodes)
@@ -166,7 +169,9 @@ suggestions from the schema, so it follows automatically).
    one layer, so hub -> N members = one very wide row. `buildElk` therefore
    switches any group whose interior is untouched by connections (edges may end
    at the group itself) to `SEPARATE_CHILDREN` + component packing
-   (`PACK_OPTIONS`), gridding its members near the 1.6 aspect ratio.
+   (`PACK_OPTIONS`), gridding its members near the 2.0 aspect ratio (the
+   packer's row width is ~ar*sqrt(area); 1.6 tipped groups of wide nodes —
+   long captions like HYPERVISOR — into one-per-row columns).
    INCLUDE_CHILDREN would silently disable that packing — which is exactly why
    it only applies to groups with no boundary-crossing member edges. Advise
    users to connect hub -> group (not each member) for compact fan-outs.

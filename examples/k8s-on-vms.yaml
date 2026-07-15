@@ -1,0 +1,55 @@
+# Kubernetes cluster running on VMs — the whole platform stack in one picture.
+# Layout tricks used here:
+# - machine pools (workers, vSphere hosts) have no member-level connections,
+#   so they pack into compact grids
+# - the "runs on" association (direction: none — no arrow, excluded from the
+#   Connections table) is what places the virtualization layer below the
+#   cluster; no rank needed
+diagram:
+  title: K8s cluster on VMs
+  owner: platform-team
+
+nodes:
+  - {id: inet, label: Internet, type: internet}
+  - {id: ing, label: ingress-lb, type: ingress, ip: 203.0.113.30}
+
+  # control plane (VMs; etcd stacked on the control-plane nodes)
+  - {id: cp1, label: cp-01, type: vm, ip: 10.50.0.11, os: linux, etcd: member}
+  - {id: cp2, label: cp-02, type: vm, ip: 10.50.0.12, os: linux, etcd: member}
+  - {id: cp3, label: cp-03, type: vm, ip: 10.50.0.13, os: linux, etcd: member}
+
+  # workers (VMs)
+  - {id: w1, label: worker-01, type: vm, ip: 10.50.1.11, os: linux}
+  - {id: w2, label: worker-02, type: vm, ip: 10.50.1.12, os: linux}
+  - {id: w3, label: worker-03, type: vm, ip: 10.50.1.13, os: linux}
+  - {id: w4, label: worker-04, type: vm, ip: 10.50.1.14, os: linux}
+  - {id: w5, label: worker-05, type: vm, ip: 10.50.1.15, os: linux}
+  - {id: w6, label: worker-06, type: vm, ip: 10.50.1.16, os: linux}
+
+  # virtualization layer
+  - {id: hv1, label: esx-01, type: hypervisor, ip: 10.50.9.11, os: esxi}
+  - {id: hv2, label: esx-02, type: hypervisor, ip: 10.50.9.12, os: esxi}
+  - {id: hv3, label: esx-03, type: hypervisor, ip: 10.50.9.13, os: esxi}
+  - {id: hv4, label: esx-04, type: hypervisor, ip: 10.50.9.14, os: esxi}
+  - {id: vc, label: vcenter, type: vm, ip: 10.50.9.5, os: linux, tags: [mgmt]}
+  - {id: vsan, label: vsan-01, type: storage, ip: 10.50.9.20, tags: [datastore]}
+
+groups:
+  - id: cluster
+    label: K8s — prod
+    class: cluster
+    nodes: [ing]
+    groups:
+      - {id: workers, label: workers, class: nodepool, cidr: 10.50.1.0/24, nodes: [w1, w2, w3, w4, w5, w6]}
+      - {id: cp, label: control plane, class: zone, cidr: 10.50.0.0/24, nodes: [cp1, cp2, cp3]}
+  - id: vsphere
+    label: vSphere
+    class: onprem
+    cidr: 10.50.9.0/24
+    nodes: [hv1, hv2, hv3, hv4, vc, vsan]
+
+connections:
+  - {from: inet, to: ing,      label: "tcp/443 https",       protocol: tcp, port: 443}
+  - {from: ing,  to: workers,  label: "tcp/30443 nodeport",  protocol: tcp, port: 30443, comment: "ingress-nginx service"}
+  - {from: workers, to: cp,    label: "tcp/6443 kube-api",   protocol: tcp, port: 6443,  comment: "kubelet <-> control plane (+10250 back)"}
+  - {from: cluster, to: vsphere, label: "runs on", direction: none}

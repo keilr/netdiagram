@@ -37,6 +37,13 @@ const GROUP_STYLES = {
   ap:     { ...groupColorScheme('#7c3aed'), dash:null  },
   epg:    { ...groupColorScheme('#15803d'), dash:null  },
   l3out:  { ...groupColorScheme('#c2410c'), dash:'6 4' },
+  /* Kubernetes containers: cluster (alias k8s) > namespace (alias ns);
+   * nodepool for machine pools (worker / gpu pools) */
+  cluster:  { ...groupColorScheme('#1d4ed8'), dash:null },
+  k8s:      { ...groupColorScheme('#1d4ed8'), dash:null },
+  namespace:{ ...groupColorScheme('#15803d'), dash:null },
+  ns:       { ...groupColorScheme('#15803d'), dash:null },
+  nodepool: { ...groupColorScheme('#57636f'), dash:null },
   default:{ fill:'rgba(60,72,88,.04)',   stroke:'#a8b2bd', dash:null,  label:'#5b6874' }
 };
 
@@ -96,7 +103,14 @@ const GLYPH_ALIASES = {
   physicalserver:'metal', dedicated:'metal', 'dedicated server':'metal',
   /* GPU / accelerator hosts (own glyph, no platform border) */
   'gpu-host':'gpu', gpuhost:'gpu', gpuserver:'gpu', 'gpu-server':'gpu',
-  accelerator:'gpu', cuda:'gpu'
+  accelerator:'gpu', cuda:'gpu',
+  /* Kubernetes / virtualization vocabulary. Hypervisors are physical ->
+   * metal (double border); the rest are visual-only aliases */
+  hypervisor:'metal', esx:'metal', esxi:'metal', kvm:'metal', proxmox:'metal',
+  ingress:'lb', service:'lb', svc:'lb',
+  egress:'router', 'egress-ip':'router', egressip:'router', 'egress-gw':'router',
+  etcd:'db',
+  'control-plane':'server', controlplane:'server', master:'server'
 };
 
 /* ---------------- helpers ---------------- */
@@ -312,10 +326,14 @@ function buildElk(spec){
     return (g.nodes||[]).some(id => endpoints.has(String(id)))
         || (g.groups||[]).some(sub => sub && (endpoints.has(String(sub.id)) || touchesInterior(sub)));
   }
+  /* aspectRatio feeds ELK's component-row packer (row width ~ ar*sqrt(area)):
+   * 1.6 tips groups of wide nodes (long captions like HYPERVISOR) into
+   * one-per-row columns; 2.0 keeps 2-3 column grids without flattening
+   * everything into rows (2.4 does) */
   const PACK_OPTIONS = {
     'elk.hierarchyHandling':'SEPARATE_CHILDREN',
     'elk.separateConnectedComponents':'true',
-    'elk.aspectRatio':'1.6'
+    'elk.aspectRatio':'2.0'
   };
   /* in-layer order follows YAML order (left->right in a down layout), so
    * authors can nudge siblings around without fighting crossing minimization.

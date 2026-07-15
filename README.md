@@ -87,7 +87,7 @@ editor's completion and validation). The shape is `diagram`, `nodes`, `groups`,
 |---|---|
 | `id` | required, unique across nodes and groups |
 | `label` | display name (defaults to id) |
-| `type` | icon + caption: `router` `switch` `firewall` `waf` `db` `lb` `cloud` `internet` `user` `wifi` `siem` `storage` `vm` `container` `metal` `gpu` (aliases like `gw`, `docker`, `nas`, and `gpu-host` / `accelerator` / `cuda` work; the rack-server icon is `host` / `app` / `web`). Platform types `vm` / `container` / `metal` also set the border style: dashed / fine-dotted / double. `server`, `physical [server]`, `dedicated`, `baremetal` are aliases of `metal` |
+| `type` | icon + caption: `router` `switch` `firewall` `waf` `db` `lb` `cloud` `internet` `user` `wifi` `siem` `storage` `vm` `container` `metal` `gpu` (aliases like `gw`, `docker`, `nas`, and `gpu-host` / `accelerator` / `cuda` work; the rack-server icon is `host` / `app` / `web`). Platform types `vm` / `container` / `metal` also set the border style: dashed / fine-dotted / double. `server`, `physical [server]`, `dedicated`, `baremetal` are aliases of `metal`, and so is `hypervisor` (`esx`, `esxi`, `kvm`, `proxmox`). Kubernetes vocabulary: `ingress` / `service` draw the load-balancer icon, `egress` / `egress-ip` the gateway, `etcd` the database, `pod` the container, `control-plane` / `master` the rack server |
 | `icon` | explicit icon override — visual only, border styling follows `type` (e.g. `type: metal, icon: db`) |
 | `ip` / `ips` | one or many; rendered one per line |
 | `os` | free-form (`linux`, `windows`, `bsd`, …) |
@@ -99,7 +99,7 @@ editor's completion and validation). The shape is `diagram`, `nodes`, `groups`,
 | key | notes |
 |---|---|
 | `id`, `label` | as for nodes |
-| `class` | tint + border style. Generic: `zone` `vlan` `subnet` `cloud` `onprem` `trust` (trust = red dashed). Cisco ACI: `tenant` `vrf` `bd` `ap` `epg` `l3out` (l3out = orange dashed) |
+| `class` | tint + border style. Generic: `zone` `vlan` `subnet` `cloud` `onprem` `trust` (trust = red dashed). Cisco ACI: `tenant` `vrf` `bd` `ap` `epg` `l3out` (l3out = orange dashed). Kubernetes: `cluster` / `k8s` (blue), `namespace` / `ns` (green), `nodepool` (grey) |
 | `style` | visual overrides: `color` (or `colour`) — one of `gray` `red` `orange` `yellow` `green` `teal` `cyan` `blue` `indigo` `purple` `pink`, overriding the class tint — and `border`: `solid` `dashed` `dotted` (CSS border-style names). E.g. `style: {color: blue, border: dashed}` |
 | `cidr` | rendered as `cidr: <value>` in the info box in the group's lower-right corner |
 | `tags` | informational labels — pills in the group's top-right corner, tinted in the group's own class/style color (list or single string) |

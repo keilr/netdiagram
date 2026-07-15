@@ -95,6 +95,29 @@ test("cisco ACI group classes render (e.g. epg)", async () => {
   assert.ok(out.includes('rgba(21,128,61,.05)'), "epg class draws the green ACI tint");
 });
 
+test("k8s group classes and type aliases render", async () => {
+  const s = parseSpec([
+    "nodes:",
+    "  - {id: hv, type: hypervisor}",
+    "  - {id: ing, type: ingress}",
+    "  - {id: eg, type: egress-ip}",
+    "groups:",
+    "  - {id: c, label: prod, class: cluster, groups: [{id: n, label: ns web, class: namespace, nodes: [ing, eg]}]}",
+    "  - {id: p, label: pool, class: nodepool, nodes: [hv]}",
+  ].join("\n"));
+  const out = renderSVG(s, await elk.layout(buildElk(s)));
+  assert.ok(out.includes('rgba(29,78,216,.05)'), "cluster class draws the blue tint");
+  assert.ok(out.includes('rgba(21,128,61,.05)'), "namespace class draws the green tint");
+  assert.ok(out.includes('rgba(87,99,111,.05)'), "nodepool class draws the grey tint");
+  assert.ok(out.includes('>HYPERVISOR<'), "hypervisor caption renders");
+  assert.strictEqual([...out.matchAll(/rx="4" fill="none"/g)].length, 1,
+    "hypervisor is physical -> bare-metal double border");
+  assert.ok(out.includes('M9.5 6V3'), "hypervisor draws the metal chip glyph");
+  assert.ok(out.includes('>INGRESS<') && out.includes('>EGRESS-IP<'), "ingress/egress captions render");
+  assert.ok(out.includes('M12 7.5v4'), "ingress draws the lb glyph");
+  assert.ok(out.includes('M7 9h7'), "egress-ip draws the router glyph");
+});
+
 test("hub->group fan-outs auto-pack into a grid instead of one wide row", async () => {
   const ids = Array.from({ length: 12 }, (_, i) => "n" + i);
   const spec = parseSpec([
