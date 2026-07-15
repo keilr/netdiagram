@@ -14,8 +14,8 @@ nodes:
   - {id: uplink, label: uplink network, type: internet, rank: -1}
 
   # instances on the OVN tenant network
-  - {id: ct1, label: web-ct-01, type: container, ip: 10.100.0.11, os: ubuntu}
-  - {id: ct2, label: web-ct-02, type: container, ip: 10.100.0.12, os: ubuntu}
+  - {id: ct1, label: web-ct-01, type: lxc, ip: 10.100.0.11, os: ubuntu}
+  - {id: ct2, label: web-ct-02, type: lxc, ip: 10.100.0.12, os: ubuntu}
   - {id: vm1, label: db-vm-01, type: vm, ip: 10.100.0.21, os: ubuntu}
   - {id: vm2, label: win-vm-01, type: vm, ip: 10.100.0.22, os: windows}
 

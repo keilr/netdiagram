@@ -285,6 +285,8 @@ EXAMPLES.forEach((ex, i)=>{
   o.value = i; o.textContent = ex.name;
   exampleSel.appendChild(o);
 });
+// the list is sorted by name; preselect the default (def) example for first load
+exampleSel.value = String(Math.max(0, EXAMPLES.findIndex(ex => ex.def)));
 function loadExample(){
   const yaml = EXAMPLES[exampleSel.value].yaml;
   setActive('');            // an example is a fresh, unsaved draft

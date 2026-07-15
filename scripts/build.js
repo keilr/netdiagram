@@ -54,13 +54,14 @@ const DEFAULT_EXAMPLE = "hq-edge-core.yaml"; // shown on first load
 const jsyamlLib = require("js-yaml");
 const examples = fs.readdirSync(path.join(root, "examples"))
   .filter((f) => f.endsWith(".yaml"))
-  .sort((a, b) => (a === DEFAULT_EXAMPLE ? -1 : b === DEFAULT_EXAMPLE ? 1 : a.localeCompare(b)))
   .map((f) => {
     const yaml = read("examples/" + f);
     let name = f.replace(/\.yaml$/, "");
     try { name = String(jsyamlLib.load(yaml)?.diagram?.title || name); } catch (e) { /* fall back to filename */ }
-    return { name, yaml };
-  });
+    // the picker shows names, so sort by name; `def` marks the first-load example
+    return f === DEFAULT_EXAMPLE ? { name, yaml, def: true } : { name, yaml };
+  })
+  .sort((a, b) => a.name.localeCompare(b.name, "en", { sensitivity: "base" }));
 const schema  = read("netdiagram-schema.json");
 const core = read("src/netdiagram.js");
 const app = read("src/app.js");

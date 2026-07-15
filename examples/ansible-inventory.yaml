@@ -69,6 +69,10 @@ nodes:
   - {id: nas1, label: nas-01, type: storage, ip: 10.42.80.11, os: linux}
   - {id: nas2, label: backup-01, type: storage, ip: 10.42.80.12, os: linux}
 
+  # secrets management (DC2) — playbooks pull credentials from OpenBao
+  - {id: bao1, label: openbao-01, type: vm, ip: 10.42.90.11, os: linux, tags: [vault]}
+  - {id: bao2, label: openbao-02, type: vm, ip: 10.42.90.12, os: linux, tags: [vault]}
+
 groups:
   - id: cloud
     label: Cloud — eu-central
@@ -142,6 +146,11 @@ groups:
         class: subnet
         cidr: 10.42.80.0/24
         nodes: [nas1, nas2]
+      - id: sec
+        label: secrets — openbao
+        class: trust
+        cidr: 10.42.90.0/24
+        nodes: [bao1, bao2]
 
 connections:
   # one edge per inventory group — this is what enables the compact grids
@@ -155,3 +164,4 @@ connections:
   - {from: awx, to: mon, label: "tcp/22 ssh",     protocol: tcp, port: 22,   comment: "exporter + dashboard rollout"}
   - {from: awx, to: esx, label: "tcp/443 https",  protocol: tcp, port: 443,  comment: "community.vmware modules"}
   - {from: awx, to: bak, label: "tcp/22 ssh",     protocol: tcp, port: 22,   comment: "snapshot + restore jobs"}
+  - {from: awx, to: sec, label: "tcp/8200 vault", protocol: tcp, port: 8200, comment: "openbao secrets lookup"}
