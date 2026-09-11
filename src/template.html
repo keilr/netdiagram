@@ -16,6 +16,7 @@
     --slate-2:#161c25;
     --editor-text:#d7dee8;
     --accent:#b45309;
+    --glow:#f59e0b;         /* selected diagram item */
     --err:#c0392b;
   }
   *{box-sizing:border-box;margin:0;padding:0}
@@ -99,6 +100,30 @@
   #canvas-pane .edge-lbl{cursor:pointer}
   #canvas-pane .edge,#canvas-pane .edge-lbl{transition:opacity .15s}
   #canvas-pane .edge-lo{opacity:.12}
+  #canvas-pane .nd-node,#canvas-pane .nd-group>rect:first-child{cursor:pointer}
+  /* selection (editor cursor / diagram click): amber outline + glow, pulsing
+   * briefly when it changes. Screen only — downloads use the clean SVG. */
+  #canvas-pane .nd-sel{filter:drop-shadow(0 0 5px var(--glow))}
+  #canvas-pane .nd-node.nd-sel>rect:first-child,
+  #canvas-pane .nd-group.nd-sel>rect:first-child{stroke:var(--glow);stroke-width:3}
+  #canvas-pane .edge.nd-sel{stroke-width:4}
+  #canvas-pane .edge-lbl.nd-sel{filter:drop-shadow(0 0 2px var(--glow));animation:none}   /* keep label text crisp */
+  #canvas-pane .nd-pulse{animation:nd-pulse .6s ease-in-out 3}
+  @keyframes nd-pulse{50%{filter:drop-shadow(0 0 3px var(--glow)) drop-shadow(0 0 14px var(--glow))}}
+  @media (prefers-reduced-motion:reduce){#canvas-pane .nd-pulse{animation:none}}
+  #tag-filter{display:flex;align-items:center;gap:6px;margin-left:auto;padding:0 12px;flex-wrap:wrap;min-width:0}
+  #tag-filter[hidden]{display:none}
+  #tag-chips{display:flex;gap:5px;flex-wrap:wrap}
+  .tag-chip{padding:2px 9px;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;border-radius:10px}
+  .tag-chip[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:#fff}
+  body.dropping #right-pane::after{content:"Drop to import";position:absolute;inset:12px;display:flex;
+    align-items:center;justify-content:center;border:2px dashed var(--accent);border-radius:8px;
+    background:rgba(22,28,37,.72);color:#f0c088;font-size:14px;letter-spacing:.08em;z-index:5;pointer-events:none}
+  .conn-chg{font-weight:700;text-align:center;width:24px}
+  .conn-table tr.chg-added td{background:rgba(21,128,61,.08)}
+  .conn-table tr.chg-removed td{background:rgba(192,57,43,.08);text-decoration:line-through;text-decoration-color:rgba(192,57,43,.5)}
+  .conn-table tr.chg-changed td{background:rgba(180,83,9,.08)}
+  .chg-added .conn-chg{color:#15803d}.chg-removed .conn-chg{color:#c0392b}.chg-changed .conn-chg{color:#b45309}
   #connections-pane{flex:1;overflow:auto;background:var(--paper);color:var(--ink);font-size:12px}
   .conn-toolbar{display:flex;align-items:center;justify-content:space-between;
     padding:12px 16px 10px;border-bottom:1px solid #dde3d7;position:sticky;top:0;
@@ -134,11 +159,17 @@
     <select id="sel-project" title="Open or switch between projects saved in this browser"></select>
   </div>
   <button id="btn-save" title="Save the current YAML as a named project in this browser (Ctrl/Cmd+S)">Save</button>
-  <button id="btn-import" title="Load a .yaml file from your computer into the editor">Import YAML</button>
-  <input id="file-yaml" type="file" accept=".yaml,.yml,text/yaml,text/plain" hidden>
+  <button id="btn-import" title="Load a file into the editor: netdiagram YAML, an SVG exported by netdiagram, an Ansible inventory, Terraform state or a NetBox export (or drop it onto the page)">Import</button>
+  <input id="file-yaml" type="file" accept=".yaml,.yml,.svg,.ini,.json,.tfstate,.txt,text/yaml,text/plain,image/svg+xml,application/json" hidden>
   <button id="btn-yaml" title="Download the current YAML to a file">Download YAML</button>
   <button id="btn-del" title="Delete the current project" hidden>Delete</button>
+  <div class="picker" id="compare-picker">
+    <label class="picker-label" for="sel-compare">Compare</label>
+    <select id="sel-compare" title="Show what changed against a saved project or a file: added, removed and changed items are marked in the diagram and the Connections table"></select>
+  </div>
+  <input id="file-compare" type="file" accept=".yaml,.yml,.svg,text/yaml,text/plain,image/svg+xml" hidden>
   <div class="hdr-actions">
+    <button id="btn-share" title="Copy a link that carries this diagram in the URL fragment (never sent to a server)">Share link</button>
     <button id="btn-pdf" title="Open the print dialog to save as PDF">Export PDF</button>
     <button id="btn-download" class="primary">Download SVG</button>
   </div>
@@ -159,6 +190,10 @@
     <div id="view-tabs">
       <button class="tab-btn active" data-pane="canvas-pane">Diagram</button>
       <button class="tab-btn" data-pane="connections-pane">Connections</button>
+      <div id="tag-filter" hidden>
+        <span class="picker-label">Show tags</span>
+        <span id="tag-chips"></span>
+      </div>
     </div>
     <div id="canvas-pane" aria-label="Rendered diagram"></div>
     <div id="connections-pane" hidden></div>

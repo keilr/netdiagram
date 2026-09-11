@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 "use strict";
 /*
- * Build: src/template.html + vendored libs + src/*.js + examples/hq-edge-core.yaml
+ * Build: src/template.html + vendored libs + src/*.js + examples/*.yaml + schema
  *        -> dist/netdiagram.html (fully self-contained, no CDN, works offline)
  *
  * IMPORTANT: library code is spliced in via split/join on placeholder comments.
@@ -64,11 +64,14 @@ const examples = fs.readdirSync(path.join(root, "examples"))
   .sort((a, b) => a.name.localeCompare(b.name, "en", { sensitivity: "base" }));
 const schema  = read("netdiagram-schema.json");
 const core = read("src/netdiagram.js");
+const importers = read("src/importers.js");
 const app = read("src/app.js");
-const version = require(path.join(root, "package.json")).version;
+const pkg = require(path.join(root, "package.json"));
 const payload =
-  `window.NETDIAGRAM_VERSION = ${JSON.stringify(version)};\n` +
-  `const EXAMPLES = ${JSON.stringify(examples)};\nconst SCHEMA = ${schema};\n` + core + "\n" + app;
+  `window.NETDIAGRAM_VERSION = ${JSON.stringify(pkg.version)};\n` +
+  // hosted copy that share links point at when the page is opened from a file
+  `window.NETDIAGRAM_HOMEPAGE = ${JSON.stringify(pkg.homepage || "")};\n` +
+  `const EXAMPLES = ${JSON.stringify(examples)};\nconst SCHEMA = ${schema};\n` + core + "\n" + importers + "\n" + app;
 
 // 5. assemble
 let html = read("src/template.html");

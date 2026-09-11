@@ -1,6 +1,7 @@
 "use strict";
 /* Flat ESLint config. The sources run in three shapes:
  *  - src/netdiagram.js : CommonJS core, runs in BOTH node and the browser
+ *  - src/importers.js  : inventory importers, same dual shape (window.Importers)
  *  - src/app.js        : browser wiring, concatenated (not bundled) after the
  *                        core + build-injected globals, so its cross-file names
  *                        are globals here, not imports
@@ -29,6 +30,16 @@ module.exports = [
   },
 
   {
+    files: ["src/importers.js"],
+    languageOptions: {
+      ecmaVersion: 2022,
+      sourceType: "commonjs",
+      globals: { ...globals.node, ...globals.browser, jsyaml: "readonly" },
+    },
+    rules: shared,
+  },
+
+  {
     files: ["src/app.js"],
     languageOptions: {
       ecmaVersion: 2022,
@@ -40,8 +51,13 @@ module.exports = [
         // from src/editor.js
         makeEditor: "readonly",
         // from src/netdiagram.js (concatenated ahead of app.js at build time)
-        parseSpec: "readonly", buildElk: "readonly", assignPorts: "readonly", renderSVG: "readonly",
-        esc: "readonly", dirOf: "readonly", ipsOf: "readonly",
+        parseSpec: "readonly", specFromDoc: "readonly", sourceMap: "readonly",
+        buildElk: "readonly", assignPorts: "readonly", renderSVG: "readonly",
+        allTags: "readonly", filterDoc: "readonly", diffDocs: "readonly",
+        connectionRules: "readonly", rulesToCsv: "readonly", extractSource: "readonly",
+        encodeShare: "readonly", decodeShare: "readonly", esc: "readonly",
+        // from src/importers.js
+        Importers: "readonly",
       },
     },
     rules: shared,

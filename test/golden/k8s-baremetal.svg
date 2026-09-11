@@ -1,0 +1,292 @@
+<svg xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="nd-title nd-desc" width="1281" height="1585" viewBox="0 0 1281 1585" font-family="ui-monospace,Menlo,monospace" data-theme="paper" data-bg="#fafbf7">
+    <title id="nd-title">K8s bare metal + GPU</title>
+    <desc id="nd-desc">16 nodes, 7 groups, 9 connections</desc>
+    <metadata id="netdiagram-source" data-type="text/yaml"># Bare-metal Kubernetes with GPU workers. Workloads (namespaces) sit in the
+# request flow; the machine pools carry rank: 1, pinning them below the
+# namespaces inside the cluster. Egress leaves through a pinned egress IP —
+# that edge runs against the flow and attaches to the Internet node&#39;s near
+# side automatically. &quot;scheduled on&quot; is drawn with direction: none (no arrow,
+# not a firewall rule).
+diagram:
+  title: K8s bare metal + GPU
+  owner: ml-platform
+
+nodes:
+  - {id: inet, label: Internet, type: internet}
+  - {id: ing, label: ingress-lb, type: ingress, ip: 203.0.113.40}
+  # rank: -1 lifts the egress gateway into the cluster&#39;s first row, next to
+  # the ingress — its edge to the Internet stays short instead of wrapping
+  # around the whole cluster
+  - {id: eg, label: egress-gw, type: egress-ip, ip: 203.0.113.41, tags: [snat], rank: -1}
+
+  # workloads
+  - {id: fe, label: shop-frontend, type: pod, ip: 10.244.4.21}
+  - {id: be, label: shop-backend, type: pod, ip: 10.244.4.22}
+  - {id: train, label: llm-train, type: pod, ip: 10.244.7.11, tags: [gpu]}
+  - {id: serve, label: llm-serve, type: pod, ip: 10.244.7.12, tags: [gpu]}
+  # a legacy VM workload virtualized on the cluster via KubeVirt
+  - {id: legdb, label: legacy-erp-db, type: vm, ip: 10.244.9.21, os: windows, tags: [kubevirt]}
+
+  # machines (bare metal)
+  - {id: cp1, label: cp-01, type: metal, ip: 10.60.0.11, os: linux, etcd: member}
+  - {id: cp2, label: cp-02, type: metal, ip: 10.60.0.12, os: linux, etcd: member}
+  - {id: cp3, label: cp-03, type: metal, ip: 10.60.0.13, os: linux, etcd: member}
+  - {id: w1, label: worker-01, type: metal, ip: 10.60.1.11, os: linux}
+  - {id: w2, label: worker-02, type: metal, ip: 10.60.1.12, os: linux}
+  - {id: w3, label: worker-03, type: metal, ip: 10.60.1.13, os: linux}
+  - {id: g1, label: gpu-01, type: gpu, ip: 10.60.2.11, os: linux, tags: [h100]}
+  - {id: g2, label: gpu-02, type: gpu, ip: 10.60.2.12, os: linux, tags: [h100]}
+
+groups:
+  - id: cluster
+    label: K8s — ml-prod
+    class: k8s
+    nodes: [ing, eg]
+    groups:
+      - {id: shop, label: ns shop, class: namespace, nodes: [fe, be]}
+      - id: ml
+        label: ns ml
+        class: namespace
+        quota: gpu=8
+        nodes: [train, serve]
+      - id: legacy
+        label: ns legacy
+        class: namespace
+        nodes: [legdb]
+      - {id: cp, label: control plane, class: zone, rank: 1, cidr: 10.60.0.0/24, nodes: [cp1, cp2, cp3]}
+      - {id: workers, label: workers, class: nodepool, rank: 1, cidr: 10.60.1.0/24, nodes: [w1, w2, w3]}
+      - id: gpuw
+        label: gpu workers
+        class: nodepool
+        style: {color: purple}
+        rank: 1
+        cidr: 10.60.2.0/24
+        nodes: [g1, g2]
+
+connections:
+  - {from: inet, to: ing,   label: &quot;tcp/443 https&quot;,     protocol: tcp, port: 443}
+  - {from: ing,  to: shop,  label: &quot;tcp/8443 https&quot;,    protocol: tcp, port: 8443, comment: &quot;ingress route shop.example.com&quot;}
+  - {from: fe,   to: be,    label: &quot;tcp/9090 api&quot;,      protocol: tcp, port: 9090}
+  - {from: be,   to: ml,    label: &quot;tcp/8000 inference&quot;, protocol: tcp, port: 8000, comment: &quot;model serving&quot;}
+  - {from: be,   to: legdb, label: &quot;tcp/1433 mssql&quot;,     protocol: tcp, port: 1433, comment: &quot;legacy ERP db on a kubevirt vm&quot;}
+  - {from: eg,   to: inet,  label: &quot;tcp/443 egress&quot;,    protocol: tcp, port: 443,  comment: &quot;snat via pinned egress ip 203.0.113.41&quot;}
+  # associations tie the machine pools into the flow (and below the workloads)
+  - {from: shop, to: workers, label: &quot;scheduled on&quot;, direction: none}
+  - {from: ml,   to: gpuw,  label: &quot;scheduled on&quot;, direction: none}
+  - {from: workers, to: cp, label: &quot;tcp/6443 kube-api&quot;, protocol: tcp, port: 6443, comment: &quot;kubelet &lt;-&gt; control plane&quot;}
+</metadata>
+    <defs>
+    <pattern id="gridS" width="12" height="12" patternUnits="userSpaceOnUse">
+      <path d="M12 0H0v12" fill="none" stroke="#e7ece2" stroke-width=".6"/>
+    </pattern>
+    <pattern id="gridL" width="60" height="60" patternUnits="userSpaceOnUse">
+      <rect width="60" height="60" fill="url(#gridS)"/>
+      <path d="M60 0H0v60" fill="none" stroke="#dde3d7" stroke-width="1"/>
+    </pattern>
+    <marker id="ah-0f766e" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse">
+      <path d="M0 .8 9.2 5 0 9.2z" fill="#0f766e"/>
+    </marker>
+    <marker id="ah-7c3aed" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse">
+      <path d="M0 .8 9.2 5 0 9.2z" fill="#7c3aed"/>
+    </marker>
+    <marker id="ah-1d4ed8" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse">
+      <path d="M0 .8 9.2 5 0 9.2z" fill="#1d4ed8"/>
+    </marker>
+    <marker id="ah-9d174d" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse">
+      <path d="M0 .8 9.2 5 0 9.2z" fill="#9d174d"/>
+    </marker>
+    <marker id="ah-4d7c0f" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse">
+      <path d="M0 .8 9.2 5 0 9.2z" fill="#4d7c0f"/>
+    </marker>
+    <marker id="ah-0e7490" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse">
+      <path d="M0 .8 9.2 5 0 9.2z" fill="#0e7490"/>
+    </marker>
+    <marker id="ah-a21caf" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse">
+      <path d="M0 .8 9.2 5 0 9.2z" fill="#a21caf"/>
+    </marker>
+    <marker id="ah-b45309" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse">
+      <path d="M0 .8 9.2 5 0 9.2z" fill="#b45309"/>
+    </marker></defs>
+    <rect width="1281" height="1585" fill="#fafbf7"/>
+    <rect width="1281" height="1585" fill="url(#gridL)"/>
+    <g transform="translate(26,26)">
+      <g class="nd-group" data-id="cluster">
+      <rect x="16" y="175.1" width="1197" height="1257.4" rx="8" fill="rgba(29,78,216,.05)" stroke="#7c98e8" stroke-width="1.4"/>
+      
+      <text x="30" y="197.1" font-family="ui-monospace,Menlo,monospace" font-size="11" font-weight="700" letter-spacing="1.6" fill="#1d4ed8">K8S — ML-PROD</text>
+      </g><g class="nd-group" data-id="shop">
+      <rect x="889.15" y="371.29999999999995" width="226" height="272.2" rx="8" fill="rgba(21,128,61,.05)" stroke="#77b58e" stroke-width="1.4"/>
+      
+      <text x="903.15" y="393.29999999999995" font-family="ui-monospace,Menlo,monospace" font-size="11" font-weight="700" letter-spacing="1.6" fill="#15803d">NS SHOP</text>
+      </g><g class="nd-group" data-id="ml">
+      <rect x="543" y="794.5" width="275" height="217" rx="8" fill="rgba(21,128,61,.05)" stroke="#77b58e" stroke-width="1.4"/>
+      
+      <text x="557" y="816.5" font-family="ui-monospace,Menlo,monospace" font-size="11" font-weight="700" letter-spacing="1.6" fill="#15803d">NS ML</text>
+      <rect class="attr-box" x="696" y="978.5" width="114" height="25" rx="3" fill="#ffffff" fill-opacity=".8" stroke="#77b58e" stroke-width=".9"/><text x="706" y="994.5" font-family="ui-monospace,Menlo,monospace" font-size="10.5" fill="#15803d"><tspan opacity=".6">quota: </tspan><tspan opacity=".9">gpu=8</tspan></text></g><g class="nd-group" data-id="legacy">
+      <rect x="874" y="757.5" width="317" height="128" rx="8" fill="rgba(21,128,61,.05)" stroke="#77b58e" stroke-width="1.4"/>
+      
+      <text x="888" y="779.5" font-family="ui-monospace,Menlo,monospace" font-size="11" font-weight="700" letter-spacing="1.6" fill="#15803d">NS LEGACY</text>
+      </g><g class="nd-group" data-id="cp">
+      <rect x="38" y="1153.5" width="448" height="257" rx="8" fill="rgba(180,83,9,.05)" stroke="#c98a4b" stroke-width="1.4"/>
+      
+      <text x="52" y="1175.5" font-family="ui-monospace,Menlo,monospace" font-size="11" font-weight="700" letter-spacing="1.6" fill="#9a5b17">CONTROL PLANE</text>
+      <rect class="attr-box" x="317" y="1377.5" width="161" height="25" rx="3" fill="#ffffff" fill-opacity=".8" stroke="#c98a4b" stroke-width=".9"/><text x="327" y="1393.5" font-family="ui-monospace,Menlo,monospace" font-size="10.5" fill="#9a5b17"><tspan opacity=".6">cidr: </tspan><tspan opacity=".9">10.60.0.0/24</tspan></text></g><g class="nd-group" data-id="workers">
+      <rect x="144" y="748.5" width="236" height="309" rx="8" fill="rgba(87,99,111,.05)" stroke="#9ea5ab" stroke-width="1.4"/>
+      
+      <text x="158" y="770.5" font-family="ui-monospace,Menlo,monospace" font-size="11" font-weight="700" letter-spacing="1.6" fill="#57636f">WORKERS</text>
+      <rect class="attr-box" x="211" y="1024.5" width="161" height="25" rx="3" fill="#ffffff" fill-opacity=".8" stroke="#9ea5ab" stroke-width=".9"/><text x="221" y="1040.5" font-family="ui-monospace,Menlo,monospace" font-size="10.5" fill="#57636f"><tspan opacity=".6">cidr: </tspan><tspan opacity=".9">10.60.1.0/24</tspan></text></g><g class="nd-group" data-id="gpuw">
+      <rect x="542" y="1153.5" width="277" height="229" rx="8" fill="rgba(124,58,237,.05)" stroke="#b38df5" stroke-width="1.4"/>
+      
+      <text x="556" y="1175.5" font-family="ui-monospace,Menlo,monospace" font-size="11" font-weight="700" letter-spacing="1.6" fill="#7c3aed">GPU WORKERS</text>
+      <rect class="attr-box" x="650" y="1349.5" width="161" height="25" rx="3" fill="#ffffff" fill-opacity=".8" stroke="#b38df5" stroke-width=".9"/><text x="660" y="1365.5" font-family="ui-monospace,Menlo,monospace" font-size="10.5" fill="#7c3aed"><tspan opacity=".6">cidr: </tspan><tspan opacity=".9">10.60.2.0/24</tspan></text></g>
+      <path class="edge" data-conn="0" data-label="tcp/443 https" d="M961.8 70.1L961.8 221.1" fill="none" stroke="#0f766e" stroke-width="2" marker-end="url(#ah-0f766e)"/><path class="edge" data-conn="1" data-label="tcp/8443 https" d="M961.8 275.3L961.8 371.29999999999995" fill="none" stroke="#7c3aed" stroke-width="2" marker-end="url(#ah-7c3aed)"/><path class="edge" data-conn="2" data-label="tcp/9090 api" d="M1002.15 471.29999999999995L1002.15 567.3" fill="none" stroke="#1d4ed8" stroke-width="2" marker-end="url(#ah-1d4ed8)"/><path class="edge" data-conn="3" data-label="tcp/8000 inference" d="M971.8 621.5L971.8 710.5L680.5 710.5L680.5 794.5" fill="none" stroke="#9d174d" stroke-width="2" marker-end="url(#ah-9d174d)"/><path class="edge" data-conn="4" data-label="tcp/1433 mssql" d="M1032.5 621.5L1032.5 803.4999999999999" fill="none" stroke="#4d7c0f" stroke-width="2" marker-end="url(#ah-4d7c0f)"/><path class="edge" data-conn="5" data-label="tcp/443 egress" d="M644.8 221.2L644.8 106.1L957.3 106.1A4.5 4.5 0 0 1 966.3 106.1L1018.5 106.1L1018.5 70.1" fill="none" stroke="#0e7490" stroke-width="2" marker-end="url(#ah-0e7490)"/><path class="edge" data-conn="6" data-label="scheduled on" d="M961.8 643.5L961.8 688.5L262 688.5L262 748.5" fill="none" stroke="#a21caf" stroke-width="2"/><path class="edge" data-conn="7" data-label="scheduled on" d="M680.5 1011.5L680.5 1153.5" fill="none" stroke="#a21caf" stroke-width="2"/><path class="edge" data-conn="8" data-label="tcp/6443 kube-api" d="M262 1057.5L262 1153.5" fill="none" stroke="#b45309" stroke-width="2" marker-end="url(#ah-b45309)"/>
+      <g class="nd-node" data-id="ing">
+      <rect x="849.8" y="221.2" width="224" height="54" rx="6" fill="#ffffff" stroke="#24344d" stroke-width="1.5"/>
+      
+      <g transform="translate(879.3,230.2)"><g fill="none" stroke="#24344d" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" color="#24344d"><rect x="9" y="2.5" width="6" height="5" rx="1"/><rect x="2" y="16.5" width="5" height="5" rx="1"/><rect x="9.5" y="16.5" width="5" height="5" rx="1"/><rect x="17" y="16.5" width="5" height="5" rx="1"/><path d="M12 7.5v4m0 0L4.5 16.5M12 11.5v5m0-5 7.5 5"/></g></g>
+      <text x="891.3" y="267.2" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8.5" font-weight="700" letter-spacing=".5" fill="#7a8798">INGRESS</text>
+      <text x="932.8" y="243.2" font-family="ui-monospace,Menlo,monospace" font-size="13" font-weight="600" fill="#1a2638">ingress-lb</text>
+      <text x="932.8" y="259.2" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#7a8798">ip: </tspan><tspan fill="#3f5e8c">203.0.113.40</tspan></text>
+      
+    </g><g class="nd-node" data-id="eg">
+      <rect x="495.79999999999995" y="221.2" width="298" height="54" rx="6" fill="#ffffff" stroke="#24344d" stroke-width="1.5"/>
+      
+      <g transform="translate(533.3,230.2)"><g fill="none" stroke="#24344d" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" color="#24344d"><circle cx="12" cy="12" r="10"/><path d="M7 9h7m0 0-2.4-2.4M14 9l-2.4 2.4M17 15h-7m0 0 2.4-2.4M10 15l2.4 2.4"/></g></g>
+      <text x="545.3" y="267.2" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8.5" font-weight="700" letter-spacing=".5" fill="#7a8798">EGRESS-IP</text>
+      <text x="594.8" y="243.2" font-family="ui-monospace,Menlo,monospace" font-size="13" font-weight="600" fill="#1a2638">egress-gw</text>
+      <text x="594.8" y="259.2" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#7a8798">ip: </tspan><tspan fill="#3f5e8c">203.0.113.41</tspan></text>
+      <rect x="741.8" y="227.2" width="45" height="12" rx="6" fill="#eef1f4" stroke="#9aa7ba" stroke-width=".8"/>
+      <text x="764.3" y="236.2" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8" font-weight="700" letter-spacing=".8" fill="#5b6874">SNAT</text>
+    </g><g class="nd-node" data-id="fe">
+      <rect x="911.15" y="417.29999999999995" width="182" height="54" rx="6" fill="#ffffff" stroke="#24344d" stroke-width="1.5" stroke-dasharray="2 3"/>
+      
+      <g transform="translate(923.65,426.29999999999995)"><g fill="none" stroke="#24344d" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" color="#24344d"><rect x="2" y="7" width="20" height="11" rx="1.5"/><path d="M6.5 10v5M12 10v5M17.5 10v5"/></g></g>
+      <text x="935.65" y="463.29999999999995" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8.5" font-weight="700" letter-spacing=".5" fill="#7a8798">POD</text>
+      <text x="960.15" y="439.29999999999995" font-family="ui-monospace,Menlo,monospace" font-size="13" font-weight="600" fill="#1a2638">shop-frontend</text>
+      <text x="960.15" y="455.29999999999995" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#7a8798">ip: </tspan><tspan fill="#3f5e8c">10.244.4.21</tspan></text>
+      
+    </g><g class="nd-node" data-id="be">
+      <rect x="911.15" y="567.4" width="182" height="54" rx="6" fill="#ffffff" stroke="#24344d" stroke-width="1.5" stroke-dasharray="2 3"/>
+      
+      <g transform="translate(923.65,576.4)"><g fill="none" stroke="#24344d" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" color="#24344d"><rect x="2" y="7" width="20" height="11" rx="1.5"/><path d="M6.5 10v5M12 10v5M17.5 10v5"/></g></g>
+      <text x="935.65" y="613.4" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8.5" font-weight="700" letter-spacing=".5" fill="#7a8798">POD</text>
+      <text x="960.15" y="589.4" font-family="ui-monospace,Menlo,monospace" font-size="13" font-weight="600" fill="#1a2638">shop-backend</text>
+      <text x="960.15" y="605.4" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#7a8798">ip: </tspan><tspan fill="#3f5e8c">10.244.4.22</tspan></text>
+      
+    </g><g class="nd-node" data-id="train">
+      <rect x="565" y="840.5" width="231" height="54" rx="6" fill="#ffffff" stroke="#24344d" stroke-width="1.5" stroke-dasharray="2 3"/>
+      
+      <g transform="translate(577.5,849.5)"><g fill="none" stroke="#24344d" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" color="#24344d"><rect x="2" y="7" width="20" height="11" rx="1.5"/><path d="M6.5 10v5M12 10v5M17.5 10v5"/></g></g>
+      <text x="589.5" y="886.5" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8.5" font-weight="700" letter-spacing=".5" fill="#7a8798">POD</text>
+      <text x="614" y="862.5" font-family="ui-monospace,Menlo,monospace" font-size="13" font-weight="600" fill="#1a2638">llm-train</text>
+      <text x="614" y="878.5" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#7a8798">ip: </tspan><tspan fill="#3f5e8c">10.244.7.11</tspan></text>
+      <rect x="753" y="846.5" width="36" height="12" rx="6" fill="#eef1f4" stroke="#9aa7ba" stroke-width=".8"/>
+      <text x="771" y="855.5" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8" font-weight="700" letter-spacing=".8" fill="#5b6874">GPU</text>
+    </g><g class="nd-node" data-id="serve">
+      <rect x="565" y="914.5" width="231" height="54" rx="6" fill="#ffffff" stroke="#24344d" stroke-width="1.5" stroke-dasharray="2 3"/>
+      
+      <g transform="translate(577.5,923.5)"><g fill="none" stroke="#24344d" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" color="#24344d"><rect x="2" y="7" width="20" height="11" rx="1.5"/><path d="M6.5 10v5M12 10v5M17.5 10v5"/></g></g>
+      <text x="589.5" y="960.5" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8.5" font-weight="700" letter-spacing=".5" fill="#7a8798">POD</text>
+      <text x="614" y="936.5" font-family="ui-monospace,Menlo,monospace" font-size="13" font-weight="600" fill="#1a2638">llm-serve</text>
+      <text x="614" y="952.5" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#7a8798">ip: </tspan><tspan fill="#3f5e8c">10.244.7.12</tspan></text>
+      <rect x="753" y="920.5" width="36" height="12" rx="6" fill="#eef1f4" stroke="#9aa7ba" stroke-width=".8"/>
+      <text x="771" y="929.5" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8" font-weight="700" letter-spacing=".8" fill="#5b6874">GPU</text>
+    </g><g class="nd-node" data-id="legdb">
+      <rect x="896" y="803.5" width="273" height="60" rx="6" fill="#ffffff" stroke="#24344d" stroke-width="1.5" stroke-dasharray="5 3"/>
+      
+      <g transform="translate(908,812.5)"><g fill="none" stroke="#24344d" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" color="#24344d"><rect x="3" y="8" width="13" height="13" rx="1.5"/><path d="M8 8V5.5A1.5 1.5 0 0 1 9.5 4h9A1.5 1.5 0 0 1 20 5.5v9a1.5 1.5 0 0 1-1.5 1.5H16"/></g></g>
+      <text x="920" y="849.5" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8.5" font-weight="700" letter-spacing=".5" fill="#7a8798">VM</text>
+      <text x="944" y="825.5" font-family="ui-monospace,Menlo,monospace" font-size="13" font-weight="600" fill="#1a2638">legacy-erp-db</text>
+      <text x="944" y="841.5" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#7a8798">os: </tspan><tspan fill="#3f5e8c">windows</tspan></text><text x="944" y="855.5" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#7a8798">ip: </tspan><tspan fill="#3f5e8c">10.244.9.21</tspan></text>
+      <rect x="1083" y="809.5" width="79" height="12" rx="6" fill="#eef1f4" stroke="#9aa7ba" stroke-width=".8"/>
+      <text x="1122.5" y="818.5" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8" font-weight="700" letter-spacing=".8" fill="#5b6874">KUBEVIRT</text>
+    </g><g class="nd-node" data-id="cp1">
+      <rect x="60" y="1199.5" width="192" height="74" rx="6" fill="#ffffff" stroke="#24344d" stroke-width="1.5"/>
+      <rect x="63" y="1202.5" width="186" height="68" rx="4" fill="none" stroke="#24344d" stroke-width=".8"/>
+      <g transform="translate(81,1208.5)"><g fill="none" stroke="#24344d" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" color="#24344d"><rect x="6" y="6" width="12" height="12" rx="1"/><rect x="10" y="10" width="4" height="4"/><path d="M9.5 6V3M14.5 6V3M9.5 21v-3M14.5 21v-3M6 9.5H3M6 14.5H3M21 9.5h-3M21 14.5h-3"/></g></g>
+      <text x="93" y="1245.5" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8.5" font-weight="700" letter-spacing=".5" fill="#7a8798">METAL</text>
+      <text x="126" y="1221.5" font-family="ui-monospace,Menlo,monospace" font-size="13" font-weight="600" fill="#1a2638">cp-01</text>
+      <text x="126" y="1237.5" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#7a8798">os: </tspan><tspan fill="#3f5e8c">linux</tspan></text><text x="126" y="1251.5" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#7a8798">ip: </tspan><tspan fill="#3f5e8c">10.60.0.11</tspan></text><text x="126" y="1265.5" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#7a8798">etcd: </tspan><tspan fill="#3f5e8c">member</tspan></text>
+      
+    </g><g class="nd-node" data-id="cp2">
+      <rect x="272" y="1199.5" width="192" height="74" rx="6" fill="#ffffff" stroke="#24344d" stroke-width="1.5"/>
+      <rect x="275" y="1202.5" width="186" height="68" rx="4" fill="none" stroke="#24344d" stroke-width=".8"/>
+      <g transform="translate(293,1208.5)"><g fill="none" stroke="#24344d" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" color="#24344d"><rect x="6" y="6" width="12" height="12" rx="1"/><rect x="10" y="10" width="4" height="4"/><path d="M9.5 6V3M14.5 6V3M9.5 21v-3M14.5 21v-3M6 9.5H3M6 14.5H3M21 9.5h-3M21 14.5h-3"/></g></g>
+      <text x="305" y="1245.5" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8.5" font-weight="700" letter-spacing=".5" fill="#7a8798">METAL</text>
+      <text x="338" y="1221.5" font-family="ui-monospace,Menlo,monospace" font-size="13" font-weight="600" fill="#1a2638">cp-02</text>
+      <text x="338" y="1237.5" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#7a8798">os: </tspan><tspan fill="#3f5e8c">linux</tspan></text><text x="338" y="1251.5" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#7a8798">ip: </tspan><tspan fill="#3f5e8c">10.60.0.12</tspan></text><text x="338" y="1265.5" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#7a8798">etcd: </tspan><tspan fill="#3f5e8c">member</tspan></text>
+      
+    </g><g class="nd-node" data-id="cp3">
+      <rect x="60" y="1293.5" width="192" height="74" rx="6" fill="#ffffff" stroke="#24344d" stroke-width="1.5"/>
+      <rect x="63" y="1296.5" width="186" height="68" rx="4" fill="none" stroke="#24344d" stroke-width=".8"/>
+      <g transform="translate(81,1302.5)"><g fill="none" stroke="#24344d" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" color="#24344d"><rect x="6" y="6" width="12" height="12" rx="1"/><rect x="10" y="10" width="4" height="4"/><path d="M9.5 6V3M14.5 6V3M9.5 21v-3M14.5 21v-3M6 9.5H3M6 14.5H3M21 9.5h-3M21 14.5h-3"/></g></g>
+      <text x="93" y="1339.5" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8.5" font-weight="700" letter-spacing=".5" fill="#7a8798">METAL</text>
+      <text x="126" y="1315.5" font-family="ui-monospace,Menlo,monospace" font-size="13" font-weight="600" fill="#1a2638">cp-03</text>
+      <text x="126" y="1331.5" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#7a8798">os: </tspan><tspan fill="#3f5e8c">linux</tspan></text><text x="126" y="1345.5" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#7a8798">ip: </tspan><tspan fill="#3f5e8c">10.60.0.13</tspan></text><text x="126" y="1359.5" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#7a8798">etcd: </tspan><tspan fill="#3f5e8c">member</tspan></text>
+      
+    </g><g class="nd-node" data-id="w1">
+      <rect x="166" y="794.5" width="192" height="60" rx="6" fill="#ffffff" stroke="#24344d" stroke-width="1.5"/>
+      <rect x="169" y="797.5" width="186" height="54" rx="4" fill="none" stroke="#24344d" stroke-width=".8"/>
+      <g transform="translate(187,803.5)"><g fill="none" stroke="#24344d" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" color="#24344d"><rect x="6" y="6" width="12" height="12" rx="1"/><rect x="10" y="10" width="4" height="4"/><path d="M9.5 6V3M14.5 6V3M9.5 21v-3M14.5 21v-3M6 9.5H3M6 14.5H3M21 9.5h-3M21 14.5h-3"/></g></g>
+      <text x="199" y="840.5" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8.5" font-weight="700" letter-spacing=".5" fill="#7a8798">METAL</text>
+      <text x="232" y="816.5" font-family="ui-monospace,Menlo,monospace" font-size="13" font-weight="600" fill="#1a2638">worker-01</text>
+      <text x="232" y="832.5" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#7a8798">os: </tspan><tspan fill="#3f5e8c">linux</tspan></text><text x="232" y="846.5" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#7a8798">ip: </tspan><tspan fill="#3f5e8c">10.60.1.11</tspan></text>
+      
+    </g><g class="nd-node" data-id="w2">
+      <rect x="166" y="874.5" width="192" height="60" rx="6" fill="#ffffff" stroke="#24344d" stroke-width="1.5"/>
+      <rect x="169" y="877.5" width="186" height="54" rx="4" fill="none" stroke="#24344d" stroke-width=".8"/>
+      <g transform="translate(187,883.5)"><g fill="none" stroke="#24344d" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" color="#24344d"><rect x="6" y="6" width="12" height="12" rx="1"/><rect x="10" y="10" width="4" height="4"/><path d="M9.5 6V3M14.5 6V3M9.5 21v-3M14.5 21v-3M6 9.5H3M6 14.5H3M21 9.5h-3M21 14.5h-3"/></g></g>
+      <text x="199" y="920.5" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8.5" font-weight="700" letter-spacing=".5" fill="#7a8798">METAL</text>
+      <text x="232" y="896.5" font-family="ui-monospace,Menlo,monospace" font-size="13" font-weight="600" fill="#1a2638">worker-02</text>
+      <text x="232" y="912.5" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#7a8798">os: </tspan><tspan fill="#3f5e8c">linux</tspan></text><text x="232" y="926.5" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#7a8798">ip: </tspan><tspan fill="#3f5e8c">10.60.1.12</tspan></text>
+      
+    </g><g class="nd-node" data-id="w3">
+      <rect x="166" y="954.5" width="192" height="60" rx="6" fill="#ffffff" stroke="#24344d" stroke-width="1.5"/>
+      <rect x="169" y="957.5" width="186" height="54" rx="4" fill="none" stroke="#24344d" stroke-width=".8"/>
+      <g transform="translate(187,963.5)"><g fill="none" stroke="#24344d" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" color="#24344d"><rect x="6" y="6" width="12" height="12" rx="1"/><rect x="10" y="10" width="4" height="4"/><path d="M9.5 6V3M14.5 6V3M9.5 21v-3M14.5 21v-3M6 9.5H3M6 14.5H3M21 9.5h-3M21 14.5h-3"/></g></g>
+      <text x="199" y="1000.5" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8.5" font-weight="700" letter-spacing=".5" fill="#7a8798">METAL</text>
+      <text x="232" y="976.5" font-family="ui-monospace,Menlo,monospace" font-size="13" font-weight="600" fill="#1a2638">worker-03</text>
+      <text x="232" y="992.5" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#7a8798">os: </tspan><tspan fill="#3f5e8c">linux</tspan></text><text x="232" y="1006.5" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#7a8798">ip: </tspan><tspan fill="#3f5e8c">10.60.1.13</tspan></text>
+      
+    </g><g class="nd-node" data-id="g1">
+      <rect x="564" y="1199.5" width="233" height="60" rx="6" fill="#ffffff" stroke="#24344d" stroke-width="1.5"/>
+      
+      <g transform="translate(576.5,1208.5)"><g fill="none" stroke="#24344d" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" color="#24344d"><rect x="2" y="6.5" width="20" height="11" rx="1.5"/><circle cx="8" cy="12" r="3.2"/><path d="M8 8.8v6.4M4.8 12h6.4"/><path d="M14 10h4.5M14 12.3h4.5M14 14.6h4.5"/><path d="M6.5 17.5v2.6M11 17.5v2.6"/></g></g>
+      <text x="588.5" y="1245.5" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8.5" font-weight="700" letter-spacing=".5" fill="#7a8798">GPU</text>
+      <text x="613" y="1221.5" font-family="ui-monospace,Menlo,monospace" font-size="13" font-weight="600" fill="#1a2638">gpu-01</text>
+      <text x="613" y="1237.5" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#7a8798">os: </tspan><tspan fill="#3f5e8c">linux</tspan></text><text x="613" y="1251.5" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#7a8798">ip: </tspan><tspan fill="#3f5e8c">10.60.2.11</tspan></text>
+      <rect x="745" y="1205.5" width="45" height="12" rx="6" fill="#eef1f4" stroke="#9aa7ba" stroke-width=".8"/>
+      <text x="767.5" y="1214.5" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8" font-weight="700" letter-spacing=".8" fill="#5b6874">H100</text>
+    </g><g class="nd-node" data-id="g2">
+      <rect x="564" y="1279.5" width="233" height="60" rx="6" fill="#ffffff" stroke="#24344d" stroke-width="1.5"/>
+      
+      <g transform="translate(576.5,1288.5)"><g fill="none" stroke="#24344d" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" color="#24344d"><rect x="2" y="6.5" width="20" height="11" rx="1.5"/><circle cx="8" cy="12" r="3.2"/><path d="M8 8.8v6.4M4.8 12h6.4"/><path d="M14 10h4.5M14 12.3h4.5M14 14.6h4.5"/><path d="M6.5 17.5v2.6M11 17.5v2.6"/></g></g>
+      <text x="588.5" y="1325.5" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8.5" font-weight="700" letter-spacing=".5" fill="#7a8798">GPU</text>
+      <text x="613" y="1301.5" font-family="ui-monospace,Menlo,monospace" font-size="13" font-weight="600" fill="#1a2638">gpu-02</text>
+      <text x="613" y="1317.5" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#7a8798">os: </tspan><tspan fill="#3f5e8c">linux</tspan></text><text x="613" y="1331.5" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#7a8798">ip: </tspan><tspan fill="#3f5e8c">10.60.2.12</tspan></text>
+      <rect x="745" y="1285.5" width="45" height="12" rx="6" fill="#eef1f4" stroke="#9aa7ba" stroke-width=".8"/>
+      <text x="767.5" y="1294.5" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8" font-weight="700" letter-spacing=".8" fill="#5b6874">H100</text>
+    </g><g class="nd-node" data-id="inet">
+      <rect x="905.15" y="16" width="170" height="54" rx="6" fill="#ffffff" stroke="#24344d" stroke-width="1.5"/>
+      
+      <g transform="translate(938.65,25)"><g fill="none" stroke="#24344d" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" color="#24344d"><circle cx="12" cy="12" r="9.5"/><ellipse cx="12" cy="12" rx="4.2" ry="9.5"/><path d="M2.5 12h19M4 7h16M4 17h16"/></g></g>
+      <text x="950.65" y="62" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8.5" font-weight="700" letter-spacing=".5" fill="#7a8798">INTERNET</text>
+      <text x="996.15" y="38" font-family="ui-monospace,Menlo,monospace" font-size="13" font-weight="600" fill="#1a2638">Internet</text>
+      
+      
+    </g>
+      <text class="edge-lbl" data-conn="0" data-label="tcp/443 https" x="961.8" y="140.6" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="11" fill="#0f766e" stroke="#fafbf7" stroke-width="4" paint-order="stroke" stroke-linejoin="round">tcp/443 https</text><text class="edge-lbl" data-conn="1" data-label="tcp/8443 https" x="961.8" y="318.29999999999995" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="11" fill="#7c3aed" stroke="#fafbf7" stroke-width="4" paint-order="stroke" stroke-linejoin="round">tcp/8443 https</text><text class="edge-lbl" data-conn="2" data-label="tcp/9090 api" x="1002.15" y="514.3" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="11" fill="#1d4ed8" stroke="#fafbf7" stroke-width="4" paint-order="stroke" stroke-linejoin="round">tcp/9090 api</text><text class="edge-lbl" data-conn="3" data-label="tcp/8000 inference" x="828.65" y="705.5" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="11" fill="#9d174d" stroke="#fafbf7" stroke-width="4" paint-order="stroke" stroke-linejoin="round">tcp/8000 inference</text><text class="edge-lbl" data-conn="4" data-label="tcp/1433 mssql" x="1032.5" y="707.5" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="11" fill="#4d7c0f" stroke="#fafbf7" stroke-width="4" paint-order="stroke" stroke-linejoin="round">tcp/1433 mssql</text><text class="edge-lbl" data-conn="5" data-label="tcp/443 egress" x="792.1" y="101.1" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="11" fill="#0e7490" stroke="#fafbf7" stroke-width="4" paint-order="stroke" stroke-linejoin="round">tcp/443 egress</text><text class="edge-lbl" data-conn="6" data-label="scheduled on" x="604.4" y="683.5" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="11" fill="#a21caf" stroke="#fafbf7" stroke-width="4" paint-order="stroke" stroke-linejoin="round">scheduled on</text><text class="edge-lbl" data-conn="7" data-label="scheduled on" x="680.5" y="1077.5" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="11" fill="#a21caf" stroke="#fafbf7" stroke-width="4" paint-order="stroke" stroke-linejoin="round">scheduled on</text><text class="edge-lbl" data-conn="8" data-label="tcp/6443 kube-api" x="262" y="1100.5" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="11" fill="#b45309" stroke="#fafbf7" stroke-width="4" paint-order="stroke" stroke-linejoin="round">tcp/6443 kube-api</text>
+    </g>
+    <g>
+    <rect x="1031" y="1501" width="232" height="70" fill="#ffffff" stroke="#24344d" stroke-width="1.4"/>
+    <path d="M1031 1521 h232 M1181 1521 V1555" stroke="#24344d" stroke-width="1"/>
+    <text x="1040" y="1515.5" font-family="ui-monospace,Menlo,monospace" font-size="10.5" font-weight="700" letter-spacing="1.2" fill="#24344d">K8S BARE METAL + GPU</text>
+    <text x="1040" y="1538" font-family="ui-monospace,Menlo,monospace" font-size="9" letter-spacing="1" fill="#7a8798">DRAWN</text>
+    <text x="1040" y="1549" font-family="ui-monospace,Menlo,monospace" font-size="10" fill="#24344d">netdiagram vX</text>
+    <text x="1190" y="1538" font-family="ui-monospace,Menlo,monospace" font-size="9" letter-spacing="1" fill="#7a8798">DATE</text>
+    <text x="1190" y="1549" font-family="ui-monospace,Menlo,monospace" font-size="10" fill="#24344d">2000-01-01</text>
+    <path d="M1031 1555 h232" stroke="#24344d" stroke-width=".7"/>
+    <text x="1040" y="1567" font-family="ui-monospace,Menlo,monospace" font-size="9" letter-spacing="1" fill="#7a8798">OWNER</text>
+    <text x="1254" y="1567" text-anchor="end" font-family="ui-monospace,Menlo,monospace" font-size="10" fill="#24344d">ml-platform</text>
+  </g>
+  </svg>

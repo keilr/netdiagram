@@ -19,6 +19,16 @@
           "enum": ["down", "right"],
           "default": "down",
           "description": "Option: layout direction — down (top→bottom, default) or right (left→right)"
+        },
+        "theme": {
+          "type": "string",
+          "enum": ["paper", "blueprint"],
+          "default": "paper",
+          "description": "Option: color theme — paper (dark ink on light drafting paper, default) or blueprint (white linework on cyanotype blue)"
+        },
+        "date": {
+          "type": "string",
+          "description": "Option: date shown in the title block's DATE cell instead of today (keeps rendered SVGs reproducible), e.g. \"2026-09-11\""
         }
       },
       "additionalProperties": {

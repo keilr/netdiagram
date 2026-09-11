@@ -45,3 +45,30 @@ jobs:
             dist/netdiagram.html "netdiagram-$GITHUB_REF_NAME.html" \
             --title "$GITHUB_REF_NAME" \
             --generate-notes
+
+  # Hosted copy (package.json "homepage") — share links made from a local copy
+  # open it. One-time setup: Settings -> Pages -> Source: GitHub Actions.
+  pages:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: netdiagram-html
+          path: site
+
+      - run: mv site/netdiagram.html site/index.html
+
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: site
+
+      - id: deploy
+        uses: actions/deploy-pages@v5

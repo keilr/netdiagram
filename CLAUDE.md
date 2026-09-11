@@ -14,8 +14,14 @@ libraries) that works offline with no CDN and no server.
 ```bash
 npm install        # deps: elkjs, js-yaml; dev: esbuild, jsdom, eslint, codemirror
 npm run build      # -> dist/netdiagram.html (~2.7 MB, self-contained)
+npm run watch      # rebuild dist on changes to src/, examples/, the schema
 npm run lint       # eslint (flat config; also runs first in CI)
-npm test           # builds, then runs test/test.js (pipeline, features, validation, jsdom boot)
+npm test           # builds, then runs test/test.js (pipeline, features, validation,
+                   # importers, CLI, golden SVGs, jsdom boot of the app)
+npm run test:golden  # rebuild + rewrite test/golden/*.svg — ONLY after an intended
+                   # visual change; review the SVG diff before committing
+npm run render -- in.yaml [out.svg] [--theme --tags --compare --csv --date --extract]
+npm run import -- <file|-> [--from ansible|terraform|netbox] [-o out.yaml]
 ```
 
 There is no dev server; after `npm run build`, open `dist/netdiagram.html` in a browser.
@@ -24,40 +30,63 @@ There is no dev server; after `npm run build`, open `dist/netdiagram.html` in a 
 
 ```
 src/netdiagram.js   Core library (browser + node). Pure pipeline:
-                    parseSpec(yamlText) -> {doc, nodeMap, groupMap, claimed}
+                    parseSpec(yamlText) = specFromDoc(jsyaml.load(text))
+                      -> {doc, nodeMap, groupMap, claimed}; validation errors
+                      carry e.errors = [{path, message}] (path into the doc)
                     buildElk(spec)      -> ELK graph JSON (layout is caller's job)
                     assignPorts(graph, pass1) -> graph|null — two-pass layout:
                       pins FIXED_ORDER ports on leaf nodes with 2+ edges so hub
                       edges leave toward their targets (kills most crossings).
                       Pass a FRESH buildElk graph; null = no hubs, skip pass 2.
-                    renderSVG(spec, layout) -> SVG string
-                    Also: CONNECTION_STYLES, GROUP_STYLES, GLYPHS, LABEL_PALETTE.
-src/app.js          Browser-only wire-up: textarea editor, debounced render,
-                    SVG download, YAML import/download, PDF export (prints via a hidden
-                    iframe — the browser's print-to-PDF keeps it vector),
-                    example loading (picker below the editor), and local
-                    project persistence (autosaves the
-                    editor buffer as a draft and stores named projects in
+                    renderSVG(spec, layout, opts) -> SVG string; opts: theme,
+                      date, source (YAML embedded in <metadata>), diff, rows
+                    Views on a doc (both keep connection objects BY REFERENCE):
+                      filterDoc(doc, tags), allTags(doc), diffDocs(base, cur)
+                      -> {doc (merged), status, counts}
+                    sourceMap(text) -> {rangeOf(path), itemRange(kind, key),
+                      itemAt(pos)} — YAML offsets from js-yaml parseEvents
+                    connectionRules(spec) / rulesToCsv — the firewall-rule table
+                    extractSource(svgText), encodeShare/decodeShare (#src= links)
+                    Also: CONNECTION_STYLES, GROUP_STYLES, GLYPHS, LABEL_PALETTE, THEMES.
+src/importers.js    Ansible (INI / YAML / --list JSON), Terraform (show -json /
+                    tfstate) and NetBox JSON -> netdiagram doc + YAML.
+                    detectImport(text, filename) | importAs(kind, text).
+                    Dual shape like the core; publishes window.Importers.
+src/app.js          Browser-only wire-up: CodeMirror editor, debounced render
+                    (validate source -> tag filter -> compare -> layout), SVG /
+                    YAML download, PDF export (prints via a hidden iframe — the
+                    browser's print-to-PDF keeps it vector), Import (YAML, SVG
+                    with embedded source, inventories; also drag & drop), share
+                    links, compare picker, tag chips, diagram <-> YAML navigation
+                    (data-id / data-conn attributes + sourceMap), example picker
+                    (below the editor), and local project persistence (autosaves
+                    the editor buffer as a draft and stores named projects in
                     localStorage under netdiagram:v1:* keys; every storage
                     access is guarded, so an opaque/unavailable origin hides the
                     project UI and degrades to no-op). Expects globals ELK,
-                    jsyaml, EXAMPLE (injected at build time).
+                    jsyaml, EXAMPLES, SCHEMA, makeEditor, Importers.
 src/editor.js       CodeMirror 6 setup (bundled separately by esbuild):
                     YAML mode + json-schema lint/hover/key-completion, plus
                     valueCompletion() — value hints the library doesn't do:
                     enums/examples read from the JSON schema, document ids
                     for connection endpoints and group member lists.
+                    makeEditor(parent, schema, onChange, {lint, onCursor}) ->
+                    {value, setValue, reveal(from, to)}.
 src/template.html   Page shell + CSS with <!--INJECT:JSYAML-->, <!--INJECT:ELK-->,
-                    <!--INJECT:APP--> placeholders.
-scripts/build.js    Vendors js-yaml + elkjs via esbuild, injects everything into
-                    the template, writes dist/netdiagram.html.
-scripts/render.js   CLI: node scripts/render.js in.yaml [out.svg] [--watch] —
-                    same pipeline in node, for external-editor workflows
-                    (VS Code tasks in .vscode/tasks.json call it).
+                    <!--INJECT:EDITOR-->, <!--INJECT:APP--> placeholders.
+scripts/build.js    Vendors js-yaml + elkjs + the editor bundle via esbuild,
+                    concatenates core + importers + app into one script (after
+                    EXAMPLES, SCHEMA, NETDIAGRAM_VERSION / _HOMEPAGE globals),
+                    writes dist/netdiagram.html.
+scripts/render.js   CLI: same pipeline in node, for external editors (VS Code
+                    tasks in .vscode/tasks.json call it) and CI change reviews.
+scripts/import.js   CLI: inventory -> YAML scaffold (stdin with `-`).
 examples/*.yaml     All examples are injected into the app at build time
-                    (EXAMPLES array; picker in the header). hq-edge-core.yaml
+                    (EXAMPLES array; picker below the editor). hq-edge-core.yaml
                     is the default on load and the one tests assert against.
 test/test.js        Assertion-based tests, no framework. Must pass before commit.
+test/golden/*.svg   Every example rendered with a fixed date (+ hq-edge-core in
+                    blueprint); byte-compared by npm test.
 ```
 
 Layout is done by ELK (`elk.bundled.js`, layered algorithm, orthogonal routing,
@@ -68,6 +97,8 @@ Layout is done by ELK (`elk.bundled.js`, layered algorithm, orthogonal routing,
 ```yaml
 diagram:
   title: str, direction: down|right   # OPTIONS (control rendering; down is default)
+  theme: paper|blueprint, date: str   # OPTIONS (blueprint = cyanotype colors; date
+                                      # pins the title-block DATE, else today)
   <any-scalar-key>: val               # attributes; rendered as rows in the
                                       # drafting title block (author, revision, …)
 nodes:
@@ -182,6 +213,21 @@ suggestions from the schema, so it follows automatically).
     (applyRanks), activated per hierarchy level only when a sibling sets one —
     unranked siblings get partition 0 explicitly.
 
+11. **The browser payload is ONE classic script.** build.js concatenates
+    netdiagram.js + importers.js + app.js, so top-level `const`/`let` names
+    share a scope — a second `const jsyaml` is a SyntaxError that kills the
+    page. importers.js therefore lives in an IIFE; new files must too (and get
+    an eslint globals entry for what app.js uses).
+12. **Views keep connection objects by reference.** filterDoc and diffDocs
+    never clone connections; app.js maps between editor indices and drawn
+    `data-conn` indices with `indexOf`. Cloning them breaks click-to-source
+    and cursor highlighting silently.
+13. **Golden SVGs are byte-exact.** Any rendering change (a color, an
+    attribute, an offset) fails every golden test. That is the point: run
+    `npm run test:golden`, open the changed SVGs, then commit them with the code.
+    Node measures text with the 7.8px fallback, so goldens differ from what a
+    browser lays out — they guard regressions, not browser pixels.
+
 ## Conventions
 
 - Vanilla JS, CommonJS, no frameworks, no transpilation of `src/`.
@@ -197,8 +243,8 @@ suggestions from the schema, so it follows automatically).
   with the higher index arcs over the lower one (hopPath/segHops — exact
   H-vs-V intersection tests, only possible because routing is orthogonal).
 - After changing rendering or layout, eyeball the example: render
-  `examples/hq-edge-core.yaml` and check labels don't collide (there is no
-  automated visual regression test).
+  `examples/hq-edge-core.yaml` and check labels don't collide — the golden
+  SVGs catch unintended changes, not ugly-but-intended ones.
 
 ## License notes
 

@@ -179,7 +179,7 @@ function ipListOf(n){
 function ipsOf(n){ return ipListOf(n).join(' · '); }
 const NODE_KNOWN_KEYS = new Set(['id','label','type','icon','ip','ips','addr','os','tags','rank']);
 /* option keys control rendering; every other scalar key is a displayed attribute */
-const DIAGRAM_OPTION_KEYS = new Set(['title','direction']);
+const DIAGRAM_OPTION_KEYS = new Set(['title','direction','theme','date']);
 const GROUP_KNOWN_KEYS = new Set(['id','label','class','cidr','nodes','groups','style','tags','rank']);
 function attrLines(obj, known){
   const out = [];
@@ -235,22 +235,29 @@ function groupHeader(g){
 
 /* ---------------- parse + validate ---------------- */
 function parseSpec(text){
-  const doc = jsyaml.load(text);
+  return specFromDoc(jsyaml.load(text));
+}
+/* Validation errors carry the offending document path (e.g. ['connections', 3,
+ * 'to']) so the editor can underline the exact spot (see sourceMap). The thrown
+ * Error joins every message; e.errors keeps the structured list. */
+function specFromDoc(doc){
   if (!doc || typeof doc !== 'object') throw new Error('Empty document — define nodes and connections.');
   const errors = [];
-  if (doc.links != null) errors.push('"links:" has been renamed — use "connections:" instead');
+  const err = (path, message) => errors.push({ path, message });
+  const badTags = t => t != null && (
+    (typeof t === 'object' && !Array.isArray(t)) ||
+    (Array.isArray(t) && t.some(x => x != null && typeof x === 'object')));
+  if (doc.links != null) err(['links'], '"links:" has been renamed — use "connections:" instead');
   const nodes = Array.isArray(doc.nodes) ? doc.nodes : [];
-  if (!nodes.length) errors.push('No nodes defined.');
+  if (!nodes.length) err(['nodes'], 'No nodes defined.');
   const nodeMap = new Map();
   nodes.forEach((n,i)=>{
-    if (!n || !n.id) { errors.push(`nodes[${i}]: missing id`); return; }
-    if (nodeMap.has(String(n.id))) errors.push(`duplicate node id "${n.id}"`);
-    if (n.tags != null && (
-        (typeof n.tags === 'object' && !Array.isArray(n.tags)) ||
-        (Array.isArray(n.tags) && n.tags.some(t => t != null && typeof t === 'object'))))
-      errors.push(`nodes[${i}] "${n.id}": tags must be a scalar or a list of scalars`);
+    if (!n || !n.id) { err(['nodes', i], `nodes[${i}]: missing id`); return; }
+    if (nodeMap.has(String(n.id))) err(['nodes', i, 'id'], `duplicate node id "${n.id}"`);
+    if (badTags(n.tags))
+      err(['nodes', i, 'tags'], `nodes[${i}] "${n.id}": tags must be a scalar or a list of scalars`);
     if (n.rank != null && !Number.isFinite(Number(n.rank)))
-      errors.push(`nodes[${i}] "${n.id}": rank must be a number`);
+      err(['nodes', i, 'rank'], `nodes[${i}] "${n.id}": rank must be a number`);
     nodeMap.set(String(n.id), n);
   });
 
@@ -258,37 +265,371 @@ function parseSpec(text){
   const claimed = new Map(); // nodeId -> groupId
   function walkGroups(list, path){
     (list||[]).forEach((g,i)=>{
-      if (!g || !g.id) { errors.push(`${path}[${i}]: group missing id`); return; }
+      const gp = [...path, i];
+      if (!g || !g.id) { err(gp, `${path.join('.')}[${i}]: group missing id`); return; }
       const gid = String(g.id);
-      if (groupMap.has(gid) || nodeMap.has(gid)) errors.push(`duplicate id "${gid}"`);
-      if (g.tags != null && (
-          (typeof g.tags === 'object' && !Array.isArray(g.tags)) ||
-          (Array.isArray(g.tags) && g.tags.some(t => t != null && typeof t === 'object'))))
-        errors.push(`group "${gid}": tags must be a scalar or a list of scalars`);
+      if (groupMap.has(gid) || nodeMap.has(gid)) err([...gp, 'id'], `duplicate id "${gid}"`);
+      if (badTags(g.tags))
+        err([...gp, 'tags'], `group "${gid}": tags must be a scalar or a list of scalars`);
       if (g.rank != null && !Number.isFinite(Number(g.rank)))
-        errors.push(`group "${gid}": rank must be a number`);
+        err([...gp, 'rank'], `group "${gid}": rank must be a number`);
       groupMap.set(gid, g);
-      (g.nodes||[]).forEach(nid=>{
+      (g.nodes||[]).forEach((nid, k)=>{
         nid = String(nid);
-        if (!nodeMap.has(nid)) errors.push(`group "${gid}": unknown node "${nid}"`);
-        else if (claimed.has(nid)) errors.push(`node "${nid}" is in both "${claimed.get(nid)}" and "${gid}"`);
+        if (!nodeMap.has(nid)) err([...gp, 'nodes', k], `group "${gid}": unknown node "${nid}"`);
+        else if (claimed.has(nid)) err([...gp, 'nodes', k], `node "${nid}" is in both "${claimed.get(nid)}" and "${gid}"`);
         else claimed.set(nid, gid);
       });
-      walkGroups(g.groups, `${path}[${i}].groups`);
+      walkGroups(g.groups, [...gp, 'groups']);
     });
   }
-  walkGroups(doc.groups, 'groups');
+  walkGroups(doc.groups, ['groups']);
 
   const connections = Array.isArray(doc.connections) ? doc.connections : [];
   connections.forEach((l,i)=>{
-    if (!l || l.from == null || l.to == null) { errors.push(`connections[${i}]: needs from + to`); return; }
-    for (const end of [String(l.from), String(l.to)])
-      if (!nodeMap.has(end) && !groupMap.has(end))
-        errors.push(`connections[${i}]: unknown endpoint "${end}"`);
+    if (!l || l.from == null || l.to == null) { err(['connections', i], `connections[${i}]: needs from + to`); return; }
+    for (const end of ['from', 'to'])
+      if (!nodeMap.has(String(l[end])) && !groupMap.has(String(l[end])))
+        err(['connections', i, end], `connections[${i}]: unknown endpoint "${l[end]}"`);
   });
 
-  if (errors.length) { const e = new Error(errors.join('\n')); e.isSpec = true; throw e; }
+  if (errors.length){
+    const e = new Error(errors.map(x => x.message).join('\n'));
+    e.isSpec = true; e.errors = errors;
+    throw e;
+  }
   return { doc, nodeMap, groupMap, claimed };
+}
+
+/* ---------------- source map (YAML offsets for document paths) ----------------
+ * Built on js-yaml's event stream, which carries offsets for scalars and
+ * collection starts; a collection ends where its last descendant scalar ends.
+ * Returns null when the text does not parse. */
+function yamlTree(text){
+  let events;
+  try { events = jsyaml.parseEvents(text); } catch (e) { return null; }
+  const stack = [];
+  let root = null;
+  const add = node => {
+    const top = stack[stack.length - 1];
+    if (!top) { if (!root) root = node; return; }
+    if (top.kind === 'seq') top.items.push(node);
+    else if (top.key) { top.pairs.push({ key: top.key, value: node }); top.key = null; }
+    else top.key = node;
+  };
+  for (const e of events){
+    if (e.type === 2 || e.type === 3){           // sequence / mapping start
+      const node = e.type === 2 ? { kind:'seq', from:e.start, to:e.start, items:[] }
+                                : { kind:'map', from:e.start, to:e.start, pairs:[], key:null };
+      add(node); stack.push(node);
+    } else if (e.type === 4){                    // scalar
+      add({ kind:'scalar', from:e.valueStart, to:e.valueEnd, text:text.slice(e.valueStart, e.valueEnd) });
+    } else if (e.type === 5){                    // alias
+      const p = e.start ?? e.valueStart ?? 0;
+      add({ kind:'alias', from:p, to:p });
+    } else if (e.type === 6){                    // pop
+      const n = stack.pop();
+      if (!n) continue;
+      const last = n.kind === 'seq' ? n.items[n.items.length - 1]
+        : (n.key || (n.pairs.length ? n.pairs[n.pairs.length - 1].value : null));
+      if (last) n.to = Math.max(n.to, last.to);
+    }
+  }
+  return root;
+}
+const treeGet = (map, key) => map && map.kind === 'map'
+  ? (map.pairs.find(p => p.key.kind === 'scalar' && p.key.text === key) || {}).value : undefined;
+
+function sourceMap(text){
+  const root = yamlTree(text);
+  if (!root) return null;
+  const idOf = item => { const v = treeGet(item, 'id'); return v && v.kind === 'scalar' ? v.text : null; };
+  const inside = (n, pos) => n && pos >= n.from && pos <= n.to;
+  /* deepest node along path; a missing tail segment falls back to its parent */
+  function rangeOf(path){             // depth: how many path segments resolved
+    let n = root, depth = 0;
+    for (const seg of path){
+      const next = typeof seg === 'number' ? (n.kind === 'seq' ? n.items[seg] : undefined) : treeGet(n, seg);
+      if (!next) break;
+      n = next; depth++;
+    }
+    return { from:n.from, to:n.to, depth };
+  }
+  function findGroup(list, id){
+    for (const g of (list && list.kind === 'seq') ? list.items : []){
+      if (idOf(g) === id) return g;
+      const sub = findGroup(treeGet(g, 'groups'), id);
+      if (sub) return sub;
+    }
+    return null;
+  }
+  function itemRange(kind, key){
+    let n = null;
+    if (kind === 'node') n = (treeGet(root, 'nodes')?.items || []).find(it => idOf(it) === key);
+    else if (kind === 'group') n = findGroup(treeGet(root, 'groups'), key);
+    else if (kind === 'connection') n = (treeGet(root, 'connections')?.items || [])[key];
+    return n ? { from:n.from, to:n.to } : null;
+  }
+  /* what the cursor is on: a node / group / connection item, or a member id
+   * inside a group's nodes: list (that node) */
+  function itemAt(pos){
+    const nodes = treeGet(root, 'nodes');
+    for (const it of nodes?.items || []) if (inside(it, pos) && idOf(it)) return { kind:'node', id:idOf(it) };
+    const conns = treeGet(root, 'connections');
+    const ci = (conns?.items || []).findIndex(it => inside(it, pos));
+    if (ci >= 0) return { kind:'connection', index:ci };
+    function inGroups(list){
+      for (const g of (list && list.kind === 'seq') ? list.items : []){
+        if (!inside(g, pos)) continue;
+        const deeper = inGroups(treeGet(g, 'groups'));
+        if (deeper) return deeper;
+        const member = (treeGet(g, 'nodes')?.items || []).find(m => m.kind === 'scalar' && inside(m, pos));
+        if (member) return { kind:'node', id:member.text };
+        return idOf(g) ? { kind:'group', id:idOf(g) } : null;
+      }
+      return null;
+    }
+    return inGroups(treeGet(root, 'groups'));
+  }
+  return { rangeOf, itemRange, itemAt };
+}
+
+/* ---------------- views: tag filter + compare ---------------- */
+/* every distinct tag on nodes and groups, sorted */
+function allTags(doc){
+  const out = new Set();
+  (doc?.nodes || []).forEach(n => n && tagsOf(n).forEach(t => out.add(t)));
+  (function walk(list){
+    (list || []).forEach(g => { if (!g) return; tagsOf(g).forEach(t => out.add(t)); walk(g.groups); });
+  })(doc?.groups);
+  return [...out].sort((a, b) => a.localeCompare(b));
+}
+/* Subset of doc showing only what carries one of `tags` (case-insensitive).
+ * A tagged group shows its whole subtree; an untagged group survives when
+ * something inside it does. Connections survive when both endpoints do.
+ * Connection objects are kept by reference (callers map back to source
+ * indices with indexOf). */
+function filterDoc(doc, tags){
+  const want = new Set((tags || []).map(t => String(t).toLowerCase()));
+  if (!want.size || !doc) return doc;
+  const hit = o => tagsOf(o).some(t => want.has(t.toLowerCase()));
+  const byId = new Map((doc.nodes || []).filter(n => n && n.id != null).map(n => [String(n.id), n]));
+  const keep = new Set(), grouped = new Set();
+  function walk(list, on){
+    return (list || []).flatMap(g => {
+      if (!g || g.id == null) return [];
+      const inTag = on || hit(g);
+      (g.nodes || []).forEach(id => grouped.add(String(id)));
+      const nodes = (g.nodes || []).filter(id => {
+        const n = byId.get(String(id));
+        return n && (inTag || hit(n)) && keep.add(String(id));
+      });
+      const groups = walk(g.groups, inTag);
+      if (!inTag && !nodes.length && !groups.length) return [];
+      keep.add(String(g.id));
+      return [{ ...g, nodes, groups }];
+    });
+  }
+  const groups = walk(doc.groups, false);
+  for (const [id, n] of byId) if (!grouped.has(id) && hit(n)) keep.add(id);
+  return {
+    ...doc,
+    nodes: (doc.nodes || []).filter(n => n && keep.has(String(n.id))),
+    groups,
+    connections: (doc.connections || []).filter(l => l && keep.has(String(l.from)) && keep.has(String(l.to)))
+  };
+}
+
+/* order-independent JSON for change detection */
+const canon = v => Array.isArray(v) ? '[' + v.map(canon).join(',') + ']'
+  : (v && typeof v === 'object') ? '{' + Object.keys(v).sort().map(k => JSON.stringify(k) + ':' + canon(v[k])).join(',') + '}'
+  : JSON.stringify(v ?? null);
+
+/* Compare two documents. Returns a merged doc — the current one plus what the
+ * base had and the current lost (removed groups re-parented under their old
+ * parent when it still exists, removed nodes back in their old group) — and
+ * per-item status: 'added' | 'removed' | 'changed' (absent = unchanged).
+ * Connections are matched by from/to (nth occurrence); current connection
+ * objects are kept by reference, removed ones are appended after them. */
+function diffDocs(base, cur){
+  base = base || {}; cur = cur || {};
+  const flatGroups = (doc) => {
+    const out = new Map();
+    (function walk(list, parent){
+      (list || []).forEach(g => {
+        if (!g || g.id == null) return;
+        out.set(String(g.id), { g, parent });
+        walk(g.groups, String(g.id));
+      });
+    })(doc.groups, null);
+    return out;
+  };
+  const memberOf = (groups) => {
+    const out = new Map();
+    for (const [gid, { g }] of groups) (g.nodes || []).forEach(id => { if (!out.has(String(id))) out.set(String(id), gid); });
+    return out;
+  };
+  const byId = doc => new Map((doc.nodes || []).filter(n => n && n.id != null).map(n => [String(n.id), n]));
+  const bNodes = byId(base), cNodes = byId(cur);
+  const bGroups = flatGroups(base), cGroups = flatGroups(cur);
+  const bMember = memberOf(bGroups), cMember = memberOf(cGroups);
+  const status = { nodes:new Map(), groups:new Map(), connections:new Map() };
+  const counts = { added:0, removed:0, changed:0 };
+  const mark = (map, key, s) => { map.set(key, s); counts[s]++; };
+
+  /* merged doc: deep copy of the current groups so re-parenting can't touch cur */
+  const copyGroups = list => (list || []).map(g => (g && typeof g === 'object')
+    ? { ...g, nodes:[...(g.nodes || [])], groups:copyGroups(g.groups) } : g);
+  const doc = { ...cur, nodes:[...(cur.nodes || [])], groups:copyGroups(cur.groups), connections:[...(cur.connections || [])] };
+  const merged = flatGroups(doc);
+  const taken = new Set([...cNodes.keys(), ...cGroups.keys()]);
+
+  for (const [id, { g, parent }] of cGroups){
+    const b = bGroups.get(id);
+    const strip = x => canon({ ...x, nodes: undefined, groups: undefined });
+    if (!b) mark(status.groups, id, 'added');
+    else if (strip(b.g) !== strip(g) || b.parent !== parent) mark(status.groups, id, 'changed');
+  }
+  for (const [id, { g, parent }] of bGroups){      // walk order: parents first
+    if (cGroups.has(id)) continue;
+    mark(status.groups, id, 'removed');
+    if (taken.has(id)) continue;                   // id now names something else
+    const copy = { ...g, nodes:[], groups:[] };
+    const host = parent && merged.get(parent);
+    if (host) (host.g.groups = host.g.groups || []).push(copy);
+    else (doc.groups = doc.groups || []).push(copy);
+    merged.set(id, { g:copy, parent });
+    taken.add(id);
+  }
+  for (const [id, n] of cNodes){
+    const b = bNodes.get(id);
+    if (!b) mark(status.nodes, id, 'added');
+    else if (canon(b) !== canon(n) || bMember.get(id) !== cMember.get(id)) mark(status.nodes, id, 'changed');
+  }
+  for (const [id, n] of bNodes){
+    if (cNodes.has(id)) continue;
+    mark(status.nodes, id, 'removed');
+    if (taken.has(id)) continue;
+    doc.nodes.push(n);
+    const host = bMember.has(id) && merged.get(bMember.get(id));
+    if (host) host.g.nodes.push(id);
+    taken.add(id);
+  }
+
+  const connKeys = list => {
+    const seen = new Map();
+    return (list || []).map(l => {
+      const k = l ? String(l.from) + ' ' + String(l.to) : '';
+      const nth = seen.get(k) || 0; seen.set(k, nth + 1);
+      return k + ' ' + nth;
+    });
+  };
+  const bKeys = connKeys(base.connections), cKeys = connKeys(cur.connections);
+  const bByKey = new Map(bKeys.map((k, i) => [k, base.connections[i]]));
+  cKeys.forEach((k, i) => {
+    if (!bByKey.has(k)) mark(status.connections, i, 'added');
+    else if (canon(bByKey.get(k)) !== canon(cur.connections[i])) mark(status.connections, i, 'changed');
+  });
+  const cKeySet = new Set(cKeys);
+  bKeys.forEach((k, i) => {
+    const l = base.connections[i];
+    if (cKeySet.has(k) || !l) return;
+    if (!taken.has(String(l.from)) || !taken.has(String(l.to))) return;
+    mark(status.connections, doc.connections.length, 'removed');
+    doc.connections.push(l);
+  });
+  return { doc, status, counts };
+}
+
+/* ---------------- firewall rules (Connections table) ---------------- */
+/* One directed rule per connection; direction: both yields two, direction:
+ * none (blocked) none. Pairs whose endpoints share the same immediate zone
+ * (a node's parent group; a group is its own zone) need no rule. `conn` is
+ * the connection index each rule came from. */
+function connectionRules(spec){
+  const { doc, nodeMap, groupMap, claimed } = spec;
+  const connections = doc.connections || [];
+  const zoneOf = id => nodeMap.has(id) ? claimed.get(id) : groupMap.has(id) ? id : undefined;
+  function endpoint(id){
+    id = String(id);
+    const n = nodeMap.get(id);
+    if (n) return { name: String(n.label ?? id), addr: ipsOf(n) || '—' };
+    const g = groupMap.get(id);
+    if (g) return { name: String(g.label ?? id), addr: g.cidr ? String(g.cidr) : '—' };
+    return { name: id, addr: '—' };
+  }
+  const rules = [];
+  let excluded = 0;
+  connections.forEach((l, i) => {
+    const fz = zoneOf(String(l.from)), tz = zoneOf(String(l.to));
+    if (fz !== undefined && fz === tz) { excluded++; return; }
+    const dir = dirOf(l);
+    if (dir === 'none') return;
+    const meta = {
+      proto:   l.protocol != null ? String(l.protocol) : '',
+      port:    l.port     != null ? String(l.port)     : '',
+      label:   l.label    != null ? String(l.label)    : '',
+      comment: l.comment  != null ? String(l.comment)  : '',
+    };
+    rules.push({ conn:i, src:endpoint(l.from), dst:endpoint(l.to), ...meta });
+    if (dir === 'both') rules.push({ conn:i, src:endpoint(l.to), dst:endpoint(l.from), ...meta });
+  });
+  return { rules, excluded, considered: connections.length - excluded };
+}
+/* CSV of the rules; `change` (conn index -> status) adds a Change column */
+function rulesToCsv(rules, change){
+  const hasComment = rules.some(r => r.comment.trim() !== '');
+  const head = ['#','Source','Source Address','Destination','Dest Address','Protocol','Port','Label'];
+  if (hasComment) head.push('Comment');
+  if (change) head.push('Change');
+  const rows = [head, ...rules.map((r, i) => {
+    const row = [i+1, r.src.name, r.src.addr, r.dst.name, r.dst.addr, r.proto, r.port, r.label];
+    if (hasComment) row.push(r.comment);
+    if (change) row.push(change.get(r.conn) || '');
+    return row;
+  })];
+  return rows.map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
+}
+
+/* ---------------- embedded source + share links ---------------- */
+/* renderSVG embeds the YAML in <metadata id="netdiagram-source">; this pulls it
+ * back out of SVG text (escaped text or CDATA). null when absent. */
+function extractSource(svgText){
+  const m = /<metadata\b[^>]*\bid="netdiagram-source"[^>]*>([\s\S]*?)<\/metadata>/.exec(String(svgText));
+  if (!m) return null;
+  const cdata = /^\s*<!\[CDATA\[([\s\S]*)\]\]>\s*$/.exec(m[1]);
+  if (cdata) return cdata[1];
+  const named = { amp:'&', lt:'<', gt:'>', quot:'"', apos:"'", nbsp:' ' };
+  return m[1].replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (s, e) =>
+    e[0] === '#' ? String.fromCodePoint(parseInt(e[1].toLowerCase() === 'x' ? e.slice(2) : e.slice(1), e[1].toLowerCase() === 'x' ? 16 : 10))
+    : (named[e.toLowerCase()] ?? s));
+}
+/* Share-link payload for a URL fragment: 'z' + base64url(deflate-raw) where
+ * CompressionStream exists, else 'r' + base64url(utf-8). Fragments never reach
+ * a server, so a shared link keeps the diagram client-side. */
+const b64url = bytes => {
+  let s = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+};
+const unb64url = s => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
+async function pipeBytes(bytes, stream){
+  return new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(stream)).arrayBuffer());
+}
+async function encodeShare(text, { compress = true } = {}){
+  const bytes = new TextEncoder().encode(text);
+  if (compress && typeof CompressionStream === 'function')
+    return 'z' + b64url(await pipeBytes(bytes, new CompressionStream('deflate-raw')));
+  return 'r' + b64url(bytes);
+}
+async function decodeShare(payload){
+  const kind = payload[0], bytes = unb64url(payload.slice(1));
+  if (kind === 'r') return new TextDecoder().decode(bytes);
+  if (kind === 'z'){
+    if (typeof DecompressionStream !== 'function') throw new Error('This browser cannot open compressed share links.');
+    return new TextDecoder().decode(await pipeBytes(bytes, new DecompressionStream('deflate-raw')));
+  }
+  throw new Error('Unrecognized share link.');
 }
 
 /* ---------------- build ELK graph ---------------- */
@@ -477,6 +818,36 @@ function assignPorts(graph, layout){
   return assigned ? graph : null;
 }
 
+/* ---------------- themes + change colors ---------------- */
+/* renderSVG colors come from a theme: paper (default) or blueprint — white
+ * linework on cyanotype blue, palette colors lifted toward white (tone). */
+const THEMES = {
+  paper: {
+    name:'paper', bg:'#fafbf7', gridS:'#e7ece2', gridL:'#dde3d7',
+    ink:'#24344d', text:'#1a2638', muted:'#7a8798', value:'#3f5e8c',
+    nodeFill:'#ffffff', boxFill:'#ffffff',
+    pillFill:'#eef1f4', pillStroke:'#9aa7ba', pillText:'#5b6874',
+    tone: hex => hex,
+    group: st => st
+  },
+  blueprint: {
+    name:'blueprint', bg:'#1f4f8f', gridS:'#2a5998', gridL:'#3565a3',
+    ink:'#e8f0fc', text:'#ffffff', muted:'#a9c2e6', value:'#d4e4fb',
+    nodeFill:'#1b4680', boxFill:'#1b4680',
+    pillFill:'#28589a', pillStroke:'#9fbbe3', pillText:'#dbe8fb',
+    tone: hex => mixHex(hex, '#ffffff', .55),
+    group: st => ({ ...st, fill:'rgba(255,255,255,.04)',
+      stroke: mixHex(st.label, '#ffffff', .45), label: mixHex(st.label, '#ffffff', .62) })
+  }
+};
+const themeOf = name => {
+  const k = String(name || '').toLowerCase();
+  return Object.hasOwn(THEMES, k) ? THEMES[k] : THEMES.paper;
+};
+/* compare view (opts.diff): halo + corner mark per changed item */
+const DIFF_COLORS = { added:'#15803d', removed:'#c0392b', changed:'#b45309' };
+const DIFF_MARKS = { added:'+', removed:'−', changed:'~' };
+
 /* ---------------- render SVG ---------------- */
 function midOfPolyline(pts){
   let total = 0;
@@ -560,9 +931,19 @@ function hopPath(pts, lowerPolys){
   return d;
 }
 
-function renderSVG(spec, layout){
+/* opts: { theme, date, source (YAML to embed), diff ({status, counts, base}
+ * from diffDocs), rows ([[key, value]] extra title-block rows) } */
+function renderSVG(spec, layout, opts = {}){
   const { doc, nodeMap, groupMap } = spec;
   const title = String(doc.diagram?.title || 'untitled network');
+  const T = themeOf(opts.theme ?? doc.diagram?.theme);
+  const diff = opts.diff || null;
+  const statusOf = (kind, key) => diff ? diff.status[kind].get(key) : undefined;
+  const diffHex = s => T.tone(DIFF_COLORS[s]);
+  const diffHalo = (s, b, rx) => s
+    ? `<rect class="nd-halo" x="${b.x-4}" y="${b.y-4}" width="${b.w+8}" height="${b.h+8}" rx="${rx}" fill="none" stroke="${diffHex(s)}" stroke-width="2.2"${s === 'removed' ? ' stroke-dasharray="6 4"' : ''}/>` : '';
+  const diffMark = (s, x, y) => s
+    ? `<g class="nd-change" data-change="${s}"><circle cx="${x}" cy="${y}" r="7.5" fill="${diffHex(s)}"/><text x="${x}" y="${y+3.8}" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="11" font-weight="700" fill="${T.nodeFill}">${DIFF_MARKS[s]}</text></g>` : '';
 
   // connections with the same label share a palette color
   const labelColor = new Map();
@@ -570,9 +951,15 @@ function renderSVG(spec, layout){
     if (l.label != null && !labelColor.has(String(l.label)))
       labelColor.set(String(l.label), LABEL_PALETTE[labelColor.size % LABEL_PALETTE.length]);
   }
-  function styleOf(l){
-    if (l.label != null) return { ...CONNECTION_STYLES.labeled, hex: labelColor.get(String(l.label)) };
-    return CONNECTION_STYLES.default;
+  function styleOf(l, i){
+    const st = l.label != null
+      ? { ...CONNECTION_STYLES.labeled, hex: T.tone(labelColor.get(String(l.label))) }
+      : { ...CONNECTION_STYLES.default, hex: T.ink };
+    const s = statusOf('connections', i);
+    // compare view: unchanged connections recede so the change colors can't be
+    // mistaken for label colors
+    if (!s) return diff ? { ...st, hex: T.muted, opacity: .45 } : st;
+    return { ...st, hex: diffHex(s), dash: s === 'removed' ? '6 4' : st.dash, opacity: s === 'removed' ? .6 : null };
   }
   // absolute positions
   const abs = new Map(); // id -> {x,y,w,h,isGroup}
@@ -585,7 +972,12 @@ function renderSVG(spec, layout){
   })(layout, 0, 0);
 
   const W = Math.ceil(layout.width||600), H = Math.ceil(layout.height||400);
-  const dAttrs = attrLines(doc.diagram, DIAGRAM_OPTION_KEYS);
+  const dAttrs = [...attrLines(doc.diagram, DIAGRAM_OPTION_KEYS),
+    ...(opts.rows || []).map(([k, v]) => [String(k), String(v)])];
+  if (diff){
+    const c = diff.counts;
+    dAttrs.push(['compare', `+${c.added} −${c.removed} ~${c.changed}` + (diff.base ? ` vs ${diff.base}` : '')]);
+  }
   const attrKeyW = dAttrs.length ? Math.max(...dAttrs.map(([k]) => textW(k.toUpperCase(), '700 9px ui-monospace'))) : 0;
   const attrValW = dAttrs.length ? Math.max(...dAttrs.map(([,v]) => textW(v, '10px ui-monospace'))) : 0;
   const stampW = Math.max(232, Math.ceil(9 + attrKeyW + 24 + attrValW + 9));
@@ -595,13 +987,13 @@ function renderSVG(spec, layout){
 
   let defs = `
     <pattern id="gridS" width="12" height="12" patternUnits="userSpaceOnUse">
-      <path d="M12 0H0v12" fill="none" stroke="#e7ece2" stroke-width=".6"/>
+      <path d="M12 0H0v12" fill="none" stroke="${T.gridS}" stroke-width=".6"/>
     </pattern>
     <pattern id="gridL" width="60" height="60" patternUnits="userSpaceOnUse">
       <rect width="60" height="60" fill="url(#gridS)"/>
-      <path d="M60 0H0v60" fill="none" stroke="#dde3d7" stroke-width="1"/>
+      <path d="M60 0H0v60" fill="none" stroke="${T.gridL}" stroke-width="1"/>
     </pattern>`;
-  const markerHexes = [...new Set((doc.connections||[]).map(l => styleOf(l).hex))];
+  const markerHexes = [...new Set((doc.connections||[]).map((l, i) => styleOf(l, i).hex))];
   for (const hex of markerHexes){
     defs += `
     <marker id="ah-${hex.slice(1)}" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse">
@@ -620,6 +1012,7 @@ function renderSVG(spec, layout){
     const gs = g.style || {};
     const cName = String(gs.color ?? gs.colour ?? '').toLowerCase().trim();
     if (GROUP_COLORS[cName]) st = { ...st, ...GROUP_COLORS[cName] };
+    st = T.group(st);
     const bName = String(gs.border ?? '').toLowerCase().trim();
     const dashVal = (bName in GROUP_BORDERS) ? GROUP_BORDERS[bName] : st.dash;
     const dash = dashVal ? ` stroke-dasharray="${dashVal}"` : '';
@@ -628,7 +1021,7 @@ function renderSVG(spec, layout){
     let boxText = '';
     if (hdr.box){
       const bx = b.x + b.w - GBOX_MARGIN - hdr.box.w, by = b.y + b.h - GBOX_MARGIN - hdr.box.h;
-      boxText = `<rect class="attr-box" x="${bx}" y="${by}" width="${hdr.box.w}" height="${hdr.box.h}" rx="3" fill="#ffffff" fill-opacity=".8" stroke="${st.stroke}" stroke-width=".9"/>`
+      boxText = `<rect class="attr-box" x="${bx}" y="${by}" width="${hdr.box.w}" height="${hdr.box.h}" rx="3" fill="${T.boxFill}" fill-opacity=".8" stroke="${st.stroke}" stroke-width=".9"/>`
         + hdr.box.lines.map(([k,v],i) =>
           `<text x="${bx+GBOX_PAD}" y="${by + 16 + i*GBOX_LINE_H}" font-family="ui-monospace,Menlo,monospace" font-size="10.5" fill="${st.label}"><tspan opacity=".6">${esc(k)}: </tspan><tspan opacity=".9">${esc(v)}</tspan></text>`).join('');
     }
@@ -638,14 +1031,17 @@ function renderSVG(spec, layout){
       let px = b.x + b.w - 10 - pillRowW(row);
       const py = b.y + 8 + r * PILL_ROW_H;
       for (const p of row){
-        gBadge += `<rect x="${px}" y="${py}" width="${p.w}" height="${PILL_H}" rx="6" fill="#ffffff" fill-opacity=".85" stroke="${st.stroke}" stroke-width=".9"/>
+        gBadge += `<rect x="${px}" y="${py}" width="${p.w}" height="${PILL_H}" rx="6" fill="${T.boxFill}" fill-opacity=".85" stroke="${st.stroke}" stroke-width=".9"/>
       <text x="${px+p.w/2}" y="${py+9}" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8" font-weight="700" letter-spacing=".8" fill="${st.label}">${esc(p.text)}</text>`;
         px += p.w + PILL_GAP;
       }
     });
-    gGroups += `<rect x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" rx="8" fill="${st.fill}" stroke="${st.stroke}" stroke-width="1.4"${dash}/>
+    const ds = statusOf('groups', id);
+    gGroups += `<g class="nd-group" data-id="${esc(id)}"${ds === 'removed' ? ' opacity=".5"' : ''}>
+      <rect x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" rx="8" fill="${st.fill}" stroke="${st.stroke}" stroke-width="1.4"${dash}/>
+      ${diffHalo(ds, b, 11)}
       <text x="${b.x+14}" y="${b.y+hdr.labelY}" font-family="ui-monospace,Menlo,monospace" font-size="11" font-weight="700" letter-spacing="1.6" fill="${st.label}">${esc(String(g.label||id).toUpperCase())}</text>
-      ${boxText}${gBadge}`;
+      ${boxText}${gBadge}${diffMark(ds, b.x, b.y)}</g>`;
   }
 
   // nodes
@@ -659,29 +1055,30 @@ function renderSVG(spec, layout){
     const hs = hw ? HW_STYLES[hw] : null;
     const borderDash = hs?.dash ? ` stroke-dasharray="${hs.dash}"` : '';
     const inner = hs?.inner
-      ? `<rect x="${b.x+3}" y="${b.y+3}" width="${b.w-6}" height="${b.h-6}" rx="4" fill="none" stroke="#24344d" stroke-width=".8"/>` : '';
+      ? `<rect x="${b.x+3}" y="${b.y+3}" width="${b.w-6}" height="${b.h-6}" rx="4" fill="none" stroke="${T.ink}" stroke-width=".8"/>` : '';
     // tag pills: right-aligned block in the corner, up to two per row
     let badge = '';
     pillRows.forEach((row, r) => {
       let px = b.x + b.w - 7 - pillRowW(row);
       const py = b.y + 6 + r * PILL_ROW_H;
       for (const p of row){
-        badge += `<rect x="${px}" y="${py}" width="${p.w}" height="${PILL_H}" rx="6" fill="#eef1f4" stroke="#9aa7ba" stroke-width=".8"/>
-      <text x="${px+p.w/2}" y="${py+9}" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8" font-weight="700" letter-spacing=".8" fill="#5b6874">${esc(p.text)}</text>`;
+        badge += `<rect x="${px}" y="${py}" width="${p.w}" height="${PILL_H}" rx="6" fill="${T.pillFill}" stroke="${T.pillStroke}" stroke-width=".8"/>
+      <text x="${px+p.w/2}" y="${py+9}" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8" font-weight="700" letter-spacing=".8" fill="${T.pillText}">${esc(p.text)}</text>`;
         px += p.w + PILL_GAP;
       }
     });
     const kvText = kv.map(([k,v],i) =>
-      `<text x="${tx}" y="${b.y + 38 + i*14}" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#7a8798">${esc(k)}: </tspan><tspan fill="#3f5e8c">${esc(v)}</tspan></text>`
+      `<text x="${tx}" y="${b.y + 38 + i*14}" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="${T.muted}">${esc(k)}: </tspan><tspan fill="${T.value}">${esc(v)}</tspan></text>`
     ).join('');
-    gNodes += `<g>
-      <rect x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" rx="6" fill="#ffffff" stroke="#24344d" stroke-width="1.5"${borderDash}/>
-      ${inner}
-      ${glyph ? `<g transform="translate(${iconX},${b.y+9})"><g fill="none" stroke="#24344d" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" color="#24344d">${glyph}</g></g>` : ''}
-      ${type ? `<text x="${capX}" y="${b.y + (glyph ? 46 : 26)}" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8.5" font-weight="700" letter-spacing=".5" fill="#7a8798">${esc(type)}</text>` : ''}
-      <text x="${tx}" y="${b.y + 22}" font-family="ui-monospace,Menlo,monospace" font-size="13" font-weight="600" fill="#1a2638">${esc(label)}</text>
+    const ds = statusOf('nodes', id);
+    gNodes += `<g class="nd-node" data-id="${esc(id)}"${ds === 'removed' ? ' opacity=".5"' : ''}>
+      <rect x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" rx="6" fill="${T.nodeFill}" stroke="${T.ink}" stroke-width="1.5"${borderDash}/>
+      ${inner}${diffHalo(ds, b, 10)}
+      ${glyph ? `<g transform="translate(${iconX},${b.y+9})"><g fill="none" stroke="${T.ink}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" color="${T.ink}">${glyph}</g></g>` : ''}
+      ${type ? `<text x="${capX}" y="${b.y + (glyph ? 46 : 26)}" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8.5" font-weight="700" letter-spacing=".5" fill="${T.muted}">${esc(type)}</text>` : ''}
+      <text x="${tx}" y="${b.y + 22}" font-family="ui-monospace,Menlo,monospace" font-size="13" font-weight="600" fill="${T.text}">${esc(label)}</text>
       ${kvText}
-      ${badge}
+      ${badge}${diffMark(ds, b.x, b.y)}
     </g>`;
   }
 
@@ -713,48 +1110,52 @@ function renderSVG(spec, layout){
   // pass 2: draw, arcing over every crossing with an earlier edge
   drawn.forEach((rec, k)=>{
     const l = (doc.connections||[])[rec.idx] || {};
-    const st = styleOf(l);
+    const st = styleOf(l, rec.idx);
     const mk = 'ah-' + st.hex.slice(1);
     const d = hopPath(rec.pts, drawn.slice(0, k).map(r => r.pts));
     const dirMode = dirOf(l);
     const mEnd = dirMode==='none' ? '' : ` marker-end="url(#${mk})"`;
     const mStart = dirMode==='both' ? ` marker-start="url(#${mk})"` : '';
     const dash = st.dash ? ` stroke-dasharray="${st.dash}"` : '';
+    const op = st.opacity ? ` opacity="${st.opacity}"` : '';
     const lblAttr = l.label != null ? ` data-label="${esc(String(l.label))}"` : '';
-    gEdges += `<path class="edge"${lblAttr} d="${d}" fill="none" stroke="${st.hex}" stroke-width="${st.width}"${dash}${mEnd}${mStart}/>`;
+    gEdges += `<path class="edge" data-conn="${rec.idx}"${lblAttr} d="${d}" fill="none" stroke="${st.hex}" stroke-width="${st.width}"${dash}${op}${mEnd}${mStart}/>`;
     if (l.label){
       const m = midOfPolyline(rec.pts);
-      gLabels += `<text class="edge-lbl" data-label="${esc(String(l.label))}" x="${m.x}" y="${m.y-5}" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="11" fill="${st.hex}" stroke="#fafbf7" stroke-width="4" paint-order="stroke" stroke-linejoin="round">${esc(String(l.label))}</text>`;
+      gLabels += `<text class="edge-lbl" data-conn="${rec.idx}" data-label="${esc(String(l.label))}" x="${m.x}" y="${m.y-5}" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="11" fill="${st.hex}" stroke="${T.bg}" stroke-width="4" paint-order="stroke" stroke-linejoin="round"${op}>${esc(String(l.label))}</text>`;
     }
   });
 
   // drafting title block
   const sx = totW - stampW - 18, sy = totH - stampH - 14;
-  const today = new Date().toISOString().slice(0,10);
+  const date = String(opts.date ?? doc.diagram?.date ?? new Date().toISOString().slice(0,10));
   const attrRows = dAttrs.map(([k,v],i)=>{
     const ry = sy + 54 + i*16;
-    return `<path d="M${sx} ${ry} h${stampW}" stroke="#24344d" stroke-width=".7"/>
-    <text x="${sx+9}" y="${ry+12}" font-family="ui-monospace,Menlo,monospace" font-size="9" letter-spacing="1" fill="#7a8798">${esc(k.toUpperCase())}</text>
-    <text x="${sx+stampW-9}" y="${ry+12}" text-anchor="end" font-family="ui-monospace,Menlo,monospace" font-size="10" fill="#24344d">${esc(v)}</text>`;
+    return `<path d="M${sx} ${ry} h${stampW}" stroke="${T.ink}" stroke-width=".7"/>
+    <text x="${sx+9}" y="${ry+12}" font-family="ui-monospace,Menlo,monospace" font-size="9" letter-spacing="1" fill="${T.muted}">${esc(k.toUpperCase())}</text>
+    <text x="${sx+stampW-9}" y="${ry+12}" text-anchor="end" font-family="ui-monospace,Menlo,monospace" font-size="10" fill="${T.ink}">${esc(v)}</text>`;
   }).join('');
   const stamp = `<g>
-    <rect x="${sx}" y="${sy}" width="${stampW}" height="${stampH}" fill="#ffffff" stroke="#24344d" stroke-width="1.4"/>
-    <path d="M${sx} ${sy+20} h${stampW} M${sx+150} ${sy+20} V${sy+54}" stroke="#24344d" stroke-width="1"/>
-    <text x="${sx+9}" y="${sy+14.5}" font-family="ui-monospace,Menlo,monospace" font-size="10.5" font-weight="700" letter-spacing="1.2" fill="#24344d">${esc(title.toUpperCase())}</text>
-    <text x="${sx+9}" y="${sy+37}" font-family="ui-monospace,Menlo,monospace" font-size="9" letter-spacing="1" fill="#7a8798">DRAWN</text>
-    <text x="${sx+9}" y="${sy+48}" font-family="ui-monospace,Menlo,monospace" font-size="10" fill="#24344d">netdiagram${VERSION ? ' v' + esc(VERSION) : ''}</text>
-    <text x="${sx+159}" y="${sy+37}" font-family="ui-monospace,Menlo,monospace" font-size="9" letter-spacing="1" fill="#7a8798">DATE</text>
-    <text x="${sx+159}" y="${sy+48}" font-family="ui-monospace,Menlo,monospace" font-size="10" fill="#24344d">${today}</text>
+    <rect x="${sx}" y="${sy}" width="${stampW}" height="${stampH}" fill="${T.boxFill}" stroke="${T.ink}" stroke-width="1.4"/>
+    <path d="M${sx} ${sy+20} h${stampW} M${sx+150} ${sy+20} V${sy+54}" stroke="${T.ink}" stroke-width="1"/>
+    <text x="${sx+9}" y="${sy+14.5}" font-family="ui-monospace,Menlo,monospace" font-size="10.5" font-weight="700" letter-spacing="1.2" fill="${T.ink}">${esc(title.toUpperCase())}</text>
+    <text x="${sx+9}" y="${sy+37}" font-family="ui-monospace,Menlo,monospace" font-size="9" letter-spacing="1" fill="${T.muted}">DRAWN</text>
+    <text x="${sx+9}" y="${sy+48}" font-family="ui-monospace,Menlo,monospace" font-size="10" fill="${T.ink}">netdiagram${VERSION ? ' v' + esc(VERSION) : ''}</text>
+    <text x="${sx+159}" y="${sy+37}" font-family="ui-monospace,Menlo,monospace" font-size="9" letter-spacing="1" fill="${T.muted}">DATE</text>
+    <text x="${sx+159}" y="${sy+48}" font-family="ui-monospace,Menlo,monospace" font-size="10" fill="${T.ink}">${esc(date)}</text>
     ${attrRows}
   </g>`;
 
+  // the YAML source rides along, so a downloaded SVG can be imported and edited again
+  const meta = opts.source != null
+    ? `\n    <metadata id="netdiagram-source" data-type="text/yaml">${esc(opts.source)}</metadata>` : '';
   const nc = nodeMap.size, gc = groupMap.size, cc = (doc.connections||[]).length;
   const desc = `${nc} node${nc!==1?'s':''}, ${gc} group${gc!==1?'s':''}, ${cc} connection${cc!==1?'s':''}`;
-  return `<svg xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="nd-title nd-desc" width="${totW}" height="${totH}" viewBox="0 0 ${totW} ${totH}" font-family="ui-monospace,Menlo,monospace">
+  return `<svg xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="nd-title nd-desc" width="${totW}" height="${totH}" viewBox="0 0 ${totW} ${totH}" font-family="ui-monospace,Menlo,monospace" data-theme="${T.name}" data-bg="${T.bg}">
     <title id="nd-title">${esc(title)}</title>
-    <desc id="nd-desc">${esc(desc)}</desc>
+    <desc id="nd-desc">${esc(desc)}</desc>${meta}
     <defs>${defs}</defs>
-    <rect width="${totW}" height="${totH}" fill="#fafbf7"/>
+    <rect width="${totW}" height="${totH}" fill="${T.bg}"/>
     <rect width="${totW}" height="${totH}" fill="url(#gridL)"/>
     <g transform="translate(${PAD},${PAD})">
       ${gGroups}
@@ -767,6 +1168,8 @@ function renderSVG(spec, layout){
 }
 
 if (typeof module !== "undefined" && module.exports)
-  module.exports = { parseSpec, buildElk, assignPorts, renderSVG, CONNECTION_STYLES, GROUP_STYLES, GLYPHS, LABEL_PALETTE,
+  module.exports = { parseSpec, specFromDoc, sourceMap, buildElk, assignPorts, renderSVG,
+    allTags, filterDoc, diffDocs, connectionRules, rulesToCsv, extractSource, encodeShare, decodeShare,
+    CONNECTION_STYLES, GROUP_STYLES, GLYPHS, LABEL_PALETTE, THEMES,
     // helpers the browser app (concatenated after this file at build time) reuses
     esc, dirOf, ipsOf };
