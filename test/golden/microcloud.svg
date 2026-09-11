@@ -70,7 +70,13 @@ connections:
   - {from: admin, to: members,   label: &quot;tcp/8443 lxd-api&quot;, protocol: tcp, port: 8443, comment: &quot;lxc + microcloud cli&quot;}
   - {from: admin, to: instances, label: &quot;tcp/22 ssh&quot;,       protocol: tcp, port: 22,   comment: &quot;instance access&quot;}
   - {from: instances, to: uplink, label: &quot;ovn uplink&quot;,      comment: &quot;snat via br-uplink&quot;}
+  # instances -&gt; members relates two aggregates (and the instances carry their
+  # own OVN subnet), so it stays an association rather than node containment
   - {from: instances, to: members, label: &quot;runs on&quot;, direction: none}
+
+views:
+  - {id: uplink, title: &quot;MicroCloud — north-south uplink&quot;, focus: uplink, depth: 1}
+  - {id: members, title: &quot;MicroCloud — cluster members&quot;, focus: members, depth: 1}
 </metadata>
     <defs>
     <pattern id="gridS" width="12" height="12" patternUnits="userSpaceOnUse">

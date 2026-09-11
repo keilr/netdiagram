@@ -90,6 +90,12 @@ connections:
   - {from: web,       to: app,       label: &quot;tcp/8080 api&quot;,    protocol: tcp, port: 8080}
   - {from: app,       to: db1,       label: &quot;tcp/5432 pgsql&quot;,  protocol: tcp, port: 5432}
   - {from: db1,       to: db2,       label: &quot;tcp/5432 repl&quot;,   protocol: tcp, port: 5432, direction: both, comment: &quot;streaming replication&quot;}
+
+# views: the auth path is the reviewable story here; the tiers are the rest
+views:
+  - {id: auth, title: &quot;3-tier — auth path&quot;, focus: authproxy, depth: 1}
+  - {id: tiers, title: &quot;3-tier — tier to tier&quot;, focus: app, depth: 1}
+  - {id: data, title: &quot;3-tier — data tier&quot;, focus: db1, depth: 1}
 </metadata>
     <defs>
     <pattern id="gridS" width="12" height="12" patternUnits="userSpaceOnUse">

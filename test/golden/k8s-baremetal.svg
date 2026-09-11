@@ -74,6 +74,13 @@ connections:
   - {from: shop, to: workers, label: &quot;scheduled on&quot;, direction: none}
   - {from: ml,   to: gpuw,  label: &quot;scheduled on&quot;, direction: none}
   - {from: workers, to: cp, label: &quot;tcp/6443 kube-api&quot;, protocol: tcp, port: 6443, comment: &quot;kubelet &lt;-&gt; control plane&quot;}
+
+# views: the whole cluster in one picture, then one per concern
+views:
+  - {id: ingress, title: &quot;K8s — north-south ingress&quot;, focus: ing, depth: 1}
+  - {id: ml, title: &quot;K8s — ml namespace&quot;, focus: ml, depth: 1}
+  - {id: gpu, title: &quot;K8s — gpu pool&quot;, focus: gpuw, depth: 1}
+  - {id: control, title: &quot;K8s — control plane&quot;, focus: cp, depth: 1}
 </metadata>
     <defs>
     <pattern id="gridS" width="12" height="12" patternUnits="userSpaceOnUse">

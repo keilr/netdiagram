@@ -85,6 +85,13 @@ connections:
   # host metrics also come from node-exporter on the kafka and search nodes
   - {from: prom, to: kafka,  label: &quot;tcp/9100 node&quot;,         protocol: tcp, port: 9100, comment: &quot;node-exporter&quot;}
   - {from: prom, to: search, label: &quot;tcp/9100 node&quot;,         protocol: tcp, port: 9100, comment: &quot;node-exporter&quot;}
+
+# views: the scrape fan-out is the whole point, but it is not the only picture
+views:
+  - {id: scrape, title: &quot;Pull — scrape targets&quot;, focus: prom, depth: 1}
+  - {id: storage, title: &quot;Pull — long-term storage&quot;, focus: mimir, depth: 1}
+  - {id: dashboards, title: &quot;Pull — dashboards&quot;, focus: graf, depth: 1}
+  - {id: gpu, title: &quot;Pull — vllm pool&quot;, focus: gpus, depth: 1}
 </metadata>
     <defs>
     <pattern id="gridS" width="12" height="12" patternUnits="userSpaceOnUse">

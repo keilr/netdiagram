@@ -17,17 +17,25 @@ nodes:
     label: WAF
     type: waf
     ip: 10.30.0.10
-  - id: webui
-    label: Open-WebUI
-    type: container       # dockerized chat frontend — dotted border
-    ip: 10.30.10.11
+  # the chat frontend and its database are containers ON one docker host —
+  # drawn INSIDE it, which is what "runs on" actually means
+  - id: apphost
+    label: app-host-01
+    type: metal           # physical docker host — double border
+    ip: 10.30.10.5
     os: linux
-  - id: pg
-    label: webui-db
-    type: container
-    icon: db              # containerized Postgres (chat history)
-    ip: 10.30.10.21
-    os: linux
+    nodes:
+      - id: webui
+        label: Open-WebUI
+        type: container   # dockerized chat frontend — dotted border
+        ip: 10.30.10.11
+        os: linux
+      - id: pg
+        label: webui-db
+        type: container
+        icon: db          # containerized Postgres (chat history)
+        ip: 10.30.10.21
+        os: linux
   - id: router
     label: Inference Router
     type: lb              # OpenAI-compatible gateway, fans out to vLLM replicas
@@ -62,7 +70,7 @@ groups:
     label: App tier
     class: subnet
     cidr: 10.30.10.0/24
-    nodes: [webui, pg]
+    nodes: [apphost]      # the containers come along inside it
   - id: gpu
     label: GPU cluster
     class: trust
@@ -79,3 +87,8 @@ connections:
   - {from: router, to: vllm2, label: "tcp/8000 vllm",       protocol: tcp, port: 8000}
   - {from: vllm1, to: models, label: "tcp/2049 nfs",        protocol: tcp, port: 2049}
   - {from: vllm2, to: models, label: "tcp/2049 nfs",        protocol: tcp, port: 2049}
+
+views:
+  - {id: edge, title: "vLLM — edge path", focus: waf, depth: 1}
+  - {id: inference, title: "vLLM — inference path", focus: router, depth: 2}
+  - {id: gpu, title: "vLLM — gpu cluster", focus: gpu, depth: 1}

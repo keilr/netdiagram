@@ -59,6 +59,13 @@ connections:
   - {from: web1, to: app1, label: &quot;tcp/8080 api&quot;,  protocol: tcp, port: 8080}
   - {from: web2, to: app1, label: &quot;tcp/8080 api&quot;,  protocol: tcp, port: 8080}
   - {from: app1, to: pgb,  label: &quot;tcp/6432 pool&quot;, protocol: tcp, port: 6432}
+
+# views: a focus on a guest pulls in its host automatically — the host is what
+# draws it, so it comes along with the box it lives in
+views:
+  - {id: edge, title: &quot;Virt — edge path&quot;, focus: fw, depth: 1}
+  - {id: app, title: &quot;Virt — app path&quot;, focus: app1, depth: 1}
+  - {id: prod, title: &quot;Virt — prod hosts&quot;, tags: [prod]}
 </metadata>
     <defs>
     <pattern id="gridS" width="12" height="12" patternUnits="userSpaceOnUse">

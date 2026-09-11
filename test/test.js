@@ -895,6 +895,29 @@ test("views: a narrowed document never carries views onward", () => {
   assert.strictEqual(nd.filterDoc(spec.doc, ["prod"]).views, undefined, "the tag filter strips them too");
 });
 
+test("views: focusing a guest keeps the host that draws it", () => {
+  const spec = parseSpec(`
+nodes:
+  - {id: sw, type: switch}
+  - id: host
+    type: hypervisor
+    nodes:
+      - {id: g1, type: vm}
+      - {id: g2, type: vm}
+connections:
+  - {from: sw, to: g1, protocol: tcp, port: 22}
+views:
+  - {id: guest, focus: g1, depth: 1}
+`);
+  const d = nd.applyView(spec.doc, nd.viewById(spec.doc, "guest"), spec);
+  // must still validate: dropping the host would strand the connection's endpoint
+  const s = nd.specFromDoc(d);
+  assert.ok(s.nodeMap.has("host"), "the host comes along as the box that draws the guest");
+  assert.ok(s.nodeMap.has("g1"));
+  assert.ok(!s.nodeMap.has("g2"), "a sibling guest outside the focus is still dropped");
+  assert.strictEqual((d.connections || []).length, 1, "the connection survives intact");
+});
+
 test("validation: views need a known focus, unique ids and a numeric depth", () => {
   expectError("nodes:\n  - {id: a}\nviews:\n  - {id: v, focus: ghost}\n", 'unknown focus "ghost"');
   expectError("nodes:\n  - {id: a}\nviews:\n  - {id: v}\n  - {id: v}\n", 'duplicate view id "v"');

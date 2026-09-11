@@ -71,3 +71,10 @@ connections:
   - {from: shop, to: workers, label: "scheduled on", direction: none}
   - {from: ml,   to: gpuw,  label: "scheduled on", direction: none}
   - {from: workers, to: cp, label: "tcp/6443 kube-api", protocol: tcp, port: 6443, comment: "kubelet <-> control plane"}
+
+# views: the whole cluster in one picture, then one per concern
+views:
+  - {id: ingress, title: "K8s — north-south ingress", focus: ing, depth: 1}
+  - {id: ml, title: "K8s — ml namespace", focus: ml, depth: 1}
+  - {id: gpu, title: "K8s — gpu pool", focus: gpuw, depth: 1}
+  - {id: control, title: "K8s — control plane", focus: cp, depth: 1}

@@ -36,18 +36,30 @@ There is no dev server; after `npm run build`, open `dist/netdiagram.html` in a 
 ```
 src/netdiagram.js   Core library (browser + node). Pure pipeline:
                     parseSpec(yamlText) = specFromDoc(jsyaml.load(text))
-                      -> {doc, nodeMap, groupMap, claimed}; validation errors
-                      carry e.errors = [{path, message}] (path into the doc)
+                      -> {doc, nodeMap, groupMap, claimed, hosted}; nodeMap is
+                      FLAT over every nesting level, and hosted maps a child id
+                      -> the node it sits inside. Validation errors carry
+                      e.errors = [{path, message}] (path into the doc)
                     buildElk(spec)      -> ELK graph JSON (layout is caller's job)
-                    assignPorts(graph, pass1) -> graph|null — two-pass layout:
-                      pins FIXED_ORDER ports on leaf nodes with 2+ edges so hub
-                      edges leave toward their targets (kills most crossings).
-                      Pass a FRESH buildElk graph; null = no hubs, skip pass 2.
+                    assignPorts(graph, pass1) -> graph|null — the pass-2
+                      refinements (three): reverses against-flow edges; pins
+                      FIXED_ORDER ports on leaf nodes with 2+ edges so hub edges
+                      leave toward their targets (kills most crossings); widens
+                      container nodes whose own chrome is wider than their child
+                      grid (gotcha 14). Pass a FRESH buildElk graph;
+                      null = nothing to refine, skip pass 2.
                     renderSVG(spec, layout, opts) -> SVG string; opts: theme,
                       date, source (YAML embedded in <metadata>), diff, rows
-                    Views on a doc (both keep connection objects BY REFERENCE):
+                    Lenses on a doc (ALL keep connection objects BY REFERENCE):
                       filterDoc(doc, tags), allTags(doc), diffDocs(base, cur)
-                      -> {doc (merged), status, counts}
+                      -> {doc (merged), status, counts};
+                      flatNodes(doc) -> every node at every nesting depth
+                    Named views: viewsOf(doc), viewById(doc, id),
+                      focusDoc(doc, spec, id, depth), applyView(doc, view, spec)
+                    lintSpec(spec) -> [{rule, severity, path, message}], the
+                      non-fatal architecture lint behind `npm run check`;
+                      driftReport(live, authored) -> missing | extra | address
+                      against an imported inventory
                     sourceMap(text) -> {rangeOf(path), itemRange(kind, key),
                       itemAt(pos)} — YAML offsets from js-yaml parseEvents
                     connectionRules(spec) / rulesToCsv — the firewall-rule table
@@ -58,11 +70,13 @@ src/importers.js    Ansible (INI / YAML / --list JSON), Terraform (show -json /
                     detectImport(text, filename) | importAs(kind, text).
                     Dual shape like the core; publishes window.Importers.
 src/app.js          Browser-only wire-up: CodeMirror editor, debounced render
-                    (validate source -> tag filter -> compare -> layout), SVG /
+                    (validate source -> view -> tag filter -> compare ->
+                    layout), SVG /
                     YAML download, PDF export (prints via a hidden iframe — the
                     browser's print-to-PDF keeps it vector), Import (YAML, SVG
                     with embedded source, inventories; also drag & drop), share
-                    links, compare picker, tag chips, diagram <-> YAML navigation
+                    links, compare picker, View picker (shown only when the
+                    document declares views:), tag chips, diagram <-> YAML navigation
                     (data-id / data-conn attributes + sourceMap), example picker
                     (below the editor), and local project persistence (autosaves
                     the editor buffer as a draft and stores named projects in
@@ -85,10 +99,17 @@ scripts/build.js    Vendors js-yaml + elkjs + the editor bundle via esbuild,
                     writes dist/netdiagram.html.
 scripts/render.js   CLI: same pipeline in node, for external editors (VS Code
                     tasks in .vscode/tasks.json call it) and CI change reviews.
+                    --view <id> / --list-views render one named view.
 scripts/import.js   CLI: inventory -> YAML scaffold (stdin with `-`).
+scripts/check.js    CLI: architecture lint (lintSpec) + drift against a live
+                    inventory (driftReport). Exits 1 on findings, 2 on bad
+                    usage, so a spec can gate a pull request.
 examples/*.yaml     All examples are injected into the app at build time
                     (EXAMPLES array; picker below the editor). hq-edge-core.yaml
-                    is the default on load and the one tests assert against.
+                    is the default on load and the one tests assert against;
+                    virt-hosts.yaml is the node-containment showcase. Every
+                    example must stay `npm run check` clean (tests assert it),
+                    and most declare `views:`.
 test/test.js        Assertion-based tests, no framework. Must pass before commit.
 test/golden/*.svg   Every example rendered with a fixed date (+ hq-edge-core in
                     blueprint); byte-compared by npm test.
@@ -174,7 +195,9 @@ views:                     # one document, several pictures of it
 title/direction/theme into `doc.diagram`, so the rest of the pipeline needs no
 knowledge of views. A narrowed doc NEVER carries `views:` onward
 (`withoutViews`): re-validating it would check focus ids against a document the
-narrowing just pruned.
+narrowing just pruned. A kept guest also pulls in its whole host chain: nodes
+are pruned from the top-level list down, so dropping the host would drop the
+guest with it and strand a connection endpoint.
 
 Connection color: shared-label palette color if the connection has a label,
 else default ink. The app (`src/app.js`) also renders a Connections tab: a
@@ -242,15 +265,28 @@ suggestions from the schema, so it follows automatically).
     share a scope — a second `const jsyaml` is a SyntaxError that kills the
     page. importers.js therefore lives in an IIFE; new files must too (and get
     an eslint globals entry for what app.js uses).
-12. **Views keep connection objects by reference.** filterDoc and diffDocs
-    never clone connections; app.js maps between editor indices and drawn
-    `data-conn` indices with `indexOf`. Cloning them breaks click-to-source
-    and cursor highlighting silently.
+12. **Doc lenses keep connection objects by reference.** filterDoc, diffDocs
+    and applyView never clone connections; app.js maps between editor indices
+    and drawn `data-conn` indices with `indexOf`. Cloning them breaks
+    click-to-source and cursor highlighting silently.
 13. **Golden SVGs are byte-exact.** Any rendering change (a color, an
     attribute, an offset) fails every golden test. That is the point: run
     `npm run test:golden`, open the changed SVGs, then commit them with the code.
     Node measures text with the 7.8px fallback, so goldens differ from what a
     browser lays out — they guard regressions, not browser pixels.
+    Editing an example's TEXT also churns its golden, because every SVG embeds
+    its YAML source in <metadata> — to prove a text-only edit changed no
+    drawing, diff the two goldens from `</metadata>` onward.
+14. **elkjs does NOT honor `elk.nodeSize.minimum`.** Every encoding is wrong:
+    the string forms (`"(200,60)"`, `"200,60"`) ignore the width and leak the
+    first number into the HEIGHT, and object/array forms throw a hard
+    `java.lang.Error` out of the JSON importer. ELK sizes a compound node from
+    its children, so a container node whose own chrome (glyph + label + kv
+    lines) is wider than its child grid would have the label spill outside the
+    box — real for a single-child host, whose floor is only left+child+right.
+    The supported fix is the pass-2 widening in `assignPorts`: take the natural
+    width from pass 1 and re-run with the shortfall added to that container's
+    right padding (`CHROME` WeakMap + `NODE_PAD`).
 
 ## Conventions
 
@@ -258,7 +294,10 @@ suggestions from the schema, so it follows automatically).
 - `src/netdiagram.js` must stay environment-agnostic: no `document`/`window`
   access without a guard, so tests run in plain node.
 - Validation philosophy: `parseSpec` collects **all** errors (with ids and
-  indices) and throws once — don't fail fast on the first problem.
+  indices) and throws once — don't fail fast on the first problem. `lintSpec`
+  is its non-fatal companion: `parseSpec` asks whether the document is well
+  FORMED, `lintSpec` whether the network it describes is COHERENT (addresses,
+  subnets, contradictions). It returns findings and never throws.
 - Visual conventions: platform *types* (vm / container / metal + aliases) draw
   the platform glyph AND set the border style — VM = dashed, bare metal =
   double, container = fine-dotted (hwOf + HW_STYLES). Tags are informational

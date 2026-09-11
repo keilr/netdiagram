@@ -233,6 +233,12 @@ connections as written, so a connection that ends at a *group* is one hop like
 any other — which is what makes `focus: <a group>` with `depth: 1` a useful
 "this zone and what touches it" view.
 
+Two things follow from that. A `focus` that is not itself a connection endpoint
+has nothing to expand, so `depth` does nothing — point it at a node or group
+that connections actually reach. And a kept guest always brings the host that
+draws it: the host survives as a shell holding only the guests that were kept,
+so `focus: <a VM>` shows that VM inside its hypervisor.
+
 ```bash
 npm run render -- hq.yaml --list-views      # what this spec defines
 npm run render -- hq.yaml out.svg --view edge
@@ -354,7 +360,7 @@ src/editor.js        CodeMirror setup: schema-driven completion, lint, hover
 src/importers.js     Ansible / Terraform / NetBox -> netdiagram YAML (browser + node)
 src/template.html    page shell with injection placeholders
 scripts/build.js     vendors js-yaml + elkjs, assembles dist/netdiagram.html
-scripts/render.js    CLI: YAML -> SVG (--watch --theme --tags --compare --csv --extract)
+scripts/render.js    CLI: YAML -> SVG (--watch --theme --tags --view --compare --csv --extract)
 scripts/import.js    CLI: inventory -> YAML scaffold
 scripts/check.js     CLI: architecture lint + drift vs a live inventory (CI gate)
 examples/            bundled examples (injected into the app's picker at build)

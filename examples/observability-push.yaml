@@ -71,3 +71,9 @@ connections:
   # dashboards
   - {from: graf, to: mimir, label: "tcp/8080 promql", protocol: tcp, port: 8080, comment: "dashboards query mimir"}
   - {from: sre,  to: graf,  label: "tcp/443 grafana", protocol: tcp, port: 443, comment: "dashboards over https"}
+
+# views: compare `--view ingest` here with `--view scrape` in the pull example
+views:
+  - {id: ingest, title: "Push — remote-write ingest", focus: mimir, depth: 1}
+  - {id: dashboards, title: "Push — dashboards", focus: graf, depth: 1}
+  - {id: fleet, title: "Push — linux fleet ingest", focus: fleet, depth: 1}

@@ -74,6 +74,12 @@ connections:
   # dashboards
   - {from: graf, to: mimir, label: &quot;tcp/8080 promql&quot;, protocol: tcp, port: 8080, comment: &quot;dashboards query mimir&quot;}
   - {from: sre,  to: graf,  label: &quot;tcp/443 grafana&quot;, protocol: tcp, port: 443, comment: &quot;dashboards over https&quot;}
+
+# views: compare `--view ingest` here with `--view scrape` in the pull example
+views:
+  - {id: ingest, title: &quot;Push — remote-write ingest&quot;, focus: mimir, depth: 1}
+  - {id: dashboards, title: &quot;Push — dashboards&quot;, focus: graf, depth: 1}
+  - {id: fleet, title: &quot;Push — linux fleet ingest&quot;, focus: fleet, depth: 1}
 </metadata>
     <defs>
     <pattern id="gridS" width="12" height="12" patternUnits="userSpaceOnUse">

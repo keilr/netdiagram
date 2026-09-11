@@ -533,7 +533,7 @@ const viewById = (doc, id) => viewsOf(doc).find(v => String(v.id) === String(id)
  * connection hops. Hops are counted over the connection graph as written, so a
  * group endpoint is one hop like any other. */
 function focusDoc(doc, spec, focusId, depth = 1){
-  const { nodeMap, groupMap } = spec;
+  const { nodeMap, groupMap, hosted } = spec;
   const start = String(focusId);
   if (!nodeMap.has(start) && !groupMap.has(start)) return doc;
 
@@ -570,6 +570,16 @@ function focusDoc(doc, spec, focusId, depth = 1){
   for (const id of near){
     if (groupMap.has(id)) addGroup(groupMap.get(id));
     else addNode(nodeMap.get(id));
+  }
+  /* A kept guest needs the host that DRAWS it: nodes are pruned from the
+   * top-level list down, so dropping the host would drop the guest with it and
+   * leave connections pointing at a node that is no longer there. Pull in the
+   * whole host chain; each host survives as a shell holding only kept guests
+   * (filterDoc does the same for tags). */
+  for (const id of [...keep]){
+    const seen = new Set();
+    let h = hosted && hosted.get(id);
+    while (h && !seen.has(h)){ seen.add(h); keep.add(h); h = hosted.get(h); }
   }
 
   const pruneNodes = list => (list || []).filter(n => n && keep.has(String(n.id)))

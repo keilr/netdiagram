@@ -165,3 +165,12 @@ connections:
   - {from: awx, to: esx, label: "tcp/443 https",  protocol: tcp, port: 443,  comment: "community.vmware modules"}
   - {from: awx, to: bak, label: "tcp/22 ssh",     protocol: tcp, port: 22,   comment: "snapshot + restore jobs"}
   - {from: awx, to: sec, label: "tcp/8200 vault", protocol: tcp, port: 8200, comment: "openbao secrets lookup"}
+
+# views: a big inventory is unreadable as one picture — slice it per target
+# group. Each focus is a connection endpoint, so depth: 1 pulls the control
+# node in with it.
+views:
+  - {id: windows, title: "Ansible — windows (winrm)", focus: win, depth: 1}
+  - {id: network, title: "Ansible — network devices", focus: net, depth: 1}
+  - {id: gpu, title: "Ansible — gpu fleet", focus: gpu, depth: 1}
+  - {id: secrets, title: "Ansible — openbao secrets", focus: sec, depth: 1}

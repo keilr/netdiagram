@@ -56,3 +56,10 @@ connections:
   - {from: web1, to: app1, label: "tcp/8080 api",  protocol: tcp, port: 8080}
   - {from: web2, to: app1, label: "tcp/8080 api",  protocol: tcp, port: 8080}
   - {from: app1, to: pgb,  label: "tcp/6432 pool", protocol: tcp, port: 6432}
+
+# views: a focus on a guest pulls in its host automatically — the host is what
+# draws it, so it comes along with the box it lives in
+views:
+  - {id: edge, title: "Virt — edge path", focus: fw, depth: 1}
+  - {id: app, title: "Virt — app path", focus: app1, depth: 1}
+  - {id: prod, title: "Virt — prod hosts", tags: [prod]}

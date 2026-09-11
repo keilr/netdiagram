@@ -67,4 +67,10 @@ connections:
   - {from: admin, to: members,   label: "tcp/8443 lxd-api", protocol: tcp, port: 8443, comment: "lxc + microcloud cli"}
   - {from: admin, to: instances, label: "tcp/22 ssh",       protocol: tcp, port: 22,   comment: "instance access"}
   - {from: instances, to: uplink, label: "ovn uplink",      comment: "snat via br-uplink"}
+  # instances -> members relates two aggregates (and the instances carry their
+  # own OVN subnet), so it stays an association rather than node containment
   - {from: instances, to: members, label: "runs on", direction: none}
+
+views:
+  - {id: uplink, title: "MicroCloud — north-south uplink", focus: uplink, depth: 1}
+  - {id: members, title: "MicroCloud — cluster members", focus: members, depth: 1}

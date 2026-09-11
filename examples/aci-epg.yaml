@@ -95,3 +95,9 @@ connections:
   - {from: border,  to: epg-web, label: "tcp/443 web-https",  protocol: tcp, port: 443}
   - {from: epg-web, to: epg-app, label: "tcp/8080 app-api",   protocol: tcp, port: 8080}
   - {from: epg-app, to: epg-db,  label: "tcp/5432 db-sql",    protocol: tcp, port: 5432}
+
+# views: one tenant, several pictures of it — `--view db`, or the View picker
+views:
+  - {id: north-south, title: "ACI — north-south (L3Out)", focus: border, depth: 1}
+  - {id: web, title: "ACI — EPG web contracts", focus: epg-web, depth: 1}
+  - {id: db, title: "ACI — what reaches EPG db", focus: epg-db, depth: 1}
