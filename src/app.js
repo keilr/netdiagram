@@ -746,6 +746,150 @@ compareFile.addEventListener('change', () => {
   });
 });
 
+/* ---------------- optional LLM assistant ----------------
+ * Present only when src/assist.js was built in (`npm run build -- --no-assist`
+ * leaves it out); the button stays hidden otherwise, so an offline build shows
+ * no trace of it. Nothing is ever sent until Send is pressed.
+ *
+ * The proposal is NEVER written over the buffer silently: it is loaded with the
+ * previous text as the compare baseline, so the existing +/- /~ machinery is
+ * the review surface, and Discard puts the original back. */
+const ASSIST = (typeof Assist !== 'undefined') ? Assist : null;
+const btnAssist = $('#btn-assist');
+if (ASSIST){
+  const back = $('#assist-back'), provSel = $('#assist-provider');
+  const baseIn = $('#assist-base'), modelIn = $('#assist-model'), keyIn = $('#assist-key');
+  const rememberIn = $('#assist-remember'), keyRow = $('#assist-key-row'), noteEl = $('#assist-note');
+  const promptIn = $('#assist-prompt'), contextIn = $('#assist-context');
+  const payloadEl = $('#assist-payload'), statusEl2 = $('#assist-status');
+  const btnSend = $('#assist-send'), btnClose = $('#assist-close');
+  const review = $('#assist-review'), reviewMsg = $('#assist-review-msg');
+  let cfg = ASSIST.loadConfig(LS);
+  let pending = null;            // { originalText, prevCompare }
+
+  btnAssist.hidden = false;
+  ASSIST.PROVIDERS.forEach(p => {
+    const o = document.createElement('option');
+    o.value = p.id; o.textContent = p.label;
+    provSel.appendChild(o);
+  });
+
+  const currentCfg = () => ({
+    providerId: provSel.value,
+    base: baseIn.value.trim(),
+    model: modelIn.value.trim(),
+    key: keyIn.value,
+    remember: rememberIn.checked,
+  });
+  function applyProvider(id, keepFields){
+    const p = ASSIST.providerById(id);
+    provSel.value = p.id;
+    if (!keepFields){ baseIn.value = p.base; modelIn.value = p.model; }
+    keyRow.hidden = p.id === 'custom' ? false : (!p.keyRequired && p.local);
+    noteEl.textContent = (p.local ? 'Stays on your machine. ' : 'Leaves your machine: your topology is sent to a third party. ') + (p.note || '');
+    noteEl.classList.toggle('warn', !p.local);
+    refreshPayload();
+  }
+  function refreshPayload(){
+    const c = currentCfg();
+    const req = ASSIST.buildRequest(c, {
+      system: '<the netdiagram JSON Schema and authoring rules>',
+      messages: [{ role: 'user', content: ASSIST.userPrompt({
+        instruction: promptIn.value, currentYaml: contextIn.checked ? editor.value : '' }) }],
+    });
+    const shownHeaders = Object.fromEntries(Object.entries(req.headers).map(
+      ([k, v]) => [k, /^(authorization|x-api-key)$/i.test(k) ? '<your key>' : v]));
+    payloadEl.textContent = `POST ${req.url}\n${JSON.stringify(shownHeaders, null, 2)}\n\n`
+      + JSON.stringify(req.body, null, 2);
+  }
+  const setAssistStatus = (text, isErr) => {
+    statusEl2.textContent = text; statusEl2.classList.toggle('error', !!isErr);
+  };
+
+  provSel.addEventListener('change', () => applyProvider(provSel.value, false));
+  [baseIn, modelIn, promptIn].forEach(el => el.addEventListener('input', refreshPayload));
+  contextIn.addEventListener('change', refreshPayload);
+
+  function openAssist(){
+    cfg = ASSIST.loadConfig(LS);
+    applyProvider(cfg.providerId, false);
+    if (cfg.base) baseIn.value = cfg.base;
+    if (cfg.model) modelIn.value = cfg.model;
+    keyIn.value = cfg.key || '';
+    rememberIn.checked = !!cfg.remember;
+    setAssistStatus('');
+    back.hidden = false;
+    promptIn.focus();
+    refreshPayload();
+  }
+  const closeAssist = () => { back.hidden = true; };
+  btnAssist.addEventListener('click', openAssist);
+  btnClose.addEventListener('click', closeAssist);
+  back.addEventListener('click', e => { if (e.target === back) closeAssist(); });
+  window.addEventListener('keydown', e => { if (e.key === 'Escape' && !back.hidden) closeAssist(); });
+
+  /* the gate: a proposal must parse AND pass the architecture lint */
+  function validateProposal(yaml){
+    let spec;
+    try { spec = parseSpec(yaml); }
+    catch (e){ return e.errors || [{ path: null, message: e.message }]; }
+    return lintSpec(spec).filter(f => f.severity === 'error');
+  }
+
+  btnSend.addEventListener('click', async () => {
+    const c = currentCfg();
+    const p = ASSIST.providerById(c.providerId);
+    if (!c.base){ setAssistStatus('Set an endpoint first.', true); return; }
+    if (p.keyRequired && !c.key){ setAssistStatus(`${p.label} needs an API key.`, true); return; }
+    if (!promptIn.value.trim()){ setAssistStatus('Describe what it should do.', true); return; }
+    ASSIST.saveConfig(LS, c);
+    btnSend.disabled = true;
+    setAssistStatus('Sending…');
+    try {
+      const out = await ASSIST.generate(c, {
+        schema: SCHEMA,
+        instruction: promptIn.value,
+        currentYaml: contextIn.checked ? editor.value : '',
+        validate: validateProposal,
+      });
+      closeAssist();
+      proposeChange(out.yaml, out.repaired
+        ? 'AI proposal (repaired once after validation) — review the marked changes'
+        : 'AI proposal — review the marked changes');
+    } catch (err) {
+      setAssistStatus(err.message, true);
+    } finally {
+      btnSend.disabled = false;
+    }
+  });
+
+  /* load the proposal with the previous text as the compare baseline */
+  function proposeChange(yaml, message){
+    const originalText = editor.value;
+    let baseDoc = null;
+    try { baseDoc = parseSpec(originalText).doc; } catch (e) { /* was invalid: no diff to show */ }
+    pending = { originalText, prevCompare: compare };
+    if (baseDoc) compare = { kind: 'file', name: 'before assist', doc: baseDoc };
+    refreshCompare();
+    editor.setValue(yaml);
+    reviewMsg.textContent = message;
+    review.hidden = false;
+    clearTimeout(timer); fitNextRender = true; render(yaml);
+  }
+  function endReview(restore){
+    if (!pending) return;
+    const { originalText, prevCompare } = pending;
+    pending = null;
+    review.hidden = true;
+    compare = prevCompare;
+    refreshCompare();
+    if (restore) editor.setValue(originalText);
+    clearTimeout(timer); render(editor.value);
+  }
+  $('#assist-accept').addEventListener('click', () => { endReview(false); setStatus('Proposal accepted.'); });
+  $('#assist-discard').addEventListener('click', () => { endReview(true); setStatus('Proposal discarded.'); });
+}
+
 /* initial load: a shared link wins (asking before it replaces unsaved work),
  * else the autosaved draft, else the default example */
 (async () => {

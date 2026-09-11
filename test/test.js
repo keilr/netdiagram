@@ -1261,6 +1261,268 @@ test("containment: sourceMap locates a nested node; the cursor picks the innermo
   assert.deepStrictEqual(m.itemAt(text.indexOf("id: v") + 2), { kind: "node", id: "v" });
 });
 
+// ---------- MCP server (netdiagram as a tool for agents) ----------
+/* Drive the real server over stdio: spawn, write newline-delimited JSON-RPC,
+ * collect one response per request.
+ *
+ * Requests are sent ONE AT A TIME, each awaiting its reply, because that is how
+ * an agent actually behaves — and because the server dispatches concurrently,
+ * so batching a tool that reads a file behind one that writes it would race. */
+function mcpSession(messages) {
+  const { spawn } = require("child_process");
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, [path.join(root, "scripts/mcp.js")], { stdio: ["pipe", "pipe", "pipe"] });
+    const got = [];
+    let buf = "", err = "", next = 0;
+    const done = (fn, arg) => { try { child.kill(); } catch (e) {} fn(arg); };
+    const timer = setTimeout(() => done(reject, new Error("mcp server timed out. stderr: " + err)), 30000);
+    /* write until a request that expects a reply; notifications need no wait */
+    const pump = () => {
+      while (next < messages.length) {
+        const m = messages[next++];
+        child.stdin.write(JSON.stringify(m) + "\n");
+        if (m.id !== undefined) return;
+      }
+      clearTimeout(timer);
+      done(resolve, { responses: got, stderr: err });
+    };
+    child.stdout.setEncoding("utf8");
+    child.stdout.on("data", (d) => {
+      buf += d;
+      let nl, advanced = false;
+      while ((nl = buf.indexOf("\n")) >= 0) {
+        const line = buf.slice(0, nl).trim();
+        buf = buf.slice(nl + 1);
+        if (line) { got.push(JSON.parse(line)); advanced = true; }
+      }
+      if (advanced) pump();
+    });
+    child.stderr.on("data", (d) => { err += d; });
+    child.on("error", (e) => { clearTimeout(timer); reject(e); });
+    pump();
+  });
+}
+const mcpText = (r) => r.result.content.map((c) => c.text).join("");
+
+test("mcp: handshake, tool list, schema and check", async () => {
+  const { responses } = await mcpSession([
+    { jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2024-11-05", capabilities: {} } },
+    { jsonrpc: "2.0", method: "notifications/initialized" },
+    { jsonrpc: "2.0", id: 2, method: "tools/list" },
+    { jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "netdiagram_schema", arguments: {} } },
+    { jsonrpc: "2.0", id: 4, method: "tools/call",
+      params: { name: "netdiagram_check", arguments: { yaml: "nodes:\n  - {id: a}\nconnections:\n  - {from: a, to: ghost}\n" } } },
+    { jsonrpc: "2.0", id: 5, method: "tools/call",
+      params: { name: "netdiagram_check", arguments: { yaml: EXAMPLE } } },
+    { jsonrpc: "2.0", id: 6, method: "tools/call", params: { name: "netdiagram_nope", arguments: {} } },
+  ]);
+  const by = new Map(responses.map((r) => [r.id, r]));
+  assert.strictEqual(by.get(1).result.serverInfo.name, "netdiagram");
+  assert.ok(by.get(1).result.capabilities.tools, "advertises tool capability");
+
+  const names = by.get(2).result.tools.map((t) => t.name);
+  for (const n of ["netdiagram_schema", "netdiagram_check", "netdiagram_render",
+    "netdiagram_rules", "netdiagram_diff", "netdiagram_import", "netdiagram_views", "netdiagram_extract"])
+    assert.ok(names.includes(n), `tools/list offers ${n}`);
+  assert.ok(by.get(2).result.tools.every((t) => t.inputSchema && t.inputSchema.type === "object"),
+    "every tool declares an object inputSchema");
+
+  assert.ok(mcpText(by.get(3)).includes("$defs"), "schema tool returns the JSON Schema");
+
+  const bad = JSON.parse(mcpText(by.get(4)));
+  assert.strictEqual(bad.ok, false);
+  assert.ok(JSON.stringify(bad.errors).includes("ghost"), "the parse error reaches the agent");
+
+  const good = JSON.parse(mcpText(by.get(5)));
+  assert.strictEqual(good.ok, true, JSON.stringify(good).slice(0, 200));
+  assert.deepStrictEqual(good.errors, []);
+
+  assert.strictEqual(by.get(6).result.isError, true, "an unknown tool is an error, not a crash");
+});
+
+test("mcp: render, diff, views and extract", async () => {
+  const os = require("os");
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "netdiagram-mcp-"));
+  const out = path.join(dir, "out.svg");
+  try {
+    const base = "nodes:\n  - {id: a}\n  - {id: b}\nconnections:\n  - {from: a, to: b}\n";
+    const cur = "nodes:\n  - {id: a}\n  - {id: c}\nconnections:\n  - {from: a, to: c}\n";
+    const { responses } = await mcpSession([
+      { jsonrpc: "2.0", id: 1, method: "initialize", params: {} },
+      { jsonrpc: "2.0", id: 2, method: "tools/call",
+        params: { name: "netdiagram_render", arguments: { yaml: EXAMPLE, out_path: out, date: "2000-01-01" } } },
+      { jsonrpc: "2.0", id: 3, method: "tools/call",
+        params: { name: "netdiagram_diff", arguments: { base_yaml: base, current_yaml: cur } } },
+      { jsonrpc: "2.0", id: 4, method: "tools/call", params: { name: "netdiagram_views", arguments: { yaml: EXAMPLE } } },
+      { jsonrpc: "2.0", id: 5, method: "tools/call",
+        params: { name: "netdiagram_extract", arguments: { svg: out } } },
+      { jsonrpc: "2.0", id: 6, method: "tools/call",
+        params: { name: "netdiagram_render", arguments: { yaml: EXAMPLE, view: "does-not-exist" } } },
+    ]);
+    const by = new Map(responses.map((r) => [r.id, r]));
+    assert.ok(fs.existsSync(out), "render wrote the SVG");
+    assert.ok(fs.readFileSync(out, "utf8").includes(">2000-01-01</text>"), "render honored the pinned date");
+
+    const d = JSON.parse(mcpText(by.get(3)));
+    assert.deepStrictEqual(d.nodes.find((n) => n.id === "c"), { id: "c", status: "added" });
+    assert.deepStrictEqual(d.nodes.find((n) => n.id === "b"), { id: "b", status: "removed" });
+    assert.ok(!d.nodes.some((n) => n.id === "a"), "an unchanged node is not listed");
+    // counts aggregate nodes + groups + connections: node c and its connection
+    assert.strictEqual(d.counts.added, 2);
+    assert.strictEqual(d.counts.removed, 2);
+
+    const views = JSON.parse(mcpText(by.get(4)));
+    assert.ok(views.some((v) => v.id === "edge"), "views tool lists the example's views");
+
+    assert.ok(mcpText(by.get(5)).includes("HQ edge & core"), "extract recovers the embedded source");
+    assert.strictEqual(by.get(6).result.isError, true, "an unknown view is reported, not thrown");
+    assert.ok(mcpText(by.get(6)).includes("does-not-exist"));
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// ---------- optional LLM assistant ----------
+const assist = require("../src/assist.js");
+
+test("assist: OpenAI and Anthropic wire formats differ correctly", () => {
+  const msgs = [{ role: "user", content: "hi" }];
+  const oa = assist.buildRequest(
+    { providerId: "openai", base: "https://api.openai.com/v1/", model: "gpt-4o", key: "sk-test" },
+    { system: "SYS", messages: msgs });
+  assert.ok(oa.url.endsWith("/v1/chat/completions"), oa.url);
+  assert.strictEqual(oa.headers.authorization, "Bearer sk-test");
+  assert.strictEqual(oa.body.messages[0].role, "system", "system is a message for the OpenAI shape");
+  assert.strictEqual(oa.body.messages[1].content, "hi");
+
+  const an = assist.buildRequest(
+    { providerId: "anthropic", base: "https://api.anthropic.com/v1", model: "claude-sonnet-5", key: "sk-ant" },
+    { system: "SYS", messages: msgs });
+  assert.ok(an.url.endsWith("/v1/messages"), an.url);
+  assert.strictEqual(an.headers["x-api-key"], "sk-ant");
+  assert.ok(an.headers["anthropic-version"], "sends anthropic-version");
+  assert.strictEqual(an.headers["anthropic-dangerous-direct-browser-access"], "true",
+    "browser calls need the explicit opt-in or CORS blocks them");
+  assert.ok(!an.headers.authorization, "no bearer header for Anthropic");
+  assert.strictEqual(an.body.system, "SYS", "system is top-level for the Anthropic shape");
+  assert.strictEqual(an.body.messages.length, 1);
+});
+
+test("assist: response parsing per shape, and fenced YAML is unwrapped", () => {
+  assert.strictEqual(
+    assist.parseResponse({ providerId: "openai" }, { choices: [{ message: { content: "A" } }] }), "A");
+  assert.strictEqual(
+    assist.parseResponse({ providerId: "anthropic" },
+      { content: [{ type: "text", text: "B" }, { type: "thinking", text: "x" }] }), "B");
+  assert.throws(() => assist.parseResponse({ providerId: "openai" }, { error: { message: "nope" } }), /nope/);
+  assert.strictEqual(assist.extractYaml("```yaml\nnodes: []\n```"), "nodes: []");
+  assert.strictEqual(assist.extractYaml("  nodes: []  "), "nodes: []");
+});
+
+/* a fetch stand-in that replays canned completions, so no network is touched */
+const fakeFetch = (replies) => {
+  let i = 0;
+  return async () => ({
+    ok: true, status: 200, statusText: "OK",
+    text: async () => JSON.stringify({ choices: [{ message: { content: replies[i++] } }] }),
+  });
+};
+const cfg = { providerId: "custom", base: "http://localhost:9/v1", model: "m" };
+const validateFake = (y) => (y.includes("GOOD") ? null : [{ path: ["nodes", 0], message: "bad node" }]);
+
+test("assist: a valid first answer is used as-is", async () => {
+  const out = await assist.generate(cfg,
+    { schema: {}, instruction: "x", currentYaml: "", validate: validateFake },
+    fakeFetch(["GOOD: 1"]));
+  assert.strictEqual(out.yaml, "GOOD: 1");
+  assert.strictEqual(out.attempts, 1);
+  assert.strictEqual(out.repaired, false);
+});
+
+test("assist: an invalid answer is repaired once using the validation errors", async () => {
+  const seen = [];
+  const spyFetch = (replies) => {
+    let i = 0;
+    return async (url, init) => {
+      seen.push(JSON.parse(init.body));
+      return { ok: true, status: 200, statusText: "OK",
+        text: async () => JSON.stringify({ choices: [{ message: { content: replies[i++] } }] }) };
+    };
+  };
+  const out = await assist.generate(cfg,
+    { schema: {}, instruction: "x", currentYaml: "", validate: validateFake },
+    spyFetch(["BAD: 1", "GOOD: 2"]));
+  assert.strictEqual(out.yaml, "GOOD: 2");
+  assert.strictEqual(out.attempts, 2);
+  assert.strictEqual(out.repaired, true);
+  const repair = seen[1].messages[seen[1].messages.length - 1].content;
+  assert.ok(repair.includes("bad node"), "the model is told what was wrong");
+  assert.ok(repair.includes("nodes.0"), "including the document path");
+});
+
+test("assist: a proposal that stays invalid is refused, never applied", async () => {
+  await assert.rejects(
+    assist.generate(cfg, { schema: {}, instruction: "x", currentYaml: "", validate: validateFake },
+      fakeFetch(["BAD: 1", "STILL BAD"])),
+    (e) => e.errors && e.errors.length > 0 && /could not produce a valid document/.test(e.message));
+});
+
+test("assist: the API key is only persisted when the user opts in", () => {
+  const store = (() => {
+    const m = new Map();
+    return { getItem: (k) => (m.has(k) ? m.get(k) : null), setItem: (k, v) => m.set(k, String(v)) };
+  })();
+  assist.saveConfig(store, { providerId: "openai", base: "b", model: "m", key: "secret", remember: false });
+  assert.strictEqual(JSON.parse(store.getItem(assist.STORAGE_KEY)).key, "", "not remembered by default");
+  assert.strictEqual(assist.loadConfig(store).model, "m", "the rest of the settings persist");
+  assist.saveConfig(store, { providerId: "openai", base: "b", model: "m", key: "secret", remember: true });
+  assert.strictEqual(assist.loadConfig(store).key, "secret", "remembered only on request");
+});
+
+test("assist: local providers are offered first and need no key", () => {
+  const ids = assist.PROVIDERS.map((p) => p.id);
+  assert.ok(ids.includes("anthropic") && ids.includes("openai"), "hosted providers are offered");
+  assert.ok(assist.PROVIDERS[0].local, "a local engine is the default");
+  assert.ok(assist.PROVIDERS.filter((p) => p.local).every((p) => !p.keyRequired),
+    "local engines need no API key");
+  assert.strictEqual(assist.providerById("anthropic").api, "anthropic");
+  assert.strictEqual(assist.providerById("openrouter").api, "openai");
+});
+
+test("build: --no-assist strips the assistant from dist entirely", () => {
+  const { execFileSync } = require("child_process");
+  const build = path.join(root, "scripts/build.js");
+  const distFile = path.join(root, "dist/netdiagram.html");
+  try {
+    execFileSync(process.execPath, [build, "--no-assist"], { stdio: "pipe" });
+    const html = fs.readFileSync(distFile, "utf8");
+    assert.ok(!html.includes("anthropic-dangerous-direct-browser-access"),
+      "no provider code in an air-gapped build");
+    assert.ok(!/window\.Assist|root\.Assist/.test(html), "the Assist global is absent");
+  } finally {
+    execFileSync(process.execPath, [build], { stdio: "pipe" });   // restore for later tests
+  }
+  const restored = fs.readFileSync(distFile, "utf8");
+  assert.ok(restored.includes("anthropic-dangerous-direct-browser-access"), "default build includes it");
+});
+
+test("app: the Assist panel offers providers and sends nothing on open", async () => {
+  const { win, doc } = await bootPage();
+  const btn = doc.querySelector("#btn-assist");
+  assert.ok(!btn.hidden, "the Assist button appears in a default build");
+  assert.ok(doc.querySelector("#assist-back").hidden, "the panel starts closed");
+  click(win, btn);
+  assert.ok(!doc.querySelector("#assist-back").hidden, "clicking opens it");
+  const opts = [...doc.querySelectorAll("#assist-provider option")].map((o) => o.value);
+  assert.ok(opts.includes("ollama") && opts.includes("anthropic") && opts.includes("openai"),
+    "local and hosted providers are listed: " + opts.join(","));
+  assert.strictEqual(doc.querySelector("#assist-provider").value, "ollama", "a local engine is preselected");
+  assert.ok(doc.querySelector("#assist-base").value.includes("localhost"), "and its endpoint is local");
+  assert.ok(doc.querySelector("#assist-payload").textContent.includes("POST http://localhost"),
+    "the exact payload is shown before anything is sent");
+  assert.ok(doc.querySelector("#assist-review").hidden, "no review bar until a proposal arrives");
+});
+
 // ---------- golden SVGs ----------
 /* Every example rendered with a fixed date, byte-compared against
  * test/golden/. After an intended rendering change: npm run test:golden,

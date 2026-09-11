@@ -23,6 +23,9 @@ npm run test:golden  # rebuild + rewrite test/golden/*.svg — ONLY after an int
 npm run render -- in.yaml [out.svg] [--theme --tags --compare --csv --date --extract]
                    #        [--view id --list-views]  named views (views: below)
 npm run import -- <file|-> [--from ansible|terraform|netbox] [-o out.yaml]
+npm run build -- --no-assist   # same page WITHOUT the optional LLM assistant
+npm run mcp        # MCP server (stdio) exposing the pipeline to LLM agents;
+                   # `node scripts/mcp.js --tools` lists the tool names
 npm run check -- net.yaml [--against inv|-] [--from ...] [--strict] [--json]
                    # CI gate: architecture lint (+ drift vs a live inventory);
                    # exits 1 on findings, 2 on bad usage. All bundled examples
@@ -84,6 +87,15 @@ src/app.js          Browser-only wire-up: CodeMirror editor, debounced render
                     access is guarded, so an opaque/unavailable origin hides the
                     project UI and degrades to no-op). Expects globals ELK,
                     jsyaml, EXAMPLES, SCHEMA, makeEditor, Importers.
+src/assist.js       OPTIONAL LLM assistant (dual shape; publishes window.Assist).
+                    Provider presets (local engines first), two wire formats —
+                    openai /chat/completions and anthropic /messages — plus
+                    generate(), which validates the model's YAML through a
+                    caller-supplied callback and spends ONE repair round on the
+                    errors. Pure except for complete(), whose fetch is
+                    injectable, so the tests never touch the network.
+                    `npm run build -- --no-assist` omits the file entirely;
+                    app.js guards on `typeof Assist`.
 src/editor.js       CodeMirror 6 setup (bundled separately by esbuild):
                     YAML mode + json-schema lint/hover/key-completion, plus
                     valueCompletion() — value hints the library doesn't do:
@@ -104,6 +116,10 @@ scripts/import.js   CLI: inventory -> YAML scaffold (stdin with `-`).
 scripts/check.js    CLI: architecture lint (lintSpec) + drift against a live
                     inventory (driftReport). Exits 1 on findings, 2 on bad
                     usage, so a spec can gate a pull request.
+scripts/mcp.js      MCP server over stdio (newline-delimited JSON-RPC 2.0):
+                    schema / check / render / rules / diff / import / views /
+                    extract. Never loaded by the browser build — dist/ is
+                    untouched by it. See gotcha 15.
 examples/*.yaml     All examples are injected into the app at build time
                     (EXAMPLES array; picker below the editor). hq-edge-core.yaml
                     is the default on load and the one tests assert against;
@@ -287,6 +303,17 @@ suggestions from the schema, so it follows automatically).
     The supported fix is the pass-2 widening in `assignPorts`: take the natural
     width from pass 1 and re-run with the shortfall added to that container's
     right padding (`CHROME` WeakMap + `NODE_PAD`).
+15. **In scripts/mcp.js, stdout IS the protocol.** It carries newline-delimited
+    JSON-RPC and nothing else — a stray `console.log` corrupts the stream and
+    the agent silently loses the server. All diagnostics go to stderr. Tool
+    failures are returned as `isError` content rather than thrown, because the
+    spec error text (with its document paths) is the most useful thing the
+    agent can act on.
+16. **The LLM assistant must never be required.** Anything it produces is YAML
+    that goes through `parseSpec` + `lintSpec` before it can reach the diagram,
+    and it is applied only through the compare view (Accept / Discard), never
+    written over the buffer. Keep it behind `typeof Assist`, keep the network
+    call in one injectable place, and keep the tests offline.
 
 ## Conventions
 

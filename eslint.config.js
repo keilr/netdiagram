@@ -40,6 +40,17 @@ module.exports = [
   },
 
   {
+    // optional LLM assistant: same dual shape (window.Assist / module.exports)
+    files: ["src/assist.js"],
+    languageOptions: {
+      ecmaVersion: 2022,
+      sourceType: "commonjs",
+      globals: { ...globals.node, ...globals.browser },
+    },
+    rules: shared,
+  },
+
+  {
     files: ["src/app.js"],
     languageOptions: {
       ecmaVersion: 2022,
@@ -54,11 +65,14 @@ module.exports = [
         parseSpec: "readonly", specFromDoc: "readonly", sourceMap: "readonly",
         buildElk: "readonly", assignPorts: "readonly", renderSVG: "readonly",
         allTags: "readonly", filterDoc: "readonly", diffDocs: "readonly", flatNodes: "readonly",
+        lintSpec: "readonly",
         viewsOf: "readonly", viewById: "readonly", applyView: "readonly",
         connectionRules: "readonly", rulesToCsv: "readonly", extractSource: "readonly",
         encodeShare: "readonly", decodeShare: "readonly", esc: "readonly",
         // from src/importers.js
         Importers: "readonly",
+        // from src/assist.js — absent in a --no-assist build, so app.js guards it
+        Assist: "readonly",
       },
     },
     rules: shared,

@@ -118,6 +118,35 @@
   #tag-chips{display:flex;gap:5px;flex-wrap:wrap}
   .tag-chip{padding:2px 9px;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;border-radius:10px}
   .tag-chip[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:#fff}
+  /* ---- optional LLM assistant (absent entirely in a --no-assist build) ---- */
+  #assist-review{flex-shrink:0;display:flex;align-items:center;gap:10px;padding:8px 12px;
+    border-top:1px solid #2c3542;background:#2a2118;color:#f0c088;font-size:11.5px}
+  #assist-review[hidden]{display:none}
+  #assist-review-msg{flex:1;min-width:0}
+  #assist-back{position:fixed;inset:0;background:rgba(10,14,20,.68);z-index:20;
+    display:flex;align-items:center;justify-content:center;padding:20px}
+  #assist-back[hidden]{display:none}
+  #assist-panel{width:min(620px,100%);max-height:88vh;overflow:auto;background:var(--slate);
+    border:1px solid #3a4556;border-radius:8px;padding:18px 20px;display:flex;flex-direction:column;gap:12px}
+  #assist-panel h2{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:#8fa3bf;font-weight:600}
+  #assist-panel label{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#7d8da3;
+    display:block;margin-bottom:4px}
+  #assist-panel input[type=text],#assist-panel input[type=password],#assist-panel textarea,#assist-panel select{
+    font:inherit;font-size:12px;width:100%;padding:7px 10px;background:var(--slate-2);color:#d7dee8;
+    border:1px solid #3a4556;border-radius:4px}
+  #assist-panel textarea{resize:vertical;min-height:74px;line-height:1.5}
+  #assist-panel .row{display:flex;gap:10px}
+  #assist-panel .row>*{flex:1;min-width:0}
+  .assist-check{display:flex;align-items:center;gap:7px;font-size:11.5px;color:#9aa7ba;text-transform:none;letter-spacing:0}
+  .assist-check input{width:auto}
+  #assist-note{font-size:11px;line-height:1.5;color:#8fa3bf}
+  #assist-note.warn{color:#f0c088}
+  #assist-preview{font-size:11px;color:#7d8da3}
+  #assist-preview pre{margin-top:6px;max-height:190px;overflow:auto;white-space:pre-wrap;word-break:break-word;
+    background:var(--slate-2);border:1px solid #2c3542;border-radius:4px;padding:9px;color:#9aa7ba;line-height:1.45}
+  #assist-status{font-size:11.5px;color:#7d8da3;min-height:17px}
+  #assist-status.error{color:#ff9d8f}
+  #assist-actions{display:flex;gap:9px;justify-content:flex-end}
   body.dropping #right-pane::after{content:"Drop to import";position:absolute;inset:12px;display:flex;
     align-items:center;justify-content:center;border:2px dashed var(--accent);border-radius:8px;
     background:rgba(22,28,37,.72);color:#f0c088;font-size:14px;letter-spacing:.08em;z-index:5;pointer-events:none}
@@ -163,6 +192,7 @@
   <button id="btn-save" title="Save the current YAML as a named project in this browser (Ctrl/Cmd+S)">Save</button>
   <button id="btn-import" title="Load a file into the editor: netdiagram YAML, an SVG exported by netdiagram, an Ansible inventory, Terraform state or a NetBox export (or drop it onto the page)">Import</button>
   <input id="file-yaml" type="file" accept=".yaml,.yml,.svg,.ini,.json,.tfstate,.txt,text/yaml,text/plain,image/svg+xml,application/json" hidden>
+  <button id="btn-assist" title="Draft or revise the YAML with an LLM endpoint you choose — local or hosted. Nothing is sent until you configure a provider and press Send." hidden>Assist</button>
   <button id="btn-yaml" title="Download the current YAML to a file">Download YAML</button>
   <button id="btn-del" title="Delete the current project" hidden>Delete</button>
   <div class="picker" id="compare-picker">
@@ -184,6 +214,11 @@
       <select id="sel-example"
               aria-label="Load an example into the editor"
               title="Loads the selected example into the editor (replaces the current contents)"></select>
+    </div>
+    <div id="assist-review" hidden>
+      <span id="assist-review-msg"></span>
+      <button id="assist-accept" class="primary">Accept</button>
+      <button id="assist-discard">Discard</button>
     </div>
     <div id="status">Ready.</div>
   </div>
@@ -211,6 +246,52 @@
     </div>
   </div>
 </main>
+
+<div id="assist-back" hidden>
+  <div id="assist-panel" role="dialog" aria-modal="true" aria-labelledby="assist-title">
+    <h2 id="assist-title">Assist — draft with an LLM</h2>
+    <div class="row">
+      <div>
+        <label for="assist-provider">Provider</label>
+        <select id="assist-provider"></select>
+      </div>
+      <div>
+        <label for="assist-model">Model</label>
+        <input id="assist-model" type="text" spellcheck="false" autocomplete="off">
+      </div>
+    </div>
+    <div>
+      <label for="assist-base">Endpoint</label>
+      <input id="assist-base" type="text" spellcheck="false" autocomplete="off">
+    </div>
+    <div id="assist-key-row">
+      <label for="assist-key">API key</label>
+      <input id="assist-key" type="password" spellcheck="false" autocomplete="off">
+      <label class="assist-check" style="margin-top:6px">
+        <input id="assist-remember" type="checkbox">
+        Remember the key in this browser (stored in local storage)
+      </label>
+    </div>
+    <p id="assist-note"></p>
+    <div>
+      <label for="assist-prompt">What should it do?</label>
+      <textarea id="assist-prompt" placeholder="e.g. add a second firewall in HA with the edge router, or: draft a three-tier web app behind a WAF"></textarea>
+      <label class="assist-check" style="margin-top:7px">
+        <input id="assist-context" type="checkbox" checked>
+        Send the current document as context (uncheck to draft from scratch)
+      </label>
+    </div>
+    <details id="assist-preview">
+      <summary>Show exactly what will be sent</summary>
+      <pre id="assist-payload"></pre>
+    </details>
+    <div id="assist-status"></div>
+    <div id="assist-actions">
+      <button id="assist-close">Cancel</button>
+      <button id="assist-send" class="primary">Send</button>
+    </div>
+  </div>
+</div>
 
 <script><!--INJECT:APP--></script>
 </body>

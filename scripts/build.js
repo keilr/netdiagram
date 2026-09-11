@@ -65,13 +65,19 @@ const examples = fs.readdirSync(path.join(root, "examples"))
 const schema  = read("netdiagram-schema.json");
 const core = read("src/netdiagram.js");
 const importers = read("src/importers.js");
+/* The LLM assistant is OPTIONAL. `npm run build -- --no-assist` leaves it out
+ * entirely, so an air-gapped build provably contains no outbound-request code;
+ * app.js checks for the global and keeps its button hidden when it is absent. */
+const noAssist = process.argv.includes("--no-assist");
+const assist = noAssist ? "" : read("src/assist.js");
 const app = read("src/app.js");
 const pkg = require(path.join(root, "package.json"));
 const payload =
   `window.NETDIAGRAM_VERSION = ${JSON.stringify(pkg.version)};\n` +
   // hosted copy that share links point at when the page is opened from a file
   `window.NETDIAGRAM_HOMEPAGE = ${JSON.stringify(pkg.homepage || "")};\n` +
-  `const EXAMPLES = ${JSON.stringify(examples)};\nconst SCHEMA = ${schema};\n` + core + "\n" + importers + "\n" + app;
+  `const EXAMPLES = ${JSON.stringify(examples)};\nconst SCHEMA = ${schema};\n` +
+  core + "\n" + importers + "\n" + assist + "\n" + app;
 
 // 5. assemble
 let html = read("src/template.html");
@@ -82,4 +88,4 @@ html = inject(html, "<!--INJECT:APP-->",     scriptSafe(payload));
 
 fs.mkdirSync(path.join(root, "dist"), { recursive: true });
 fs.writeFileSync(path.join(root, "dist", "netdiagram.html"), html);
-console.log(`dist/netdiagram.html — ${Math.round(html.length / 1024)} KB`);
+console.log(`dist/netdiagram.html — ${Math.round(html.length / 1024)} KB${noAssist ? " (without the LLM assistant)" : ""}`);
