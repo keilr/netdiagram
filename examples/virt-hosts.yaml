@@ -1,0 +1,58 @@
+# Virtualization hosts with their guests drawn INSIDE them — node containment.
+# A node that carries `nodes:` becomes a box its children live in, which is what
+# "this VM runs on that hypervisor" actually means. Without it the relationship
+# has to be faked with an association edge between two groups (the `runs on`
+# line in k8s-on-vms.yaml) — that draws a line where there is no traffic.
+#
+# Containment nests to any depth (pgbouncer sits in a VM that sits in a host),
+# ids stay unique across every level, and connections may address a child
+# directly — the edge routes into the box.
+diagram:
+  title: Virtualization hosts
+  owner: platform-team
+
+nodes:
+  - {id: inet, label: Internet, type: internet, rank: -1}
+  - {id: fw, label: edge-fw, type: firewall, ip: 203.0.113.1, rank: -1}
+
+  - id: esx1
+    label: esx-01
+    type: hypervisor
+    ip: 10.40.0.11
+    os: esxi
+    tags: [prod]
+    nodes:
+      - {id: web1, label: web-01, type: vm, ip: 10.40.10.11, os: linux}
+      - {id: web2, label: web-02, type: vm, ip: 10.40.10.12, os: linux}
+
+  - id: esx2
+    label: esx-02
+    type: hypervisor
+    ip: 10.40.0.12
+    os: esxi
+    tags: [prod]
+    nodes:
+      - {id: app1, label: app-01, type: vm, ip: 10.40.20.11, os: linux}
+      - id: db1
+        label: pg-primary
+        type: vm
+        icon: db
+        ip: 10.40.20.21
+        os: linux
+        nodes:
+          - {id: pgb, label: pgbouncer, type: container, ip: 10.40.20.22}
+
+groups:
+  - id: dc
+    label: DC — rack 3
+    class: onprem
+    cidr: 10.40.0.0/16
+    nodes: [esx1, esx2]
+
+connections:
+  - {from: inet, to: fw,   label: "tcp/443 https", protocol: tcp, port: 443}
+  - {from: fw,   to: web1, label: "tcp/443 https", protocol: tcp, port: 443}
+  - {from: fw,   to: web2, label: "tcp/443 https", protocol: tcp, port: 443}
+  - {from: web1, to: app1, label: "tcp/8080 api",  protocol: tcp, port: 8080}
+  - {from: web2, to: app1, label: "tcp/8080 api",  protocol: tcp, port: 8080}
+  - {from: app1, to: pgb,  label: "tcp/6432 pool", protocol: tcp, port: 6432}

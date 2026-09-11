@@ -120,7 +120,39 @@ editor's completion and validation). The shape is `diagram`, `nodes`, `groups`,
 | `os` | free-form (`linux`, `windows`, `bsd`, …) |
 | `tags` | informational labels — list (or single string), shown as neutral pills top-right (two per row). Tags never affect styling |
 | `rank` | placement hint among siblings: lower rank lays out earlier in the flow (higher up in a `down` layout). Unranked siblings sit at rank 0 — use negative ranks to place before them, positive to place after |
+| `nodes` | **child nodes drawn inside this one** — see [Nodes inside nodes](#nodes-inside-nodes) |
 | *anything else* | unknown scalar keys render as `key: value` lines |
+
+#### Nodes inside nodes
+
+A node can carry its own `nodes:` list — child nodes drawn **inside its box**.
+That is what "this VM runs on that hypervisor" actually means, so it needs no
+association edge:
+
+```yaml
+nodes:
+  - id: esx1
+    label: esx-01
+    type: hypervisor
+    ip: 10.40.0.11
+    nodes:
+      - {id: web1, label: web-01, type: vm, ip: 10.40.10.11}
+      - {id: web2, label: web-02, type: vm, ip: 10.40.10.12}
+```
+
+Children are full node objects and nest to any depth (a container inside a VM
+inside a host — see `examples/virt-hosts.yaml`). The host's own glyph, label and
+attribute lines sit at the top of the box and the children lay out underneath.
+
+Ids stay unique across **every** level, so a connection can address a child
+directly (`{from: fw, to: web1}`) and the edge routes into the box. A node that
+sits inside another cannot also be listed in a group's `nodes:` — it is already
+somewhere. In the Connections table a node's host is its zone, so guests on the
+same host need no rule between them, exactly as members of one group don't.
+
+**Groups or containment?** A group is a boundary *drawn around* nodes — a VLAN,
+a zone, a tenant. Containment is for when the container is itself a device that
+runs the things inside it.
 
 ### `groups[]`
 | key | notes |

@@ -70,7 +70,7 @@ async function render() {
     const text = readSpecText(input);
     const sourceSpec = nd.parseSpec(text);
     let doc = tags.length ? nd.filterDoc(sourceSpec.doc, tags) : sourceSpec.doc;
-    if (tags.length && !doc.nodes.length) throw new Error(`nothing is tagged ${tags.join(", ")}`);
+    if (tags.length && !nd.flatNodes(doc).length) throw new Error(`nothing is tagged ${tags.join(", ")}`);
     let diff = null;
     if (opts.compare) {
       const base = nd.parseSpec(readSpecText(opts.compare)).doc;

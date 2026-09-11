@@ -837,6 +837,125 @@ test("render CLI: --date --tags --compare --csv --theme and --extract", () => {
   }
 });
 
+// ---------- node containment ----------
+const CONTAIN = `
+nodes:
+  - id: host1
+    label: esx-01
+    type: hypervisor
+    ip: 10.40.0.11
+    os: esxi
+    nodes:
+      - {id: vm1, label: web-01, type: vm, ip: 10.40.10.11}
+      - {id: vm2, label: web-02, type: vm, ip: 10.40.10.12, tags: [prod]}
+  - {id: sw, label: core-sw, type: switch}
+groups:
+  - {id: dc, label: DC, class: onprem, nodes: [host1, sw]}
+connections:
+  - {from: sw, to: vm1, label: "tcp/443 https", protocol: tcp, port: 443}
+`;
+const absBoxes = (layout) => {
+  const abs = new Map();
+  (function walk(n, ox, oy) {
+    (n.children || []).forEach((c) => {
+      const x = ox + (c.x || 0), y = oy + (c.y || 0);
+      abs.set(c.id, { x, y, w: c.width || 0, h: c.height || 0 });
+      walk(c, x, y);
+    });
+  })(layout, 0, 0);
+  return abs;
+};
+
+test("containment: children lay out inside their host and render with data-id", async () => {
+  const s = parseSpec(CONTAIN);
+  assert.ok(s.nodeMap.has("vm1"), "a nested node is registered in the flat id namespace");
+  assert.strictEqual(s.hosted.get("vm1"), "host1");
+  const layout = await layoutOf(s);
+  const abs = absBoxes(layout);
+  const host = abs.get("host1");
+  for (const id of ["vm1", "vm2"]) {
+    const b = abs.get(id);
+    assert.ok(b, `${id} is laid out`);
+    assert.ok(b.x >= host.x && b.y >= host.y &&
+      b.x + b.w <= host.x + host.w && b.y + b.h <= host.y + host.h,
+      `${id} sits inside host1's box`);
+    assert.ok(b.y >= host.y + 40, `${id} clears the host's own chrome`);
+  }
+  const svg = renderSVG(s, layout, {});
+  assert.ok(svg.includes('data-id="vm1"'), "nested nodes are clickable");
+  assert.ok(svg.includes('data-id="host1"'));
+});
+
+/* a host whose own chrome is wider than its single small child: ELK would size
+ * the box from the child alone, so the pass-2 widening has to kick in */
+const WIDE_LEAF = `
+nodes:
+  - id: hv
+    label: hypervisor-esx-01.dc1.example.com
+    type: hypervisor
+    ip: 10.40.0.11
+`;
+const WIDE_HOST = WIDE_LEAF + `    nodes:
+      - {id: g1, label: vm, type: vm}
+`;
+test("containment: a host is widened so its own chrome still fits", async () => {
+  const leaf = buildElk(parseSpec(WIDE_LEAF)).children[0].width;
+  const host = absBoxes(await layoutOf(parseSpec(WIDE_HOST))).get("hv");
+  assert.ok(host.w >= leaf,
+    `container ${host.w} should be at least the ${leaf} the same node needs as a leaf`);
+});
+
+test("validation: a hosted node cannot also be a group member", () =>
+  expectError("nodes:\n  - id: h\n    nodes:\n      - {id: v}\ngroups:\n  - {id: g, nodes: [v]}\n",
+    'is inside "h"'));
+
+test("validation: duplicate ids are caught across nesting levels", () =>
+  expectError("nodes:\n  - {id: a}\n  - id: b\n    nodes:\n      - {id: a}\n",
+    'duplicate node id "a"'));
+
+test("containment: guests on one host share its zone; a guest inherits the host's group", () => {
+  const s = parseSpec(`
+nodes:
+  - id: h1
+    type: hypervisor
+    nodes:
+      - {id: v1, type: vm}
+      - {id: v2, type: vm}
+  - {id: ext, type: internet}
+connections:
+  - {from: v1, to: v2, protocol: tcp, port: 22}
+  - {from: ext, to: v1, protocol: tcp, port: 443}
+`);
+  const { rules, excluded } = nd.connectionRules(s);
+  assert.strictEqual(excluded, 1, "same-host pair needs no rule");
+  assert.strictEqual(rules.length, 1);
+  assert.strictEqual(rules[0].dst.name, "v1");
+});
+
+test("containment: filtering by a child's tag keeps its host as a shell", () => {
+  const out = nd.filterDoc(parseSpec(CONTAIN).doc, ["prod"]);
+  const host = out.nodes.find((n) => n.id === "host1");
+  assert.ok(host, "the host survives because a child matched");
+  assert.deepStrictEqual(host.nodes.map((n) => n.id), ["vm2"]);
+  assert.ok(!out.nodes.some((n) => n.id === "sw"), "an untagged sibling is dropped");
+});
+
+test("containment: moving a guest between hosts marks the guest, not the hosts", () => {
+  const a = parseSpec("nodes:\n  - {id: h1, type: hypervisor, nodes: [{id: v, type: vm}]}\n  - {id: h2, type: hypervisor, nodes: [{id: x, type: vm}]}\n").doc;
+  const b = parseSpec("nodes:\n  - {id: h1, type: hypervisor, nodes: [{id: x, type: vm}]}\n  - {id: h2, type: hypervisor, nodes: [{id: v, type: vm}]}\n").doc;
+  const d = nd.diffDocs(a, b);
+  assert.strictEqual(d.status.nodes.get("v"), "changed");
+  assert.strictEqual(d.status.nodes.get("x"), "changed");
+  assert.ok(!d.status.nodes.get("h1"), "the host itself did not change");
+});
+
+test("containment: sourceMap locates a nested node; the cursor picks the innermost", () => {
+  const text = "nodes:\n  - id: h\n    nodes:\n      - {id: v}\n";
+  const m = nd.sourceMap(text);
+  assert.ok(slice(text, m.itemRange("node", "v")).includes("id: v"));
+  assert.deepStrictEqual(m.itemAt(text.indexOf("id: v") + 2), { kind: "node", id: "v" });
+});
+
 // ---------- golden SVGs ----------
 /* Every example rendered with a fixed date, byte-compared against
  * test/golden/. After an intended rendering change: npm run test:golden,
