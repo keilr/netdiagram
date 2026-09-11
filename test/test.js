@@ -898,7 +898,7 @@ async function waitFor(pred, ms = 5000) {
 }
 const click = (win, el) => el.dispatchEvent(new win.MouseEvent("click", { bubbles: true }));
 
-test("app: clicking the diagram reveals YAML; the cursor outlines the item", async () => {
+test("app: clicking the diagram reveals YAML; the selection glows and clears on empty paper", async () => {
   const { win, doc } = await bootPage();
   const node = doc.querySelector('#canvas-pane .nd-node[data-id="db1"]');
   assert.ok(node, "example node drawn");
@@ -908,6 +908,15 @@ test("app: clicking the diagram reveals YAML; the cursor outlines the item", asy
   click(win, edge);
   assert.ok(await waitFor(() => edge.classList.contains("nd-sel") && !node.classList.contains("nd-sel")),
     "clicking an edge moves the selection to that connection");
+  assert.ok(edge.classList.contains("nd-pulse"), "a new selection pulses");
+  assert.ok(doc.querySelector('#canvas-pane .edge-lbl[data-conn="4"]').classList.contains("nd-sel"),
+    "the edge label glows with its edge");
+  click(win, doc.querySelector("#canvas-pane svg > rect"));
+  assert.strictEqual(doc.querySelectorAll("#canvas-pane .nd-sel").length, 0, "a click on empty paper clears the selection");
+  click(win, node.querySelector("rect"));
+  assert.ok(await waitFor(() => node.classList.contains("nd-sel")), "an item can be selected again after clearing");
+  click(win, node.querySelector("rect"));
+  assert.ok(!node.classList.contains("nd-sel"), "clicking the selected item again clears it");
 });
 
 test("app: tag chips narrow the diagram", async () => {

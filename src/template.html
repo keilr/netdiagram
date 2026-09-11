@@ -16,6 +16,7 @@
     --slate-2:#161c25;
     --editor-text:#d7dee8;
     --accent:#b45309;
+    --glow:#f59e0b;         /* selected diagram item */
     --err:#c0392b;
   }
   *{box-sizing:border-box;margin:0;padding:0}
@@ -100,9 +101,16 @@
   #canvas-pane .edge,#canvas-pane .edge-lbl{transition:opacity .15s}
   #canvas-pane .edge-lo{opacity:.12}
   #canvas-pane .nd-node,#canvas-pane .nd-group>rect:first-child{cursor:pointer}
+  /* selection (editor cursor / diagram click): amber outline + glow, pulsing
+   * briefly when it changes. Screen only — downloads use the clean SVG. */
+  #canvas-pane .nd-sel{filter:drop-shadow(0 0 5px var(--glow))}
   #canvas-pane .nd-node.nd-sel>rect:first-child,
-  #canvas-pane .nd-group.nd-sel>rect:first-child{stroke:var(--accent);stroke-width:3}
+  #canvas-pane .nd-group.nd-sel>rect:first-child{stroke:var(--glow);stroke-width:3}
   #canvas-pane .edge.nd-sel{stroke-width:4}
+  #canvas-pane .edge-lbl.nd-sel{filter:drop-shadow(0 0 2px var(--glow));animation:none}   /* keep label text crisp */
+  #canvas-pane .nd-pulse{animation:nd-pulse .6s ease-in-out 3}
+  @keyframes nd-pulse{50%{filter:drop-shadow(0 0 3px var(--glow)) drop-shadow(0 0 14px var(--glow))}}
+  @media (prefers-reduced-motion:reduce){#canvas-pane .nd-pulse{animation:none}}
   #tag-filter{display:flex;align-items:center;gap:6px;margin-left:auto;padding:0 12px;flex-wrap:wrap;min-width:0}
   #tag-filter[hidden]{display:none}
   #tag-chips{display:flex;gap:5px;flex-wrap:wrap}

@@ -290,39 +290,60 @@ function currentMap(){
 const viewIndexOf = i => lastView ? (lastView.doc.connections || []).indexOf((lastView.source.connections || [])[i]) : -1;
 const sourceIndexOf = i => lastView ? (lastView.source.connections || []).indexOf((lastView.doc.connections || [])[i]) : -1;
 
-/* click in the diagram: move the editor cursor to that node / group / connection */
-function revealInEditor(target){
+/* the diagram item under a click: selection key + YAML range (range is null
+ * for items only the compare view draws); null for empty paper */
+function clickedItem(target){
   const map = currentMap();
-  if (!map || !lastView) return;
-  let range = null;
+  if (!map || !lastView) return null;
   const conn = target.closest('[data-conn]');
   if (conn){
     const si = sourceIndexOf(+conn.dataset.conn);
-    if (si >= 0) range = map.itemRange('connection', si);
-  } else {
-    const el = target.closest('.nd-node, .nd-group');
-    if (el) range = map.itemRange(el.classList.contains('nd-node') ? 'node' : 'group', el.dataset.id);
+    return si < 0 ? null : { key: `connection:${si}`, range: map.itemRange('connection', si) };
   }
-  if (range) editor.reveal(range.from, range.to);
+  const el = target.closest('.nd-node, .nd-group');
+  if (!el) return null;
+  const kind = el.classList.contains('nd-node') ? 'node' : 'group';
+  return { key: `${kind}:${el.dataset.id}`, range: map.itemRange(kind, el.dataset.id) };
 }
-/* cursor in the editor: outline the item it sits on */
+/* cursor in the editor: the item it sits on glows, pulsing briefly when the
+ * selection changes. A click on empty paper — or on the selected item again —
+ * hides the glow until the cursor moves. */
 let cursorPos = null, cursorFrame = 0;
+let selKey = null;       // item shown as selected: 'node:web1', 'group:dmz', 'connection:3'
+let selHidden = false;
 function applyCursorHighlight(){
-  canvasEl.querySelectorAll('.nd-sel').forEach(el => el.classList.remove('nd-sel'));
-  if (cursorPos == null || !lastView) return;
-  const item = currentMap()?.itemAt(cursorPos);
-  if (!item) return;
-  if (item.kind === 'connection'){
+  const item = cursorPos == null || !lastView || selHidden ? null : currentMap()?.itemAt(cursorPos);
+  const key = item ? `${item.kind}:${item.kind === 'connection' ? item.index : item.id}` : null;
+  let els = [];
+  if (item?.kind === 'connection'){
     const vi = viewIndexOf(item.index);
-    if (vi >= 0) canvasEl.querySelectorAll(`.edge[data-conn="${vi}"]`).forEach(el => el.classList.add('nd-sel'));
-    return;
+    if (vi >= 0) els = [...canvasEl.querySelectorAll(`[data-conn="${vi}"]`)];   // path + its label
+  } else if (item){
+    els = [...canvasEl.querySelectorAll(item.kind === 'node' ? '.nd-node' : '.nd-group')]
+      .filter(el => el.dataset.id === item.id);
   }
-  for (const el of canvasEl.querySelectorAll(item.kind === 'node' ? '.nd-node' : '.nd-group'))
-    if (el.dataset.id === item.id) el.classList.add('nd-sel');
+  const current = [...canvasEl.querySelectorAll('.nd-sel')];
+  // unchanged (cursor moved within the item): leave a running pulse alone
+  if (key === selKey && els.length === current.length && els.every(el => current.includes(el))) return;
+  current.forEach(el => el.classList.remove('nd-sel', 'nd-pulse'));
+  const pulse = key !== selKey;          // a new selection pulses; re-rendering the same one doesn't
+  els.forEach(el => el.classList.add('nd-sel', ...(pulse ? ['nd-pulse'] : [])));
+  selKey = els.length ? key : null;
+}
+function hideSelection(){
+  selHidden = true;
+  applyCursorHighlight();
+}
+/* click in the diagram: reveal the item in the editor (whose cursor then drives
+ * the glow); empty paper or the selected item again clears the selection */
+function selectFromDiagram(target){
+  const item = clickedItem(target);
+  if (!item || item.key === selKey) return hideSelection();
+  if (item.range) editor.reveal(item.range.from, item.range.to);
 }
 
 /* Edge click: highlight all edges sharing the same label, dim the rest; any
- * click on an item also reveals it in the editor. Lives on the container so it
+ * click also selects (or clears) in the diagram. Lives on the container so it
  * survives SVG re-renders. */
 canvasEl.addEventListener('click', e => {
   if (suppressClick){ suppressClick = false; return; }   // tail end of a pan drag
@@ -334,7 +355,7 @@ canvasEl.addEventListener('click', e => {
   all.forEach(el => {
     el.classList.toggle('edge-lo', !!activeLabel && el.dataset.label !== activeLabel);
   });
-  revealInEditor(e.target);
+  selectFromDiagram(e.target);
 });
 
 /* spec validation as editor diagnostics, placed on the offending YAML (YAML
@@ -363,6 +384,7 @@ const editor = makeEditor($('#editor'), SCHEMA, text => {
   lint: specDiagnostics,
   onCursor: pos => {
     cursorPos = pos;
+    selHidden = false;   // the cursor moved: show its item again
     cancelAnimationFrame(cursorFrame);
     cursorFrame = requestAnimationFrame(applyCursorHighlight);
   },

@@ -65,7 +65,8 @@ Load one of the bundled examples from the picker below the editor to see more.
   in two groups is underlined where it is written. The diagram re-renders as you
   type.
 - **Diagram ↔ YAML** — click a node, group or connection to jump to its YAML;
-  wherever the cursor sits in the YAML, that item is outlined in the diagram.
+  wherever the cursor sits in the YAML, that item glows in the diagram. Click
+  empty paper (or the selected item again) to clear the selection.
 - **Projects, saved in your browser** — the editor autosaves and restores on
   reload; **Save** (<kbd>Ctrl/Cmd-S</kbd>) named projects to switch between
   later. All in local storage — nothing leaves your machine. (If the browser
