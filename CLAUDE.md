@@ -22,6 +22,10 @@ npm run test:golden  # rebuild + rewrite test/golden/*.svg — ONLY after an int
                    # visual change; review the SVG diff before committing
 npm run render -- in.yaml [out.svg] [--theme --tags --compare --csv --date --extract]
 npm run import -- <file|-> [--from ansible|terraform|netbox] [-o out.yaml]
+npm run check -- net.yaml [--against inv|-] [--from ...] [--strict] [--json]
+                   # CI gate: architecture lint (+ drift vs a live inventory);
+                   # exits 1 on findings, 2 on bad usage. All bundled examples
+                   # must stay clean — test/test.js asserts it.
 ```
 
 There is no dev server; after `npm run build`, open `dist/netdiagram.html` in a browser.

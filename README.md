@@ -260,6 +260,43 @@ npm run import -- devices.json -o net.yaml          # NetBox devices / virtual-m
 The format is detected (`--from ansible|terraform|netbox` forces one). The page's
 **Import** button and drag & drop use the same importers.
 
+## Check it in CI
+
+`npm run check` reads the spec as a **model**, not as text, and exits non-zero
+when something is wrong — so a diagram can gate a pull request:
+
+```bash
+npm run check -- net.yaml                       # architecture lint
+npm run check -- net.yaml --strict              # warnings fail too
+npm run check -- net.yaml --json                # machine-readable findings
+terraform show -json | npm run check -- net.yaml --against - --from terraform
+```
+
+Validation asks whether the document is well *formed*; this asks whether the
+network it describes is *coherent*:
+
+| rule | severity | what it catches |
+|---|---|---|
+| `ip-outside-cidr` | error | an address that falls in **no** declared subnet. A second NIC on another declared subnet is legitimate dual-homing and is not flagged |
+| `duplicate-ip` | error | the same address on two nodes |
+| `cidr-overlap` | error | two unrelated groups claiming overlapping ranges (a subnet nested in its supernet is fine) |
+| `blocked-contradiction` | error | a pair that is both `direction: none` and allowed elsewhere |
+| `self-connection` | error | a connection from a node to itself |
+| `unknown-type` / `unknown-icon` | warning | a token that draws no glyph — a typo the renderer would swallow |
+| `unknown-class` | warning | a group class that silently falls back to default styling |
+| `isolated` | warning | a node no connection reaches, directly or through its group |
+
+All bundled examples are clean, and the test suite asserts they stay that way.
+
+**Drift.** `--against` imports a live inventory (Ansible, Terraform, NetBox) and
+compares it with the spec, so CI can fail when the picture stops matching
+reality: a host in the inventory that the diagram never got (`missing`), a node
+the inventory no longer has (`extra`), or one whose address changed
+(`address`). Ids differ between the two — importers slugify hostnames — so
+nodes are matched on id, then on any shared IP, then on label. Group membership
+is deliberately not compared: group identity isn't stable across importers, so
+"moved" would be guesswork.
+
 ## Development
 
 Only needed to change netdiagram itself — the app ships as the prebuilt HTML.
@@ -281,6 +318,7 @@ src/template.html    page shell with injection placeholders
 scripts/build.js     vendors js-yaml + elkjs, assembles dist/netdiagram.html
 scripts/render.js    CLI: YAML -> SVG (--watch --theme --tags --compare --csv --extract)
 scripts/import.js    CLI: inventory -> YAML scaffold
+scripts/check.js     CLI: architecture lint + drift vs a live inventory (CI gate)
 examples/            bundled examples (injected into the app's picker at build)
 docs/example.yaml    source of the screenshot above
 test/                npm test — pipeline, features, validation, importers, CLI, jsdom

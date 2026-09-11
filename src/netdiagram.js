@@ -621,6 +621,197 @@ function diffDocs(base, cur){
   return { doc, status, counts };
 }
 
+/* ---------------- architecture lint ----------------
+ * parseSpec decides whether a document is well FORMED; lintSpec decides whether
+ * the network it describes is COHERENT — an address in no declared subnet, the
+ * same IP twice, a pair both blocked and allowed. Findings are non-fatal and
+ * carry a document path, like validation errors, so an editor can place them.
+ *   severity 'error'   — a contradiction in the model
+ *   severity 'warning' — hygiene; the renderer degrades silently without it
+ * Deliberately NOT checked: whether a connection crossing a trust boundary
+ * passes a firewall. Connections are direct edges, not routes, so there is no
+ * path to inspect — the check would be guesswork and fire on most documents. */
+const ipToInt = s => {
+  const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(String(s).trim());
+  if (!m) return null;                       // not IPv4 (v6 / hostname): not checked
+  const p = m.slice(1).map(Number);
+  return p.some(x => x > 255) ? null : (p[0]*16777216 + p[1]*65536 + p[2]*256 + p[3]) >>> 0;
+};
+const parseCidr = s => {
+  const m = /^(.+)\/(\d{1,2})$/.exec(String(s).trim());
+  if (!m) return null;
+  const base = ipToInt(m[1]), bits = Number(m[2]);
+  if (base == null || bits > 32) return null;
+  const mask = bits === 0 ? 0 : ((0xFFFFFFFF << (32 - bits)) >>> 0);
+  return { net:(base & mask) >>> 0, mask, bits };
+};
+const ipInCidr = (ip, c) => ((ip & c.mask) >>> 0) === c.net;
+const cidrsOverlap = (a, b) => ((a.net & b.mask) >>> 0) === b.net || ((b.net & a.mask) >>> 0) === a.net;
+
+function lintSpec(spec){
+  const { doc, nodeMap, groupMap, claimed, hosted } = spec;
+  const findings = [];
+  const add = (rule, severity, path, message) => findings.push({ rule, severity, path, message });
+
+  /* document paths, so a finding can be placed in the source like an error */
+  const nodePath = new Map(), groupPath = new Map(), gParent = new Map();
+  (function walk(list, path){
+    (list||[]).forEach((n,i) => {
+      if (!n || n.id == null) return;
+      nodePath.set(String(n.id), [...path, i]);
+      walk(n.nodes, [...path, i, 'nodes']);
+    });
+  })(doc.nodes, ['nodes']);
+  (function walk(list, path, parent){
+    (list||[]).forEach((g,i) => {
+      if (!g || g.id == null) return;
+      const p = [...path, i];
+      groupPath.set(String(g.id), p);
+      gParent.set(String(g.id), parent);
+      walk(g.groups, [...p, 'groups'], String(g.id));
+    });
+  })(doc.groups, ['groups'], null);
+
+  /* the group a node belongs to, following its host chain out first */
+  const ownerGroup = id => {
+    let cur = id; const seen = new Set();
+    while (hosted && hosted.has(cur) && !seen.has(cur)){ seen.add(cur); cur = hosted.get(cur); }
+    return claimed.get(cur);
+  };
+  /* nearest ancestor group that declares a cidr */
+  const nearestCidr = gid => {
+    let g = gid; const seen = new Set();
+    while (g && !seen.has(g)){
+      seen.add(g);
+      const o = groupMap.get(g);
+      if (o && o.cidr != null){ const c = parseCidr(o.cidr); if (c) return { gid:g, cidr:c, raw:String(o.cidr) }; }
+      g = gParent.get(g);
+    }
+    return null;
+  };
+  const declared = [...groupMap].map(([id, g]) => {
+    const c = g.cidr == null ? null : parseCidr(g.cidr);
+    return c ? { id, cidr:c, raw:String(g.cidr) } : null;
+  }).filter(Boolean);
+
+  /* --- addresses --- */
+  const seenIp = new Map();
+  for (const [id, n] of nodeMap){
+    for (const raw of ipListOf(n)){
+      const ip = ipToInt(raw);
+      if (ip == null) continue;
+      if (seenIp.has(raw))
+        add('duplicate-ip', 'error', nodePath.get(id),
+          `"${id}" and "${seenIp.get(raw)}" both use ${raw}`);
+      else seenIp.set(raw, id);
+      const g = ownerGroup(id), near = g ? nearestCidr(g) : null;
+      /* an address outside its own subnet is fine when some OTHER declared
+       * subnet holds it — that is a dual-homed interface, not a typo */
+      if (near && !ipInCidr(ip, near.cidr) && !declared.some(d => ipInCidr(ip, d.cidr)))
+        add('ip-outside-cidr', 'error', nodePath.get(id),
+          `"${id}" has ${raw}, which is in no declared subnet (its group "${near.gid}" is ${near.raw})`);
+    }
+  }
+  for (let i = 0; i < declared.length; i++)
+    for (let j = i + 1; j < declared.length; j++){
+      const a = declared[i], b = declared[j];
+      const nested = (x, y) => { let c = y, s = new Set(); while (c && !s.has(c)){ if (c === x) return true; s.add(c); c = gParent.get(c); } return false; };
+      if (nested(a.id, b.id) || nested(b.id, a.id)) continue;   // a subnet inside its supernet
+      if (cidrsOverlap(a.cidr, b.cidr))
+        add('cidr-overlap', 'error', groupPath.get(a.id),
+          `"${a.id}" ${a.raw} overlaps "${b.id}" ${b.raw}`);
+    }
+
+  /* --- vocabulary that degrades silently --- */
+  for (const [id, n] of nodeMap)
+    for (const key of ['type', 'icon']){
+      const v = n[key];
+      if (v == null) continue;
+      if (!GLYPHS[resolveKey(v)])
+        add(`unknown-${key}`, 'warning', nodePath.get(id),
+          `"${id}" has ${key}: ${v}, which draws no glyph`);
+    }
+  for (const [id, g] of groupMap){
+    if (g.class == null) continue;
+    if (!Object.hasOwn(GROUP_STYLES, String(g.class).toLowerCase().trim()))
+      add('unknown-class', 'warning', groupPath.get(id),
+        `"${id}" has class: ${g.class}, which falls back to the default styling`);
+  }
+
+  /* --- connections --- */
+  const endpoints = new Set((doc.connections||[]).flatMap(l => l ? [String(l.from), String(l.to)] : []));
+  const allowed = new Set(), blocked = new Map();
+  (doc.connections||[]).forEach((l, i) => {
+    if (!l) return;
+    if (String(l.from) === String(l.to))
+      add('self-connection', 'error', ['connections', i], `connections[${i}] joins "${l.from}" to itself`);
+    const key = [String(l.from), String(l.to)].sort().join(' ');
+    if (dirOf(l) === 'none'){ if (!blocked.has(key)) blocked.set(key, i); }
+    else allowed.add(key);
+  });
+  for (const [key, i] of blocked)
+    if (allowed.has(key))
+      add('blocked-contradiction', 'error', ['connections', i],
+        `"${key.split(' ').join('" and "')}" are both blocked and allowed`);
+
+  /* --- reachability --- */
+  const touched = n => endpoints.has(String(n.id)) || childrenOf(n).some(touched);
+  for (const [id, n] of nodeMap){
+    if (endpoints.has(id) || (hosted && hosted.has(id)) || touched(n)) continue;
+    let g = ownerGroup(id), viaGroup = false; const seen = new Set();
+    while (g && !seen.has(g)){ seen.add(g); if (endpoints.has(g)){ viaGroup = true; break; } g = gParent.get(g); }
+    if (!viaGroup) add('isolated', 'warning', nodePath.get(id), `"${id}" has no connection`);
+  }
+  return findings;
+}
+
+/* ---------------- drift against a live inventory ----------------
+ * Compares an IMPORTED document (Terraform state, an Ansible inventory, a
+ * NetBox export) with the authored one and reports what no longer agrees.
+ * Ids differ between the two — importers slugify hostnames — so nodes are
+ * matched on id, then on any shared IP, then on label, case-insensitively.
+ * Group membership is deliberately NOT compared: group identity is not stable
+ * across importers, so "moved" would be guesswork. */
+function driftReport(live, authored){
+  const keysOf = n => {
+    const out = [];
+    if (n.id != null) out.push('id:' + String(n.id).toLowerCase());
+    ipListOf(n).forEach(ip => out.push('ip:' + ip));
+    if (n.label != null) out.push('label:' + String(n.label).toLowerCase());
+    return out;
+  };
+  const index = list => {
+    const m = new Map();
+    list.forEach(n => keysOf(n).forEach(k => { if (!m.has(k)) m.set(k, n); }));
+    return m;
+  };
+  const liveNodes = flatNodes(live), authoredNodes = flatNodes(authored);
+  const authoredIx = index(authoredNodes), liveIx = index(liveNodes);
+  const match = (n, ix) => { for (const k of keysOf(n)) { const hit = ix.get(k); if (hit) return hit; } return null; };
+
+  const findings = [];
+  const matched = new Set();
+  for (const n of liveNodes){
+    const hit = match(n, authoredIx);
+    if (!hit){
+      findings.push({ rule:'missing', id:String(n.id),
+        message:`"${n.label ?? n.id}" exists in the inventory but not in the diagram` });
+      continue;
+    }
+    matched.add(hit);
+    const a = new Set(ipListOf(hit)), b = ipListOf(n);
+    const added = b.filter(ip => !a.has(ip));
+    if (added.length && a.size)
+      findings.push({ rule:'address', id:String(hit.id),
+        message:`"${hit.id}" is ${[...a].join(', ')} in the diagram but ${b.join(', ')} in the inventory` });
+  }
+  for (const n of authoredNodes)
+    if (!matched.has(n) && !match(n, liveIx))
+      findings.push({ rule:'extra', id:String(n.id),
+        message:`"${n.id}" is in the diagram but not in the inventory` });
+  return findings;
+}
+
 /* ---------------- firewall rules (Connections table) ---------------- */
 /* One directed rule per connection; direction: both yields two, direction:
  * none (blocked) none. Pairs whose endpoints share the same immediate zone
@@ -1306,7 +1497,8 @@ function renderSVG(spec, layout, opts = {}){
 
 if (typeof module !== "undefined" && module.exports)
   module.exports = { parseSpec, specFromDoc, sourceMap, buildElk, assignPorts, renderSVG,
-    allTags, filterDoc, diffDocs, flatNodes, connectionRules, rulesToCsv, extractSource, encodeShare, decodeShare,
+    allTags, filterDoc, diffDocs, flatNodes, lintSpec, driftReport,
+    connectionRules, rulesToCsv, extractSource, encodeShare, decodeShare,
     CONNECTION_STYLES, GROUP_STYLES, GLYPHS, LABEL_PALETTE, THEMES,
     // helpers the browser app (concatenated after this file at build time) reuses
     esc, dirOf, ipsOf };

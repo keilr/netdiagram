@@ -837,6 +837,187 @@ test("render CLI: --date --tags --compare --csv --theme and --extract", () => {
   }
 });
 
+// ---------- architecture lint + drift ----------
+const lintOf = (yaml) => nd.lintSpec(parseSpec(yaml));
+const rulesFired = (yaml) => lintOf(yaml).map((f) => f.rule).sort();
+
+test("lint: every bundled example is clean", () => {
+  for (const f of fs.readdirSync(path.join(root, "examples")).filter((x) => x.endsWith(".yaml"))) {
+    const found = lintOf(fs.readFileSync(path.join(root, "examples", f), "utf8"));
+    assert.deepStrictEqual(found, [], `${f}: ${found.map((x) => x.rule + " " + x.message).join("; ")}`);
+  }
+});
+
+test("lint: an address in no declared subnet is an error, dual-homing is not", () => {
+  const base = (ips) => `
+nodes:
+  - {id: a, ip: 10.0.10.5}
+  - {id: b, ips: [${ips}]}
+groups:
+  - {id: dmz, cidr: 10.0.10.0/24, nodes: [a]}
+  - {id: lan, cidr: 10.0.20.0/24, nodes: [b]}
+connections:
+  - {from: a, to: b}
+`;
+  // a second NIC on another DECLARED subnet is legitimate
+  assert.deepStrictEqual(rulesFired(base("10.0.20.5, 10.0.10.9")), []);
+  // an address in no declared subnet at all is a typo
+  const bad = lintOf(base("10.0.20.5, 10.0.99.9"));
+  assert.deepStrictEqual(bad.map((f) => f.rule), ["ip-outside-cidr"]);
+  assert.strictEqual(bad[0].severity, "error");
+  assert.ok(bad[0].message.includes("10.0.99.9"), bad[0].message);
+  assert.deepStrictEqual(bad[0].path, ["nodes", 1]);
+});
+
+test("lint: duplicate addresses and overlapping subnets are errors", () => {
+  assert.ok(rulesFired(`
+nodes:
+  - {id: a, ip: 10.0.10.5}
+  - {id: b, ip: 10.0.10.5}
+groups:
+  - {id: g, cidr: 10.0.10.0/24, nodes: [a, b]}
+connections:
+  - {from: a, to: b}
+`).includes("duplicate-ip"));
+  assert.ok(rulesFired(`
+nodes:
+  - {id: a, ip: 10.0.10.5}
+  - {id: b, ip: 10.0.10.9}
+groups:
+  - {id: g1, cidr: 10.0.0.0/16, nodes: [a]}
+  - {id: g2, cidr: 10.0.10.0/24, nodes: [b]}
+connections:
+  - {from: a, to: b}
+`).includes("cidr-overlap"), "unrelated groups that overlap are flagged");
+  // a subnet nested inside its supernet is the normal case, not an overlap
+  assert.deepStrictEqual(rulesFired(`
+nodes:
+  - {id: a, ip: 10.0.10.5}
+groups:
+  - id: outer
+    cidr: 10.0.0.0/16
+    groups:
+      - {id: inner, cidr: 10.0.10.0/24, nodes: [a]}
+connections:
+  - {from: a, to: outer}
+`), []);
+});
+
+test("lint: a pair both blocked and allowed contradicts itself", () => {
+  const f = lintOf(`
+nodes:
+  - {id: a}
+  - {id: b}
+connections:
+  - {from: a, to: b, protocol: tcp, port: 443}
+  - {from: b, to: a, direction: none}
+`);
+  assert.deepStrictEqual(f.map((x) => x.rule), ["blocked-contradiction"]);
+  assert.strictEqual(f[0].severity, "error");
+});
+
+test("lint: silent degradation is warned about, not hidden", () => {
+  const f = lintOf(`
+nodes:
+  - {id: a, type: sw1tch}
+  - {id: b, type: switch}
+groups:
+  - {id: g, class: zoen, nodes: [a, b]}
+connections:
+  - {from: a, to: b}
+`);
+  assert.deepStrictEqual(f.map((x) => x.rule).sort(), ["unknown-class", "unknown-type"]);
+  assert.ok(f.every((x) => x.severity === "warning"));
+});
+
+test("lint: an unconnected node is warned about; a guest and a grouped node are not", () => {
+  const f = lintOf(`
+nodes:
+  - {id: a}
+  - {id: lonely}
+  - id: host
+    nodes:
+      - {id: guest}
+  - {id: member}
+groups:
+  - {id: g, nodes: [member]}
+connections:
+  - {from: a, to: g}
+  - {from: a, to: host}
+`);
+  assert.deepStrictEqual(f.map((x) => x.rule), ["isolated"]);
+  assert.ok(f[0].message.includes("lonely"), f[0].message);
+});
+
+test("drift: reports what the inventory has, the diagram has, and readdressing", () => {
+  const live = {
+    nodes: [
+      { id: "web-01", label: "web-01", ip: "10.0.10.11" },
+      { id: "web-02", label: "web-02", ip: "10.0.10.12" },
+    ],
+  };
+  const authored = {
+    nodes: [
+      { id: "w1", label: "web-01", ip: "10.0.10.99" }, // matched by label, readdressed
+      { id: "old", label: "decommissioned", ip: "10.0.10.50" },
+    ],
+  };
+  const d = nd.driftReport(live, authored);
+  const by = (r) => d.filter((x) => x.rule === r).map((x) => x.id);
+  assert.deepStrictEqual(by("missing"), ["web-02"], "in the inventory, not in the diagram");
+  assert.deepStrictEqual(by("extra"), ["old"], "in the diagram, not in the inventory");
+  assert.deepStrictEqual(by("address"), ["w1"], "matched by label but readdressed");
+  assert.deepStrictEqual(nd.driftReport(live, live), [], "a document does not drift from itself");
+});
+
+test("check CLI: exit codes, --strict, --json and --against", () => {
+  const { execFileSync } = require("child_process");
+  const os = require("os");
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "netdiagram-check-"));
+  const script = path.join(root, "scripts/check.js");
+  const run = (...args) => {
+    try {
+      return { code: 0, out: execFileSync(process.execPath, [script, ...args], { encoding: "utf8", stdio: "pipe" }) };
+    } catch (e) {
+      return { code: e.status, out: String(e.stdout || "") + String(e.stderr || "") };
+    }
+  };
+  try {
+    const clean = path.join(root, "examples/hq-edge-core.yaml");
+    assert.strictEqual(run(clean).code, 0, "a clean spec exits 0");
+    assert.ok(run(clean).out.includes("clean"));
+
+    const warn = path.join(dir, "warn.yaml");
+    fs.writeFileSync(warn, "nodes:\n  - {id: a, type: nonsense}\n  - {id: b}\nconnections:\n  - {from: a, to: b}\n");
+    assert.strictEqual(run(warn).code, 0, "warnings alone do not fail");
+    assert.strictEqual(run(warn, "--strict").code, 1, "--strict makes warnings fail");
+
+    const bad = path.join(dir, "bad.yaml");
+    fs.writeFileSync(bad, "nodes:\n  - {id: a, ip: 10.9.9.9}\n  - {id: b}\ngroups:\n  - {id: g, cidr: 10.0.0.0/24, nodes: [a]}\nconnections:\n  - {from: a, to: b}\n");
+    const r = run(bad);
+    assert.strictEqual(r.code, 1, "an error exits 1");
+    assert.ok(r.out.includes("ip-outside-cidr"), r.out);
+    const parsed = JSON.parse(run(bad, "--json").out);
+    assert.strictEqual(parsed.ok, false);
+    assert.strictEqual(parsed.findings[0].rule, "ip-outside-cidr");
+
+    // drift: an Ansible inventory that has a host the diagram doesn't
+    const inv = path.join(dir, "hosts.ini");
+    fs.writeFileSync(inv, "[web]\nweb-01 ansible_host=10.0.10.11\nweb-99 ansible_host=10.0.10.99\n");
+    const spec = path.join(dir, "net.yaml");
+    fs.writeFileSync(spec, "nodes:\n  - {id: web-01, label: web-01, ip: 10.0.10.11}\n  - {id: b}\nconnections:\n  - {from: web-01, to: b}\n");
+    const dr = run(spec, "--against", inv);
+    assert.strictEqual(dr.code, 1, "drift fails the check");
+    assert.ok(dr.out.includes("web-99"), dr.out);
+    assert.strictEqual(run(spec, "--against", inv, "--json").code, 1);
+
+    assert.strictEqual(run(clean, "--nope").code, 2, "bad usage exits 2");
+    assert.strictEqual(run(path.join(dir, "missing.yaml")).code, 2, "unreadable input exits 2");
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 // ---------- node containment ----------
 const CONTAIN = `
 nodes:
