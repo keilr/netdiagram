@@ -1,0 +1,296 @@
+<svg xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="nd-title nd-desc" width="806" height="1956" viewBox="0 0 806 1956" font-family="ui-monospace,Menlo,monospace" data-theme="blueprint" data-bg="#1f4f8f">
+    <title id="nd-title">HQ edge &amp; core</title>
+    <desc id="nd-desc">11 nodes, 5 groups, 17 connections</desc>
+    <metadata id="netdiagram-source" data-type="text/yaml"># netdiagram — describe the network, get a schematic.
+# diagram: options title + direction control rendering;
+#          any other scalar key is an attribute shown in the title block
+# nodes:  id, label, type/icon, ip|ips, os, tags: [..]
+#         platform types vm|metal|container (+ aliases like docker, baremetal,
+#         server, &quot;physical server&quot;, dedicated) draw the platform glyph AND set
+#         the border style (dashed/double/dotted)
+#         tags are informational: neutral pills top-right, two per row
+#         any other scalar key is rendered as &quot;key: value&quot; on the node
+# groups: class: zone|vlan|subnet|cloud|onprem|trust, cidr
+#         cidr + any other scalar key render in an info box bottom-right in the group
+# connections: from/to can be node OR group ids
+#         label (optional) shown on edge; connections sharing the same label share a color
+#         protocol: tcp|udp|icmp|vrrp|any   port: number or range
+#         direction: forward (default) | both | none
+diagram:
+  title: HQ edge &amp; core
+  direction: down
+  author: remy
+  revision: &quot;1.2&quot;
+
+nodes:
+  - id: inet
+    label: Internet
+    type: internet
+  - id: fw1
+    label: Edge FW A
+    type: firewall
+    ip: 203.0.113.1
+    os: bsd
+    tags: [ha]
+  - id: fw2
+    label: Edge FW B
+    type: firewall
+    ip: 203.0.113.2
+    os: bsd
+    tags: [ha]
+  - id: waf
+    label: WAF
+    type: waf
+  - id: web1
+    label: web-01
+    type: server
+    ip: 10.0.10.11
+    os: linux
+  - id: core
+    label: Core Switch
+    type: switch
+  - id: app1
+    label: app-01
+    type: vm            # platform type: VM glyph + dashed border
+    ip: 10.0.20.11
+    os: linux
+  - id: api1
+    label: api-01
+    type: container     # platform type: container glyph + dotted border
+    ip: 10.0.20.12
+    os: linux
+    tags: [prod, pci]   # informational pills, two per row
+  - id: db1
+    label: pg-primary
+    type: metal         # bare-metal database; icon keeps the db glyph
+    icon: db
+    ips: [10.0.20.21, 10.0.99.21]
+    os: linux
+  - id: mgmt
+    label: Mgmt Station
+    type: user
+    ip: 10.0.99.5
+    os: windows
+  - id: siem
+    label: SIEM
+    type: siem
+
+groups:
+  - id: onprem
+    label: On-prem — HQ
+    class: onprem
+    nodes: [fw1, fw2]
+    groups:
+      - id: dmz
+        label: DMZ (VLAN 10)
+        class: zone
+        cidr: 10.0.10.0/24
+        nodes: [waf, web1]
+      - id: lan
+        label: Server LAN (VLAN 20)
+        class: trust
+        tags: [pci]            # group tags: pills tinted in the group&#39;s own color
+        cidr: 10.0.20.0/24
+        owner: netops
+        nodes: [core, app1, api1, db1]
+      - id: oob
+        label: Mgmt (VLAN 99)
+        class: vlan
+        cidr: 10.0.99.0/24
+        nodes: [mgmt]
+  - id: cloud
+    label: Cloud — logging
+    class: cloud
+    nodes: [siem]
+
+connections:
+  # edge labels follow &quot;&lt;proto&gt;/&lt;port&gt; &lt;context&gt;&quot;; any/vrrp/deny flows keep a plain note
+  - {from: inet,  to: fw1,  label: &quot;tcp/443 https&quot;,   protocol: tcp,  port: 443, comment: &quot;public HTTPS ingress&quot;}
+  - {from: inet,  to: fw2,  label: &quot;tcp/443 https&quot;,   protocol: tcp,  port: 443}
+  - {from: fw1,   to: fw2,  label: &quot;vrrp ha&quot;,         protocol: vrrp, direction: both, comment: &quot;firewall HA heartbeat&quot;}
+  - {from: fw1,   to: waf,  label: &quot;tcp/443 https&quot;,   protocol: tcp,  port: 443}
+  - {from: waf,   to: web1, label: &quot;tcp/8443 https&quot;,  protocol: tcp,  port: 8443}
+  - {from: fw1,   to: core,                           protocol: any}
+  - {from: fw2,   to: core,                           protocol: any}
+  - {from: core,  to: app1, label: &quot;tcp/8080 app&quot;,    protocol: tcp,  port: 8080}
+  - {from: core,  to: api1, label: &quot;tcp/8080 api&quot;,    protocol: tcp,  port: 8080}
+  - {from: web1,  to: app1, label: &quot;tcp/8443 app&quot;,    protocol: tcp,  port: 8443}
+  - {from: app1,  to: db1,  label: &quot;tcp/5432 pgsql&quot;,  protocol: tcp,  port: 5432, direction: both, comment: &quot;app read/write + replication&quot;}
+  - {from: api1,  to: db1,  label: &quot;tcp/5432 pgsql&quot;,  protocol: tcp,  port: 5432}
+  - {from: oob,   to: lan,  label: &quot;tcp/22 ssh&quot;,      protocol: tcp,  port: 22}
+  - {from: oob,   to: fw1,  label: &quot;tcp/22 ssh&quot;,      protocol: tcp,  port: 22, comment: &quot;mgmt from the jump host&quot;}
+  - {from: dmz,   to: siem, label: &quot;udp/514 syslog&quot;,  protocol: udp,  port: 514}
+  - {from: lan,   to: siem, label: &quot;udp/514 syslog&quot;,  protocol: udp,  port: 514}
+  - {from: web1,  to: db1,  label: &quot;blocked&quot;,         direction: none, comment: &quot;web tier must not reach the DB directly&quot;}
+</metadata>
+    <defs>
+    <pattern id="gridS" width="12" height="12" patternUnits="userSpaceOnUse">
+      <path d="M12 0H0v12" fill="none" stroke="#2a5998" stroke-width=".6"/>
+    </pattern>
+    <pattern id="gridL" width="60" height="60" patternUnits="userSpaceOnUse">
+      <rect width="60" height="60" fill="url(#gridS)"/>
+      <path d="M60 0H0v60" fill="none" stroke="#3565a3" stroke-width="1"/>
+    </pattern>
+    <marker id="ah-93c1be" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse">
+      <path d="M0 .8 9.2 5 0 9.2z" fill="#93c1be"/>
+    </marker>
+    <marker id="ah-c4a6f7" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse">
+      <path d="M0 .8 9.2 5 0 9.2z" fill="#c4a6f7"/>
+    </marker>
+    <marker id="ah-99afed" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse">
+      <path d="M0 .8 9.2 5 0 9.2z" fill="#99afed"/>
+    </marker>
+    <marker id="ah-e8f0fc" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse">
+      <path d="M0 .8 9.2 5 0 9.2z" fill="#e8f0fc"/>
+    </marker>
+    <marker id="ah-d397af" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse">
+      <path d="M0 .8 9.2 5 0 9.2z" fill="#d397af"/>
+    </marker>
+    <marker id="ah-afc493" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse">
+      <path d="M0 .8 9.2 5 0 9.2z" fill="#afc493"/>
+    </marker>
+    <marker id="ah-93c0cd" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse">
+      <path d="M0 .8 9.2 5 0 9.2z" fill="#93c0cd"/>
+    </marker>
+    <marker id="ah-d599db" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse">
+      <path d="M0 .8 9.2 5 0 9.2z" fill="#d599db"/>
+    </marker>
+    <marker id="ah-ddb290" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse">
+      <path d="M0 .8 9.2 5 0 9.2z" fill="#ddb290"/>
+    </marker></defs>
+    <rect width="806" height="1956" fill="#1f4f8f"/>
+    <rect width="806" height="1956" fill="url(#gridL)"/>
+    <g transform="translate(26,26)">
+      <g class="nd-group" data-id="onprem">
+      <rect x="16" y="175.1" width="721.9833333333333" height="1376.1" rx="8" fill="rgba(255,255,255,.04)" stroke="#9ca3ab" stroke-width="1.4"/>
+      
+      <text x="30" y="197.1" font-family="ui-monospace,Menlo,monospace" font-size="11" font-weight="700" letter-spacing="1.6" fill="#bbc0c5">ON-PREM — HQ</text>
+      </g><g class="nd-group" data-id="dmz">
+      <rect x="157.98333333333335" y="631.3" width="244" height="299.4" rx="8" fill="rgba(255,255,255,.04)" stroke="#c7a57f" stroke-width="1.4"/>
+      
+      <text x="171.98333333333335" y="653.3" font-family="ui-monospace,Menlo,monospace" font-size="11" font-weight="700" letter-spacing="1.6" fill="#d9c1a7">DMZ (VLAN 10)</text>
+      <rect class="attr-box" x="232.98333333333335" y="897.6999999999999" width="161" height="25" rx="3" fill="#1b4680" fill-opacity=".8" stroke="#c7a57f" stroke-width=".9"/><text x="242.98333333333335" y="913.6999999999999" font-family="ui-monospace,Menlo,monospace" font-size="10.5" fill="#d9c1a7"><tspan opacity=".6">cidr: </tspan><tspan opacity=".9">10.0.10.0/24</tspan></text></g><g class="nd-group" data-id="lan">
+      <rect x="63" y="1044.6999999999998" width="590" height="484.5" rx="8" fill="rgba(255,255,255,.04)" stroke="#cf938c" stroke-width="1.4" stroke-dasharray="8 5"/>
+      
+      <text x="77" y="1066.6999999999998" font-family="ui-monospace,Menlo,monospace" font-size="11" font-weight="700" letter-spacing="1.6" fill="#deb4b0">SERVER LAN (VLAN 20)</text>
+      <rect class="attr-box" x="484" y="1481.1999999999998" width="161" height="40" rx="3" fill="#1b4680" fill-opacity=".8" stroke="#cf938c" stroke-width=".9"/><text x="494" y="1497.1999999999998" font-family="ui-monospace,Menlo,monospace" font-size="10.5" fill="#deb4b0"><tspan opacity=".6">cidr: </tspan><tspan opacity=".9">10.0.20.0/24</tspan></text><text x="494" y="1512.1999999999998" font-family="ui-monospace,Menlo,monospace" font-size="10.5" fill="#deb4b0"><tspan opacity=".6">owner: </tspan><tspan opacity=".9">netops</tspan></text><rect x="607" y="1052.6999999999998" width="36" height="12" rx="6" fill="#1b4680" fill-opacity=".85" stroke="#cf938c" stroke-width=".9"/>
+      <text x="625" y="1061.6999999999998" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8" font-weight="700" letter-spacing=".8" fill="#deb4b0">PCI</text></g><g class="nd-group" data-id="oob">
+      <rect x="59.64999999999999" y="221.1" width="220" height="149" rx="8" fill="rgba(255,255,255,.04)" stroke="#7bb4af" stroke-width="1.4"/>
+      
+      <text x="73.64999999999999" y="243.1" font-family="ui-monospace,Menlo,monospace" font-size="11" font-weight="700" letter-spacing="1.6" fill="#a4cbc8">MGMT (VLAN 99)</text>
+      <rect class="attr-box" x="110.64999999999998" y="337.1" width="161" height="25" rx="3" fill="#1b4680" fill-opacity=".8" stroke="#7bb4af" stroke-width=".9"/><text x="120.64999999999998" y="353.1" font-family="ui-monospace,Menlo,monospace" font-size="10.5" fill="#a4cbc8"><tspan opacity=".6">cidr: </tspan><tspan opacity=".9">10.0.99.0/24</tspan></text></g><g class="nd-group" data-id="cloud">
+      <rect x="30.96666666666667" y="1665.1999999999998" width="164" height="122.1" rx="8" fill="rgba(255,255,255,.04)" stroke="#af9ed5" stroke-width="1.4" stroke-dasharray="6 4"/>
+      
+      <text x="44.96666666666667" y="1687.1999999999998" font-family="ui-monospace,Menlo,monospace" font-size="11" font-weight="700" letter-spacing="1.6" fill="#c8bce2">CLOUD — LOGGING</text>
+      </g>
+      <path class="edge" data-conn="0" data-label="tcp/443 https" d="M570.9666666666667 70.1L570.9666666666667 106.1L470.1666666666667 106.1L470.1666666666667 466.1" fill="none" stroke="#93c1be" stroke-width="2" marker-end="url(#ah-93c1be)"/><path class="edge" data-conn="1" data-label="tcp/443 https" d="M627.6666666666667 70.1L627.6666666666666 711" fill="none" stroke="#93c1be" stroke-width="2" marker-end="url(#ah-93c1be)"/><path class="edge" data-conn="2" data-label="vrrp ha" d="M492.2583333333333 526.3000000000001L492.2583333333333 562.3L539.3 562.3L539.3 711" fill="none" stroke="#c4a6f7" stroke-width="2" marker-end="url(#ah-c4a6f7)" marker-start="url(#ah-c4a6f7)"/><path class="edge" data-conn="3" data-label="tcp/443 https" d="M359.70833333333337 526.3000000000001L359.70833333333337 562.3L279.98333333333335 562.3L279.98333333333335 677.3" fill="none" stroke="#93c1be" stroke-width="2" marker-end="url(#ah-93c1be)"/><path class="edge" data-conn="4" data-label="tcp/8443 https" d="M279.98333333333335 731.5L279.98333333333335 827.5" fill="none" stroke="#99afed" stroke-width="2" marker-end="url(#ah-99afed)"/><path class="edge" data-conn="5" d="M425.98333333333335 526.3000000000001L425.98333333333335 975.6999999999999L410.79999999999995 975.6999999999999L410.8 1090.6999999999998" fill="none" stroke="#e8f0fc" stroke-width="1.8" marker-end="url(#ah-e8f0fc)"/><path class="edge" data-conn="6" d="M583.4833333333333 771.2L583.4833333333333 975.6999999999999L469.5 975.6999999999999L469.5 1090.6999999999998" fill="none" stroke="#e8f0fc" stroke-width="1.8" marker-end="url(#ah-e8f0fc)"/><path class="edge" data-conn="7" data-label="tcp/8080 app" d="M410.8 1144.8999999999999L410.8 1180.8999999999999L201.01666666666665 1180.8999999999999L201.01666666666665 1240.8999999999999" fill="none" stroke="#d397af" stroke-width="2" marker-end="url(#ah-d397af)"/><path class="edge" data-conn="8" data-label="tcp/8080 api" d="M469.5 1144.8999999999999L469.5 1240.8999999999999" fill="none" stroke="#afc493" stroke-width="2" marker-end="url(#ah-afc493)"/><path class="edge" data-conn="9" data-label="tcp/8443 app" d="M246.63333333333333 887.6999999999999L246.63333333333333 997.6999999999999L142.98333333333335 997.6999999999999L142.98333333333335 1240.8999999999996" fill="none" stroke="#93c0cd" stroke-width="2" marker-end="url(#ah-93c0cd)"/><path class="edge" data-conn="10" data-label="tcp/5432 pgsql" d="M172 1301.1L172 1337.1L234.975 1337.1L234.975 1397.1" fill="none" stroke="#d599db" stroke-width="2" marker-end="url(#ah-d599db)" marker-start="url(#ah-d599db)"/><path class="edge" data-conn="11" data-label="tcp/5432 pgsql" d="M469.5 1301.1L469.5 1337.1L331.02500000000003 1337.1L331.02500000000003 1397.1" fill="none" stroke="#d599db" stroke-width="2" marker-end="url(#ah-d599db)"/><path class="edge" data-conn="12" data-label="tcp/22 ssh" d="M132.98333333333335 370.1L132.98333333333335 1044.6999999999998" fill="none" stroke="#ddb290" stroke-width="2" marker-end="url(#ah-ddb290)"/><path class="edge" data-conn="13" data-label="tcp/22 ssh" d="M206.31666666666666 370.1L206.31666666666666 406.1L381.8 406.1L381.8 466.1" fill="none" stroke="#ddb290" stroke-width="2" marker-end="url(#ah-ddb290)"/><path class="edge" data-conn="14" data-label="udp/514 syslog" d="M236.63333333333333 930.6999999999999L236.63333333333333 975.6999999999999L137.48333333333335 975.6999999999999A4.5 4.5 0 0 0 128.48333333333335 975.6999999999999L38 975.6999999999999L38 1596.1999999999998L92.95 1596.1999999999998L92.95 1711.1999999999998" fill="none" stroke="#93c1be" stroke-width="2" marker-end="url(#ah-93c1be)"/><path class="edge" data-conn="15" data-label="udp/514 syslog" d="M132.98333333333335 1529.1999999999998L132.98333333333335 1711.1999999999998" fill="none" stroke="#93c1be" stroke-width="2" marker-end="url(#ah-93c1be)"/><path class="edge" data-conn="16" data-label="blocked" d="M313.3333333333333 887.6999999999999L313.3333333333333 975.6999999999999L283 975.6999999999999L283 1176.3999999999999A4.5 4.5 0 0 1 283 1185.3999999999999L283 1397.0999999999997" fill="none" stroke="#c4a6f7" stroke-width="2"/>
+      <g class="nd-node" data-id="fw1">
+      <rect x="293.48333333333335" y="466.20000000000005" width="265" height="60" rx="6" fill="#1b4680" stroke="#e8f0fc" stroke-width="1.5"/>
+      
+      <g transform="translate(326.98333333333335,475.20000000000005)"><g fill="none" stroke="#e8f0fc" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" color="#e8f0fc"><rect x="3" y="4" width="18" height="16" rx="1"/><path d="M3 9.3h18M3 14.6h18M9 4v5.3M15 4v5.3M6 9.3v5.3M12 9.3v5.3M18 9.3v5.3M9 14.6V20M15 14.6V20"/></g></g>
+      <text x="338.98333333333335" y="512.2" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8.5" font-weight="700" letter-spacing=".5" fill="#a9c2e6">FIREWALL</text>
+      <text x="384.48333333333335" y="488.20000000000005" font-family="ui-monospace,Menlo,monospace" font-size="13" font-weight="600" fill="#ffffff">Edge FW A</text>
+      <text x="384.48333333333335" y="504.20000000000005" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#a9c2e6">os: </tspan><tspan fill="#d4e4fb">bsd</tspan></text><text x="384.48333333333335" y="518.2" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#a9c2e6">ip: </tspan><tspan fill="#d4e4fb">203.0.113.1</tspan></text>
+      <rect x="523.4833333333333" y="472.20000000000005" width="28" height="12" rx="6" fill="#28589a" stroke="#9fbbe3" stroke-width=".8"/>
+      <text x="537.4833333333333" y="481.20000000000005" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8" font-weight="700" letter-spacing=".8" fill="#dbe8fb">HA</text>
+    </g><g class="nd-node" data-id="fw2">
+      <rect x="450.98333333333335" y="711.1" width="265" height="60" rx="6" fill="#1b4680" stroke="#e8f0fc" stroke-width="1.5"/>
+      
+      <g transform="translate(484.48333333333335,720.1)"><g fill="none" stroke="#e8f0fc" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" color="#e8f0fc"><rect x="3" y="4" width="18" height="16" rx="1"/><path d="M3 9.3h18M3 14.6h18M9 4v5.3M15 4v5.3M6 9.3v5.3M12 9.3v5.3M18 9.3v5.3M9 14.6V20M15 14.6V20"/></g></g>
+      <text x="496.48333333333335" y="757.1" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8.5" font-weight="700" letter-spacing=".5" fill="#a9c2e6">FIREWALL</text>
+      <text x="541.9833333333333" y="733.1" font-family="ui-monospace,Menlo,monospace" font-size="13" font-weight="600" fill="#ffffff">Edge FW B</text>
+      <text x="541.9833333333333" y="749.1" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#a9c2e6">os: </tspan><tspan fill="#d4e4fb">bsd</tspan></text><text x="541.9833333333333" y="763.1" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#a9c2e6">ip: </tspan><tspan fill="#d4e4fb">203.0.113.2</tspan></text>
+      <rect x="680.9833333333333" y="717.1" width="28" height="12" rx="6" fill="#28589a" stroke="#9fbbe3" stroke-width=".8"/>
+      <text x="694.9833333333333" y="726.1" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8" font-weight="700" letter-spacing=".8" fill="#dbe8fb">HA</text>
+    </g><g class="nd-node" data-id="waf">
+      <rect x="219.98333333333335" y="677.4" width="120" height="54" rx="6" fill="#1b4680" stroke="#e8f0fc" stroke-width="1.5"/>
+      
+      <g transform="translate(232.48333333333335,686.4)"><g fill="none" stroke="#e8f0fc" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" color="#e8f0fc"><path d="M12 2.5 19 5v6c0 4.5-3 8-7 9.5-4-1.5-7-5-7-9.5V5z"/><path d="M10.5 9.5 8.5 12l2 2.5M13.5 9.5 15.5 12l-2 2.5"/></g></g>
+      <text x="244.48333333333335" y="723.4" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8.5" font-weight="700" letter-spacing=".5" fill="#a9c2e6">WAF</text>
+      <text x="268.98333333333335" y="699.4" font-family="ui-monospace,Menlo,monospace" font-size="13" font-weight="600" fill="#ffffff">WAF</text>
+      
+      
+    </g><g class="nd-node" data-id="web1">
+      <rect x="179.98333333333335" y="827.5999999999999" width="200" height="60" rx="6" fill="#1b4680" stroke="#e8f0fc" stroke-width="1.5"/>
+      <rect x="182.98333333333335" y="830.5999999999999" width="194" height="54" rx="4" fill="none" stroke="#e8f0fc" stroke-width=".8"/>
+      <g transform="translate(204.98333333333335,836.5999999999999)"><g fill="none" stroke="#e8f0fc" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" color="#e8f0fc"><rect x="6" y="6" width="12" height="12" rx="1"/><rect x="10" y="10" width="4" height="4"/><path d="M9.5 6V3M14.5 6V3M9.5 21v-3M14.5 21v-3M6 9.5H3M6 14.5H3M21 9.5h-3M21 14.5h-3"/></g></g>
+      <text x="216.98333333333335" y="873.5999999999999" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8.5" font-weight="700" letter-spacing=".5" fill="#a9c2e6">SERVER</text>
+      <text x="253.98333333333335" y="849.5999999999999" font-family="ui-monospace,Menlo,monospace" font-size="13" font-weight="600" fill="#ffffff">web-01</text>
+      <text x="253.98333333333335" y="865.5999999999999" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#a9c2e6">os: </tspan><tspan fill="#d4e4fb">linux</tspan></text><text x="253.98333333333335" y="879.5999999999999" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#a9c2e6">ip: </tspan><tspan fill="#d4e4fb">10.0.10.11</tspan></text>
+      
+    </g><g class="nd-node" data-id="core">
+      <rect x="352.15" y="1090.7999999999997" width="176" height="54" rx="6" fill="#1b4680" stroke="#e8f0fc" stroke-width="1.5"/>
+      
+      <g transform="translate(377.15,1099.7999999999997)"><g fill="none" stroke="#e8f0fc" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" color="#e8f0fc"><rect x="2" y="7" width="20" height="10" rx="1.5"/><path d="M6 10.5h6m0 0-2-2m2 2-2 2M18 13.5h-6m0 0 2-2m-2 2 2 2"/></g></g>
+      <text x="389.15" y="1136.7999999999997" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8.5" font-weight="700" letter-spacing=".5" fill="#a9c2e6">SWITCH</text>
+      <text x="426.15" y="1112.7999999999997" font-family="ui-monospace,Menlo,monospace" font-size="13" font-weight="600" fill="#ffffff">Core Switch</text>
+      
+      
+    </g><g class="nd-node" data-id="app1">
+      <rect x="85" y="1240.9999999999998" width="174" height="60" rx="6" fill="#1b4680" stroke="#e8f0fc" stroke-width="1.5" stroke-dasharray="5 3"/>
+      
+      <g transform="translate(97,1249.9999999999998)"><g fill="none" stroke="#e8f0fc" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" color="#e8f0fc"><rect x="3" y="8" width="13" height="13" rx="1.5"/><path d="M8 8V5.5A1.5 1.5 0 0 1 9.5 4h9A1.5 1.5 0 0 1 20 5.5v9a1.5 1.5 0 0 1-1.5 1.5H16"/></g></g>
+      <text x="109" y="1286.9999999999998" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8.5" font-weight="700" letter-spacing=".5" fill="#a9c2e6">VM</text>
+      <text x="133" y="1262.9999999999998" font-family="ui-monospace,Menlo,monospace" font-size="13" font-weight="600" fill="#ffffff">app-01</text>
+      <text x="133" y="1278.9999999999998" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#a9c2e6">os: </tspan><tspan fill="#d4e4fb">linux</tspan></text><text x="133" y="1292.9999999999998" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#a9c2e6">ip: </tspan><tspan fill="#d4e4fb">10.0.20.11</tspan></text>
+      
+    </g><g class="nd-node" data-id="api1">
+      <rect x="308" y="1240.9999999999998" width="323" height="60" rx="6" fill="#1b4680" stroke="#e8f0fc" stroke-width="1.5" stroke-dasharray="2 3"/>
+      
+      <g transform="translate(345.5,1249.9999999999998)"><g fill="none" stroke="#e8f0fc" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" color="#e8f0fc"><rect x="2" y="7" width="20" height="11" rx="1.5"/><path d="M6.5 10v5M12 10v5M17.5 10v5"/></g></g>
+      <text x="357.5" y="1286.9999999999998" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8.5" font-weight="700" letter-spacing=".5" fill="#a9c2e6">CONTAINER</text>
+      <text x="407" y="1262.9999999999998" font-family="ui-monospace,Menlo,monospace" font-size="13" font-weight="600" fill="#ffffff">api-01</text>
+      <text x="407" y="1278.9999999999998" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#a9c2e6">os: </tspan><tspan fill="#d4e4fb">linux</tspan></text><text x="407" y="1292.9999999999998" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#a9c2e6">ip: </tspan><tspan fill="#d4e4fb">10.0.20.12</tspan></text>
+      <rect x="539" y="1246.9999999999998" width="45" height="12" rx="6" fill="#28589a" stroke="#9fbbe3" stroke-width=".8"/>
+      <text x="561.5" y="1255.9999999999998" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8" font-weight="700" letter-spacing=".8" fill="#dbe8fb">PROD</text><rect x="588" y="1246.9999999999998" width="36" height="12" rx="6" fill="#28589a" stroke="#9fbbe3" stroke-width=".8"/>
+      <text x="606" y="1255.9999999999998" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8" font-weight="700" letter-spacing=".8" fill="#dbe8fb">PCI</text>
+    </g><g class="nd-node" data-id="db1">
+      <rect x="187" y="1397.1999999999998" width="192" height="74" rx="6" fill="#1b4680" stroke="#e8f0fc" stroke-width="1.5"/>
+      <rect x="190" y="1400.1999999999998" width="186" height="68" rx="4" fill="none" stroke="#e8f0fc" stroke-width=".8"/>
+      <g transform="translate(208,1406.1999999999998)"><g fill="none" stroke="#e8f0fc" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" color="#e8f0fc"><ellipse cx="12" cy="5.5" rx="8" ry="3"/><path d="M4 5.5v13c0 1.66 3.58 3 8 3s8-1.34 8-3v-13M4 12c0 1.66 3.58 3 8 3s8-1.34 8-3"/></g></g>
+      <text x="220" y="1443.1999999999998" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8.5" font-weight="700" letter-spacing=".5" fill="#a9c2e6">METAL</text>
+      <text x="253" y="1419.1999999999998" font-family="ui-monospace,Menlo,monospace" font-size="13" font-weight="600" fill="#ffffff">pg-primary</text>
+      <text x="253" y="1435.1999999999998" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#a9c2e6">os: </tspan><tspan fill="#d4e4fb">linux</tspan></text><text x="253" y="1449.1999999999998" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#a9c2e6">ip: </tspan><tspan fill="#d4e4fb">10.0.20.21</tspan></text><text x="253" y="1463.1999999999998" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#a9c2e6">ip: </tspan><tspan fill="#d4e4fb">10.0.99.21</tspan></text>
+      
+    </g><g class="nd-node" data-id="mgmt">
+      <rect x="81.64999999999999" y="267.1" width="176" height="60" rx="6" fill="#1b4680" stroke="#e8f0fc" stroke-width="1.5"/>
+      
+      <g transform="translate(98.64999999999999,276.1)"><g fill="none" stroke="#e8f0fc" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" color="#e8f0fc"><circle cx="12" cy="7.5" r="4"/><path d="M4.5 20.5c0-4 3.4-6.5 7.5-6.5s7.5 2.5 7.5 6.5"/></g></g>
+      <text x="110.64999999999999" y="313.1" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8.5" font-weight="700" letter-spacing=".5" fill="#a9c2e6">USER</text>
+      <text x="139.64999999999998" y="289.1" font-family="ui-monospace,Menlo,monospace" font-size="13" font-weight="600" fill="#ffffff">Mgmt Station</text>
+      <text x="139.64999999999998" y="305.1" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#a9c2e6">os: </tspan><tspan fill="#d4e4fb">windows</tspan></text><text x="139.64999999999998" y="319.1" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#a9c2e6">ip: </tspan><tspan fill="#d4e4fb">10.0.99.5</tspan></text>
+      
+    </g><g class="nd-node" data-id="siem">
+      <rect x="52.96666666666667" y="1711.2999999999997" width="120" height="54" rx="6" fill="#1b4680" stroke="#e8f0fc" stroke-width="1.5"/>
+      
+      <g transform="translate(69.96666666666667,1720.2999999999997)"><g fill="none" stroke="#e8f0fc" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" color="#e8f0fc"><rect x="3" y="4" width="18" height="14" rx="1.5"/><path d="M6 13.5l3-3.5 2.5 2.5L15 8l3 4M8 21h8"/></g></g>
+      <text x="81.96666666666667" y="1757.2999999999997" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8.5" font-weight="700" letter-spacing=".5" fill="#a9c2e6">SIEM</text>
+      <text x="110.96666666666667" y="1733.2999999999997" font-family="ui-monospace,Menlo,monospace" font-size="13" font-weight="600" fill="#ffffff">SIEM</text>
+      
+      
+    </g><g class="nd-node" data-id="inet">
+      <rect x="514.3166666666667" y="16" width="170" height="54" rx="6" fill="#1b4680" stroke="#e8f0fc" stroke-width="1.5"/>
+      
+      <g transform="translate(547.8166666666667,25)"><g fill="none" stroke="#e8f0fc" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" color="#e8f0fc"><circle cx="12" cy="12" r="9.5"/><ellipse cx="12" cy="12" rx="4.2" ry="9.5"/><path d="M2.5 12h19M4 7h16M4 17h16"/></g></g>
+      <text x="559.8166666666667" y="62" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8.5" font-weight="700" letter-spacing=".5" fill="#a9c2e6">INTERNET</text>
+      <text x="605.3166666666667" y="38" font-family="ui-monospace,Menlo,monospace" font-size="13" font-weight="600" fill="#ffffff">Internet</text>
+      
+      
+    </g>
+      <text class="edge-lbl" data-conn="0" data-label="tcp/443 https" x="470.1666666666667" y="212.7" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="11" fill="#93c1be" stroke="#1f4f8f" stroke-width="4" paint-order="stroke" stroke-linejoin="round">tcp/443 https</text><text class="edge-lbl" data-conn="1" data-label="tcp/443 https" x="627.6666666666667" y="385.54999999999995" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="11" fill="#93c1be" stroke="#1f4f8f" stroke-width="4" paint-order="stroke" stroke-linejoin="round">tcp/443 https</text><text class="edge-lbl" data-conn="2" data-label="vrrp ha" x="539.3" y="590.1291666666667" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="11" fill="#c4a6f7" stroke="#1f4f8f" stroke-width="4" paint-order="stroke" stroke-linejoin="round">vrrp ha</text><text class="edge-lbl" data-conn="3" data-label="tcp/443 https" x="280.3458333333333" y="557.3" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="11" fill="#93c1be" stroke="#1f4f8f" stroke-width="4" paint-order="stroke" stroke-linejoin="round">tcp/443 https</text><text class="edge-lbl" data-conn="4" data-label="tcp/8443 https" x="279.98333333333335" y="774.5" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="11" fill="#99afed" stroke="#1f4f8f" stroke-width="4" paint-order="stroke" stroke-linejoin="round">tcp/8443 https</text><text class="edge-lbl" data-conn="7" data-label="tcp/8080 app" x="293.9083333333333" y="1175.8999999999999" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="11" fill="#d397af" stroke="#1f4f8f" stroke-width="4" paint-order="stroke" stroke-linejoin="round">tcp/8080 app</text><text class="edge-lbl" data-conn="8" data-label="tcp/8080 api" x="469.5" y="1187.8999999999999" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="11" fill="#afc493" stroke="#1f4f8f" stroke-width="4" paint-order="stroke" stroke-linejoin="round">tcp/8080 api</text><text class="edge-lbl" data-conn="9" data-label="tcp/8443 app" x="142.98333333333335" y="1007.4749999999998" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="11" fill="#93c0cd" stroke="#1f4f8f" stroke-width="4" paint-order="stroke" stroke-linejoin="round">tcp/8443 app</text><text class="edge-lbl" data-conn="10" data-label="tcp/5432 pgsql" x="215.4875" y="1332.1" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="11" fill="#d599db" stroke="#1f4f8f" stroke-width="4" paint-order="stroke" stroke-linejoin="round">tcp/5432 pgsql</text><text class="edge-lbl" data-conn="11" data-label="tcp/5432 pgsql" x="388.26250000000005" y="1332.1" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="11" fill="#d599db" stroke="#1f4f8f" stroke-width="4" paint-order="stroke" stroke-linejoin="round">tcp/5432 pgsql</text><text class="edge-lbl" data-conn="12" data-label="tcp/22 ssh" x="132.98333333333335" y="702.3999999999999" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="11" fill="#ddb290" stroke="#1f4f8f" stroke-width="4" paint-order="stroke" stroke-linejoin="round">tcp/22 ssh</text><text class="edge-lbl" data-conn="13" data-label="tcp/22 ssh" x="306.05833333333334" y="401.1" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="11" fill="#ddb290" stroke="#1f4f8f" stroke-width="4" paint-order="stroke" stroke-linejoin="round">tcp/22 ssh</text><text class="edge-lbl" data-conn="14" data-label="udp/514 syslog" x="38" y="1244.1083333333331" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="11" fill="#93c1be" stroke="#1f4f8f" stroke-width="4" paint-order="stroke" stroke-linejoin="round">udp/514 syslog</text><text class="edge-lbl" data-conn="15" data-label="udp/514 syslog" x="132.98333333333335" y="1615.1999999999998" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="11" fill="#93c1be" stroke="#1f4f8f" stroke-width="4" paint-order="stroke" stroke-linejoin="round">udp/514 syslog</text><text class="edge-lbl" data-conn="16" data-label="blocked" x="283" y="1122.2333333333331" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="11" fill="#c4a6f7" stroke="#1f4f8f" stroke-width="4" paint-order="stroke" stroke-linejoin="round">blocked</text>
+    </g>
+    <g>
+    <rect x="556" y="1856" width="232" height="86" fill="#1b4680" stroke="#e8f0fc" stroke-width="1.4"/>
+    <path d="M556 1876 h232 M706 1876 V1910" stroke="#e8f0fc" stroke-width="1"/>
+    <text x="565" y="1870.5" font-family="ui-monospace,Menlo,monospace" font-size="10.5" font-weight="700" letter-spacing="1.2" fill="#e8f0fc">HQ EDGE &amp; CORE</text>
+    <text x="565" y="1893" font-family="ui-monospace,Menlo,monospace" font-size="9" letter-spacing="1" fill="#a9c2e6">DRAWN</text>
+    <text x="565" y="1904" font-family="ui-monospace,Menlo,monospace" font-size="10" fill="#e8f0fc">netdiagram vX</text>
+    <text x="715" y="1893" font-family="ui-monospace,Menlo,monospace" font-size="9" letter-spacing="1" fill="#a9c2e6">DATE</text>
+    <text x="715" y="1904" font-family="ui-monospace,Menlo,monospace" font-size="10" fill="#e8f0fc">2000-01-01</text>
+    <path d="M556 1910 h232" stroke="#e8f0fc" stroke-width=".7"/>
+    <text x="565" y="1922" font-family="ui-monospace,Menlo,monospace" font-size="9" letter-spacing="1" fill="#a9c2e6">AUTHOR</text>
+    <text x="779" y="1922" text-anchor="end" font-family="ui-monospace,Menlo,monospace" font-size="10" fill="#e8f0fc">remy</text><path d="M556 1926 h232" stroke="#e8f0fc" stroke-width=".7"/>
+    <text x="565" y="1938" font-family="ui-monospace,Menlo,monospace" font-size="9" letter-spacing="1" fill="#a9c2e6">REVISION</text>
+    <text x="779" y="1938" text-anchor="end" font-family="ui-monospace,Menlo,monospace" font-size="10" fill="#e8f0fc">1.2</text>
+  </g>
+  </svg>

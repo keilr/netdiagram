@@ -1,0 +1,360 @@
+<svg xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="nd-title nd-desc" width="2070" height="1855" viewBox="0 0 2070 1855" font-family="ui-monospace,Menlo,monospace" data-theme="paper" data-bg="#fafbf7">
+    <title id="nd-title">Metrics — pull architecture</title>
+    <desc id="nd-desc">22 nodes, 8 groups, 12 connections</desc>
+    <metadata id="netdiagram-source" data-type="text/yaml"># Grafana / Prometheus / Mimir — PULL architecture: a central Prometheus
+# scrapes every target (it connects OUT to the exporters — that is the
+# firewall-rule direction), then remote-writes to Mimir. Each target group is
+# one edge per scrape job — untouched interiors pack into grids.
+# Compare with observability-push.yaml (agent mode, remote-write from nodes).
+# rank: splits the wide target fan-out into two rows below the stack, and
+# the mimir group members are never addressed directly, so they grid too.
+diagram:
+  title: Metrics — pull architecture
+  owner: sre-team
+
+nodes:
+  - {id: sre, label: SRE, type: user}
+
+  # observability core
+  - {id: graf, label: grafana, type: container, icon: monitoring, ip: 10.70.0.3}
+  - {id: prom, label: prometheus, type: container, ip: 10.70.0.9, tags: [scraper]}
+  - {id: mimir1, label: mimir-01, type: container, ip: 10.70.0.11}
+  - {id: mimir2, label: mimir-02, type: container, ip: 10.70.0.12}
+  - {id: mimir3, label: mimir-03, type: container, ip: 10.70.0.13}
+  - {id: s3, label: minio-s3, type: storage, ip: 10.70.0.20, tags: [blocks]}
+
+  # scrape targets
+  - {id: kafka1, label: kafka-01, type: metal, ip: 10.70.10.11, os: linux, tags: [jmx]}
+  - {id: kafka2, label: kafka-02, type: metal, ip: 10.70.10.12, os: linux, tags: [jmx]}
+  - {id: kafka3, label: kafka-03, type: metal, ip: 10.70.10.13, os: linux, tags: [jmx]}
+  - {id: os1, label: opensearch-01, type: vm, ip: 10.70.20.11, os: linux}
+  - {id: os2, label: opensearch-02, type: vm, ip: 10.70.20.12, os: linux}
+  - {id: os3, label: opensearch-03, type: vm, ip: 10.70.20.13, os: linux}
+  - {id: vec1, label: vector-01, type: container, ip: 10.70.30.11}
+  - {id: vec2, label: vector-02, type: container, ip: 10.70.30.12}
+  - {id: webui, label: open-webui, type: container, ip: 10.70.40.5}
+  - {id: dcgm, label: dcgm-exporter, type: container, ip: 10.70.40.6, tags: [nvidia]}
+  - {id: vllm1, label: vllm-01, type: gpu, ip: 10.70.40.11, os: linux, tags: [h100]}
+  - {id: vllm2, label: vllm-02, type: gpu, ip: 10.70.40.12, os: linux, tags: [h100]}
+  - {id: lx1, label: app-01, type: vm, ip: 10.70.50.11, os: linux, tags: [node-exporter]}
+  - {id: lx2, label: app-02, type: vm, ip: 10.70.50.12, os: linux, tags: [node-exporter]}
+  - {id: lx3, label: db-01, type: metal, icon: db, ip: 10.70.50.13, os: linux, tags: [node-exporter]}
+
+groups:
+  - id: obs
+    label: Observability
+    class: zone
+    cidr: 10.70.0.0/24
+    nodes: [graf, prom]
+    groups:
+      - id: mimir
+        label: mimir (HA)
+        class: subnet
+        nodes: [mimir1, mimir2, mimir3, s3]
+
+  # first target row — ml gets three scrape edges, so it sits directly below
+  # the stack where the drops stay vertical and the labels stay apart
+  - id: ml
+    label: ML inference
+    class: trust
+    style: {color: purple}
+    rank: 1
+    cidr: 10.70.40.0/24
+    nodes: [webui, dcgm]
+    groups:
+      - {id: gpus, label: vllm pool, class: nodepool, nodes: [vllm1, vllm2]}
+  - {id: logs, label: log pipeline, class: subnet, rank: 1, cidr: 10.70.30.0/24, nodes: [vec1, vec2]}
+
+  # second target row — one edge each
+  - {id: kafka, label: kafka — streaming, class: vlan, rank: 2, cidr: 10.70.10.0/24, nodes: [kafka1, kafka2, kafka3]}
+  - {id: search, label: opensearch, class: vlan, rank: 2, cidr: 10.70.20.0/24, nodes: [os1, os2, os3]}
+  - {id: fleet, label: linux fleet, class: onprem, rank: 2, cidr: 10.70.50.0/24, nodes: [lx1, lx2, lx3]}
+
+connections:
+  - {from: sre,  to: graf,   label: &quot;tcp/3000 grafana&quot;,      protocol: tcp, port: 3000}
+  - {from: graf, to: mimir,  label: &quot;tcp/8080 promql&quot;,       protocol: tcp, port: 8080, comment: &quot;dashboards query mimir&quot;}
+  - {from: prom, to: mimir,  label: &quot;tcp/8080 remote-write&quot;, protocol: tcp, port: 8080, comment: &quot;long-term storage&quot;}
+  # scrapes — prometheus connects out to the exporters
+  - {from: prom, to: kafka,  label: &quot;tcp/7071 jmx&quot;,          protocol: tcp, port: 7071, comment: &quot;jmx-exporter javaagent&quot;}
+  - {from: prom, to: search, label: &quot;tcp/9200 metrics&quot;,      protocol: tcp, port: 9200, comment: &quot;prometheus-exporter plugin&quot;}
+  - {from: prom, to: logs,   label: &quot;tcp/9598 vector&quot;,       protocol: tcp, port: 9598, comment: &quot;vector internal metrics&quot;}
+  - {from: prom, to: webui,  label: &quot;tcp/8080 open-webui&quot;,   protocol: tcp, port: 8080}
+  - {from: prom, to: dcgm,   label: &quot;tcp/9400 dcgm&quot;,         protocol: tcp, port: 9400, comment: &quot;nvidia gpu telemetry&quot;}
+  - {from: prom, to: gpus,   label: &quot;tcp/8000 vllm&quot;,         protocol: tcp, port: 8000, comment: &quot;vllm /metrics&quot;}
+  - {from: prom, to: fleet,  label: &quot;tcp/9100 node&quot;,         protocol: tcp, port: 9100, comment: &quot;node-exporter on every host&quot;}
+  # host metrics also come from node-exporter on the kafka and search nodes
+  - {from: prom, to: kafka,  label: &quot;tcp/9100 node&quot;,         protocol: tcp, port: 9100, comment: &quot;node-exporter&quot;}
+  - {from: prom, to: search, label: &quot;tcp/9100 node&quot;,         protocol: tcp, port: 9100, comment: &quot;node-exporter&quot;}
+</metadata>
+    <defs>
+    <pattern id="gridS" width="12" height="12" patternUnits="userSpaceOnUse">
+      <path d="M12 0H0v12" fill="none" stroke="#e7ece2" stroke-width=".6"/>
+    </pattern>
+    <pattern id="gridL" width="60" height="60" patternUnits="userSpaceOnUse">
+      <rect width="60" height="60" fill="url(#gridS)"/>
+      <path d="M60 0H0v60" fill="none" stroke="#dde3d7" stroke-width="1"/>
+    </pattern>
+    <marker id="ah-0f766e" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse">
+      <path d="M0 .8 9.2 5 0 9.2z" fill="#0f766e"/>
+    </marker>
+    <marker id="ah-7c3aed" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse">
+      <path d="M0 .8 9.2 5 0 9.2z" fill="#7c3aed"/>
+    </marker>
+    <marker id="ah-1d4ed8" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse">
+      <path d="M0 .8 9.2 5 0 9.2z" fill="#1d4ed8"/>
+    </marker>
+    <marker id="ah-9d174d" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse">
+      <path d="M0 .8 9.2 5 0 9.2z" fill="#9d174d"/>
+    </marker>
+    <marker id="ah-4d7c0f" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse">
+      <path d="M0 .8 9.2 5 0 9.2z" fill="#4d7c0f"/>
+    </marker>
+    <marker id="ah-0e7490" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse">
+      <path d="M0 .8 9.2 5 0 9.2z" fill="#0e7490"/>
+    </marker>
+    <marker id="ah-a21caf" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse">
+      <path d="M0 .8 9.2 5 0 9.2z" fill="#a21caf"/>
+    </marker>
+    <marker id="ah-b45309" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse">
+      <path d="M0 .8 9.2 5 0 9.2z" fill="#b45309"/>
+    </marker></defs>
+    <rect width="2070" height="1855" fill="#fafbf7"/>
+    <rect width="2070" height="1855" fill="url(#gridL)"/>
+    <g transform="translate(26,26)">
+      <g class="nd-group" data-id="obs">
+      <rect x="1356.862121212121" y="175" width="618.8333333333333" height="603.2" rx="8" fill="rgba(180,83,9,.05)" stroke="#c98a4b" stroke-width="1.4"/>
+      
+      <text x="1370.862121212121" y="197" font-family="ui-monospace,Menlo,monospace" font-size="11" font-weight="700" letter-spacing="1.6" fill="#9a5b17">OBSERVABILITY</text>
+      <rect class="attr-box" x="1806.6954545454544" y="745.2" width="161" height="25" rx="3" fill="#ffffff" fill-opacity=".8" stroke="#c98a4b" stroke-width=".9"/><text x="1816.6954545454544" y="761.2" font-family="ui-monospace,Menlo,monospace" font-size="10.5" fill="#9a5b17"><tspan opacity=".6">cidr: </tspan><tspan opacity=".9">10.70.0.0/24</tspan></text></g><g class="nd-group" data-id="mimir">
+      <rect x="1378.862121212121" y="391.2" width="328" height="344" rx="8" fill="rgba(71,105,155,.06)" stroke="#8aa2c4" stroke-width="1.4"/>
+      
+      <text x="1392.862121212121" y="413.2" font-family="ui-monospace,Menlo,monospace" font-size="11" font-weight="700" letter-spacing="1.6" fill="#3f5e8c">MIMIR (HA)</text>
+      </g><g class="nd-group" data-id="ml">
+      <rect x="577.9999999999999" y="1000.2" width="965" height="297" rx="8" fill="rgba(124,58,237,.05)" stroke="#b38df5" stroke-width="1.4" stroke-dasharray="8 5"/>
+      
+      <text x="591.9999999999999" y="1022.2" font-family="ui-monospace,Menlo,monospace" font-size="11" font-weight="700" letter-spacing="1.6" fill="#7c3aed">ML INFERENCE</text>
+      <rect class="attr-box" x="1366" y="1264.2" width="169" height="25" rx="3" fill="#ffffff" fill-opacity=".8" stroke="#b38df5" stroke-width=".9"/><text x="1376" y="1280.2" font-family="ui-monospace,Menlo,monospace" font-size="10.5" fill="#7c3aed"><tspan opacity=".6">cidr: </tspan><tspan opacity=".9">10.70.40.0/24</tspan></text></g><g class="nd-group" data-id="gpus">
+      <rect x="1237" y="1046.2" width="284" height="208" rx="8" fill="rgba(87,99,111,.05)" stroke="#9ea5ab" stroke-width="1.4"/>
+      
+      <text x="1251" y="1068.2" font-family="ui-monospace,Menlo,monospace" font-size="11" font-weight="700" letter-spacing="1.6" fill="#57636f">VLLM POOL</text>
+      </g><g class="nd-group" data-id="logs">
+      <rect x="1599" y="1000.2" width="276" height="217" rx="8" fill="rgba(71,105,155,.06)" stroke="#8aa2c4" stroke-width="1.4"/>
+      
+      <text x="1613" y="1022.2" font-family="ui-monospace,Menlo,monospace" font-size="11" font-weight="700" letter-spacing="1.6" fill="#3f5e8c">LOG PIPELINE</text>
+      <rect class="attr-box" x="1698" y="1184.2" width="169" height="25" rx="3" fill="#ffffff" fill-opacity=".8" stroke="#8aa2c4" stroke-width=".9"/><text x="1708" y="1200.2" font-family="ui-monospace,Menlo,monospace" font-size="10.5" fill="#3f5e8c"><tspan opacity=".6">cidr: </tspan><tspan opacity=".9">10.70.30.0/24</tspan></text></g><g class="nd-group" data-id="kafka">
+      <rect x="16" y="1393.2" width="292" height="309" rx="8" fill="rgba(13,148,136,.05)" stroke="#4fa9a0" stroke-width="1.4"/>
+      
+      <text x="30" y="1415.2" font-family="ui-monospace,Menlo,monospace" font-size="11" font-weight="700" letter-spacing="1.6" fill="#0f766e">KAFKA — STREAMING</text>
+      <rect class="attr-box" x="131" y="1669.2" width="169" height="25" rx="3" fill="#ffffff" fill-opacity=".8" stroke="#4fa9a0" stroke-width=".9"/><text x="141" y="1685.2" font-family="ui-monospace,Menlo,monospace" font-size="10.5" fill="#0f766e"><tspan opacity=".6">cidr: </tspan><tspan opacity=".9">10.70.10.0/24</tspan></text></g><g class="nd-group" data-id="search">
+      <rect x="1776.3727272727272" y="1393.2" width="225" height="309" rx="8" fill="rgba(13,148,136,.05)" stroke="#4fa9a0" stroke-width="1.4"/>
+      
+      <text x="1790.3727272727272" y="1415.2" font-family="ui-monospace,Menlo,monospace" font-size="11" font-weight="700" letter-spacing="1.6" fill="#0f766e">OPENSEARCH</text>
+      <rect class="attr-box" x="1824.3727272727272" y="1669.2" width="169" height="25" rx="3" fill="#ffffff" fill-opacity=".8" stroke="#4fa9a0" stroke-width=".9"/><text x="1834.3727272727272" y="1685.2" font-family="ui-monospace,Menlo,monospace" font-size="10.5" fill="#0f766e"><tspan opacity=".6">cidr: </tspan><tspan opacity=".9">10.70.20.0/24</tspan></text></g><g class="nd-group" data-id="fleet">
+      <rect x="363.9999999999999" y="1393.2" width="378" height="309" rx="8" fill="rgba(60,72,88,.045)" stroke="#9aa6b4" stroke-width="1.4"/>
+      
+      <text x="377.9999999999999" y="1415.2" font-family="ui-monospace,Menlo,monospace" font-size="11" font-weight="700" letter-spacing="1.6" fill="#4b5866">LINUX FLEET</text>
+      <rect class="attr-box" x="564.9999999999999" y="1669.2" width="169" height="25" rx="3" fill="#ffffff" fill-opacity=".8" stroke="#9aa6b4" stroke-width=".9"/><text x="574.9999999999999" y="1685.2" font-family="ui-monospace,Menlo,monospace" font-size="10.5" fill="#4b5866"><tspan opacity=".6">cidr: </tspan><tspan opacity=".9">10.70.50.0/24</tspan></text></g>
+      <path class="edge" data-conn="0" data-label="tcp/3000 grafana" d="M1488.1954545454544 70L1488.1954545454544 221" fill="none" stroke="#0f766e" stroke-width="2" marker-end="url(#ah-0f766e)"/><path class="edge" data-conn="1" data-label="tcp/8080 promql" d="M1488.1954545454544 275.2L1488.1954545454544 391.2" fill="none" stroke="#7c3aed" stroke-width="2" marker-end="url(#ah-7c3aed)"/><path class="edge" data-conn="2" data-label="tcp/8080 remote-write" d="M1734.7636363636364 275.2L1734.7636363636364 333.2L1597.5287878787879 333.2L1597.5287878787879 391.2" fill="none" stroke="#1d4ed8" stroke-width="2" marker-end="url(#ah-1d4ed8)"/><path class="edge" data-conn="3" data-label="tcp/7071 jmx" d="M1707.390909090909 275.2L1707.390909090909 311.2L1730.2636363636364 311.2A4.5 4.5 0 0 1 1739.2636363636364 311.2L1749.862121212121 311.2L1749.862121212121 845.2L210.66666666666674 845.2L210.66666666666674 1393.2" fill="none" stroke="#9d174d" stroke-width="2" marker-end="url(#ah-9d174d)"/><path class="edge" data-conn="4" data-label="tcp/9200 metrics" d="M1926.3727272727272 275.2L1926.3727272727272 1393.2" fill="none" stroke="#4d7c0f" stroke-width="2" marker-end="url(#ah-4d7c0f)"/><path class="edge" data-conn="5" data-label="tcp/9598 vector" d="M1871.6272727272726 275.2L1871.6272727272726 955.2L1737 955.2L1737 1000.2" fill="none" stroke="#0e7490" stroke-width="2" marker-end="url(#ah-0e7490)"/><path class="edge" data-conn="6" data-label="tcp/8080 open-webui" d="M1789.509090909091 275.2L1789.509090909091 889.2L712.4999999999999 889.2L712.4999999999999 1046.2" fill="none" stroke="#a21caf" stroke-width="2" marker-end="url(#ah-a21caf)"/><path class="edge" data-conn="7" data-label="tcp/9400 dcgm" d="M1816.881818181818 275.2L1816.881818181818 911.2L1031 911.2L1031 1046.2" fill="none" stroke="#b45309" stroke-width="2" marker-end="url(#ah-b45309)"/><path class="edge" data-conn="8" data-label="tcp/8000 vllm" d="M1844.2545454545455 275.2L1844.2545454545455 933.2L1379 933.2L1379 1046.2" fill="none" stroke="#0f766e" stroke-width="2" marker-end="url(#ah-0f766e)"/><path class="edge" data-conn="9" data-label="tcp/9100 node" d="M1762.1363636363635 275.2L1762.1363636363635 311.2L1768.862121212121 311.2L1768.862121212121 867.2L552.9999999999999 867.2L552.9999999999999 1393.2" fill="none" stroke="#7c3aed" stroke-width="2" marker-end="url(#ah-7c3aed)"/><path class="edge" data-conn="10" data-label="tcp/9100 node" d="M1680.0181818181818 275.2L1680.0181818181818 328.7A4.5 4.5 0 0 1 1680.0181818181818 337.7L1680.0181818181818 355.2L1730.862121212121 355.2L1730.862121212121 823.2L191.66666666666674 823.2L191.66666666666674 1333.2L113.33333333333326 1333.2L113.33333333333326 1393.2" fill="none" stroke="#7c3aed" stroke-width="2" marker-end="url(#ah-7c3aed)"/><path class="edge" data-conn="11" data-label="tcp/9100 node" d="M1899 275.2L1899 1333.2L1851.3727272727272 1333.2L1851.3727272727272 1393.2" fill="none" stroke="#7c3aed" stroke-width="2" marker-end="url(#ah-7c3aed)"/>
+      <g class="nd-node" data-id="graf">
+      <rect x="1379.6954545454544" y="221.1" width="217" height="54" rx="6" fill="#ffffff" stroke="#24344d" stroke-width="1.5" stroke-dasharray="2 3"/>
+      
+      <g transform="translate(1417.1954545454544,230.1)"><g fill="none" stroke="#24344d" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" color="#24344d"><rect x="3" y="4" width="18" height="14" rx="1.5"/><path d="M6 13.5l3-3.5 2.5 2.5L15 8l3 4M8 21h8"/></g></g>
+      <text x="1429.1954545454544" y="267.1" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8.5" font-weight="700" letter-spacing=".5" fill="#7a8798">CONTAINER</text>
+      <text x="1478.6954545454544" y="243.1" font-family="ui-monospace,Menlo,monospace" font-size="13" font-weight="600" fill="#1a2638">grafana</text>
+      <text x="1478.6954545454544" y="259.1" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#7a8798">ip: </tspan><tspan fill="#3f5e8c">10.70.0.3</tspan></text>
+      
+    </g><g class="nd-node" data-id="prom">
+      <rect x="1652.6954545454544" y="221.1" width="301" height="54" rx="6" fill="#ffffff" stroke="#24344d" stroke-width="1.5" stroke-dasharray="2 3"/>
+      
+      <g transform="translate(1690.1954545454544,230.1)"><g fill="none" stroke="#24344d" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" color="#24344d"><rect x="2" y="7" width="20" height="11" rx="1.5"/><path d="M6.5 10v5M12 10v5M17.5 10v5"/></g></g>
+      <text x="1702.1954545454544" y="267.1" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8.5" font-weight="700" letter-spacing=".5" fill="#7a8798">CONTAINER</text>
+      <text x="1751.6954545454544" y="243.1" font-family="ui-monospace,Menlo,monospace" font-size="13" font-weight="600" fill="#1a2638">prometheus</text>
+      <text x="1751.6954545454544" y="259.1" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#7a8798">ip: </tspan><tspan fill="#3f5e8c">10.70.0.9</tspan></text>
+      <rect x="1875.6954545454544" y="227.1" width="71" height="12" rx="6" fill="#eef1f4" stroke="#9aa7ba" stroke-width=".8"/>
+      <text x="1911.1954545454544" y="236.1" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8" font-weight="700" letter-spacing=".8" fill="#5b6874">SCRAPER</text>
+    </g><g class="nd-node" data-id="mimir1">
+      <rect x="1400.862121212121" y="437.2" width="225" height="54" rx="6" fill="#ffffff" stroke="#24344d" stroke-width="1.5" stroke-dasharray="2 3"/>
+      
+      <g transform="translate(1438.362121212121,446.2)"><g fill="none" stroke="#24344d" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" color="#24344d"><rect x="2" y="7" width="20" height="11" rx="1.5"/><path d="M6.5 10v5M12 10v5M17.5 10v5"/></g></g>
+      <text x="1450.362121212121" y="483.2" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8.5" font-weight="700" letter-spacing=".5" fill="#7a8798">CONTAINER</text>
+      <text x="1499.862121212121" y="459.2" font-family="ui-monospace,Menlo,monospace" font-size="13" font-weight="600" fill="#1a2638">mimir-01</text>
+      <text x="1499.862121212121" y="475.2" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#7a8798">ip: </tspan><tspan fill="#3f5e8c">10.70.0.11</tspan></text>
+      
+    </g><g class="nd-node" data-id="mimir2">
+      <rect x="1400.862121212121" y="511.2" width="225" height="54" rx="6" fill="#ffffff" stroke="#24344d" stroke-width="1.5" stroke-dasharray="2 3"/>
+      
+      <g transform="translate(1438.362121212121,520.2)"><g fill="none" stroke="#24344d" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" color="#24344d"><rect x="2" y="7" width="20" height="11" rx="1.5"/><path d="M6.5 10v5M12 10v5M17.5 10v5"/></g></g>
+      <text x="1450.362121212121" y="557.2" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8.5" font-weight="700" letter-spacing=".5" fill="#7a8798">CONTAINER</text>
+      <text x="1499.862121212121" y="533.2" font-family="ui-monospace,Menlo,monospace" font-size="13" font-weight="600" fill="#1a2638">mimir-02</text>
+      <text x="1499.862121212121" y="549.2" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#7a8798">ip: </tspan><tspan fill="#3f5e8c">10.70.0.12</tspan></text>
+      
+    </g><g class="nd-node" data-id="mimir3">
+      <rect x="1400.862121212121" y="585.2" width="225" height="54" rx="6" fill="#ffffff" stroke="#24344d" stroke-width="1.5" stroke-dasharray="2 3"/>
+      
+      <g transform="translate(1438.362121212121,594.2)"><g fill="none" stroke="#24344d" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" color="#24344d"><rect x="2" y="7" width="20" height="11" rx="1.5"/><path d="M6.5 10v5M12 10v5M17.5 10v5"/></g></g>
+      <text x="1450.362121212121" y="631.2" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8.5" font-weight="700" letter-spacing=".5" fill="#7a8798">CONTAINER</text>
+      <text x="1499.862121212121" y="607.2" font-family="ui-monospace,Menlo,monospace" font-size="13" font-weight="600" fill="#1a2638">mimir-03</text>
+      <text x="1499.862121212121" y="623.2" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#7a8798">ip: </tspan><tspan fill="#3f5e8c">10.70.0.13</tspan></text>
+      
+    </g><g class="nd-node" data-id="s3">
+      <rect x="1400.862121212121" y="659.2" width="284" height="54" rx="6" fill="#ffffff" stroke="#24344d" stroke-width="1.5"/>
+      
+      <g transform="translate(1430.362121212121,668.2)"><g fill="none" stroke="#24344d" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" color="#24344d"><rect x="3" y="5" width="18" height="6" rx="1"/><rect x="3" y="13" width="18" height="6" rx="1"/><circle cx="7" cy="8" r=".9" fill="currentColor" stroke="none"/><circle cx="7" cy="16" r=".9" fill="currentColor" stroke="none"/></g></g>
+      <text x="1442.362121212121" y="705.2" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8.5" font-weight="700" letter-spacing=".5" fill="#7a8798">STORAGE</text>
+      <text x="1483.862121212121" y="681.2" font-family="ui-monospace,Menlo,monospace" font-size="13" font-weight="600" fill="#1a2638">minio-s3</text>
+      <text x="1483.862121212121" y="697.2" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#7a8798">ip: </tspan><tspan fill="#3f5e8c">10.70.0.20</tspan></text>
+      <rect x="1615.862121212121" y="665.2" width="62" height="12" rx="6" fill="#eef1f4" stroke="#9aa7ba" stroke-width=".8"/>
+      <text x="1646.862121212121" y="674.2" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8" font-weight="700" letter-spacing=".8" fill="#5b6874">BLOCKS</text>
+    </g><g class="nd-node" data-id="webui">
+      <rect x="599.9999999999999" y="1046.2" width="225" height="54" rx="6" fill="#ffffff" stroke="#24344d" stroke-width="1.5" stroke-dasharray="2 3"/>
+      
+      <g transform="translate(637.4999999999999,1055.2)"><g fill="none" stroke="#24344d" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" color="#24344d"><rect x="2" y="7" width="20" height="11" rx="1.5"/><path d="M6.5 10v5M12 10v5M17.5 10v5"/></g></g>
+      <text x="649.4999999999999" y="1092.2" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8.5" font-weight="700" letter-spacing=".5" fill="#7a8798">CONTAINER</text>
+      <text x="698.9999999999999" y="1068.2" font-family="ui-monospace,Menlo,monospace" font-size="13" font-weight="600" fill="#1a2638">open-webui</text>
+      <text x="698.9999999999999" y="1084.2" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#7a8798">ip: </tspan><tspan fill="#3f5e8c">10.70.40.5</tspan></text>
+      
+    </g><g class="nd-node" data-id="dcgm">
+      <rect x="880.9999999999999" y="1046.2" width="300" height="54" rx="6" fill="#ffffff" stroke="#24344d" stroke-width="1.5" stroke-dasharray="2 3"/>
+      
+      <g transform="translate(918.4999999999999,1055.2)"><g fill="none" stroke="#24344d" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" color="#24344d"><rect x="2" y="7" width="20" height="11" rx="1.5"/><path d="M6.5 10v5M12 10v5M17.5 10v5"/></g></g>
+      <text x="930.4999999999999" y="1092.2" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8.5" font-weight="700" letter-spacing=".5" fill="#7a8798">CONTAINER</text>
+      <text x="979.9999999999999" y="1068.2" font-family="ui-monospace,Menlo,monospace" font-size="13" font-weight="600" fill="#1a2638">dcgm-exporter</text>
+      <text x="979.9999999999999" y="1084.2" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#7a8798">ip: </tspan><tspan fill="#3f5e8c">10.70.40.6</tspan></text>
+      <rect x="1112" y="1052.2" width="62" height="12" rx="6" fill="#eef1f4" stroke="#9aa7ba" stroke-width=".8"/>
+      <text x="1143" y="1061.2" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8" font-weight="700" letter-spacing=".8" fill="#5b6874">NVIDIA</text>
+    </g><g class="nd-node" data-id="vllm1">
+      <rect x="1259" y="1092.2" width="240" height="60" rx="6" fill="#ffffff" stroke="#24344d" stroke-width="1.5"/>
+      
+      <g transform="translate(1271.5,1101.2)"><g fill="none" stroke="#24344d" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" color="#24344d"><rect x="2" y="6.5" width="20" height="11" rx="1.5"/><circle cx="8" cy="12" r="3.2"/><path d="M8 8.8v6.4M4.8 12h6.4"/><path d="M14 10h4.5M14 12.3h4.5M14 14.6h4.5"/><path d="M6.5 17.5v2.6M11 17.5v2.6"/></g></g>
+      <text x="1283.5" y="1138.2" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8.5" font-weight="700" letter-spacing=".5" fill="#7a8798">GPU</text>
+      <text x="1308" y="1114.2" font-family="ui-monospace,Menlo,monospace" font-size="13" font-weight="600" fill="#1a2638">vllm-01</text>
+      <text x="1308" y="1130.2" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#7a8798">os: </tspan><tspan fill="#3f5e8c">linux</tspan></text><text x="1308" y="1144.2" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#7a8798">ip: </tspan><tspan fill="#3f5e8c">10.70.40.11</tspan></text>
+      <rect x="1447" y="1098.2" width="45" height="12" rx="6" fill="#eef1f4" stroke="#9aa7ba" stroke-width=".8"/>
+      <text x="1469.5" y="1107.2" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8" font-weight="700" letter-spacing=".8" fill="#5b6874">H100</text>
+    </g><g class="nd-node" data-id="vllm2">
+      <rect x="1259" y="1172.2" width="240" height="60" rx="6" fill="#ffffff" stroke="#24344d" stroke-width="1.5"/>
+      
+      <g transform="translate(1271.5,1181.2)"><g fill="none" stroke="#24344d" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" color="#24344d"><rect x="2" y="6.5" width="20" height="11" rx="1.5"/><circle cx="8" cy="12" r="3.2"/><path d="M8 8.8v6.4M4.8 12h6.4"/><path d="M14 10h4.5M14 12.3h4.5M14 14.6h4.5"/><path d="M6.5 17.5v2.6M11 17.5v2.6"/></g></g>
+      <text x="1283.5" y="1218.2" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8.5" font-weight="700" letter-spacing=".5" fill="#7a8798">GPU</text>
+      <text x="1308" y="1194.2" font-family="ui-monospace,Menlo,monospace" font-size="13" font-weight="600" fill="#1a2638">vllm-02</text>
+      <text x="1308" y="1210.2" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#7a8798">os: </tspan><tspan fill="#3f5e8c">linux</tspan></text><text x="1308" y="1224.2" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#7a8798">ip: </tspan><tspan fill="#3f5e8c">10.70.40.12</tspan></text>
+      <rect x="1447" y="1178.2" width="45" height="12" rx="6" fill="#eef1f4" stroke="#9aa7ba" stroke-width=".8"/>
+      <text x="1469.5" y="1187.2" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8" font-weight="700" letter-spacing=".8" fill="#5b6874">H100</text>
+    </g><g class="nd-node" data-id="vec1">
+      <rect x="1621" y="1046.2" width="232" height="54" rx="6" fill="#ffffff" stroke="#24344d" stroke-width="1.5" stroke-dasharray="2 3"/>
+      
+      <g transform="translate(1658.5,1055.2)"><g fill="none" stroke="#24344d" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" color="#24344d"><rect x="2" y="7" width="20" height="11" rx="1.5"/><path d="M6.5 10v5M12 10v5M17.5 10v5"/></g></g>
+      <text x="1670.5" y="1092.2" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8.5" font-weight="700" letter-spacing=".5" fill="#7a8798">CONTAINER</text>
+      <text x="1720" y="1068.2" font-family="ui-monospace,Menlo,monospace" font-size="13" font-weight="600" fill="#1a2638">vector-01</text>
+      <text x="1720" y="1084.2" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#7a8798">ip: </tspan><tspan fill="#3f5e8c">10.70.30.11</tspan></text>
+      
+    </g><g class="nd-node" data-id="vec2">
+      <rect x="1621" y="1120.2" width="232" height="54" rx="6" fill="#ffffff" stroke="#24344d" stroke-width="1.5" stroke-dasharray="2 3"/>
+      
+      <g transform="translate(1658.5,1129.2)"><g fill="none" stroke="#24344d" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" color="#24344d"><rect x="2" y="7" width="20" height="11" rx="1.5"/><path d="M6.5 10v5M12 10v5M17.5 10v5"/></g></g>
+      <text x="1670.5" y="1166.2" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8.5" font-weight="700" letter-spacing=".5" fill="#7a8798">CONTAINER</text>
+      <text x="1720" y="1142.2" font-family="ui-monospace,Menlo,monospace" font-size="13" font-weight="600" fill="#1a2638">vector-02</text>
+      <text x="1720" y="1158.2" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#7a8798">ip: </tspan><tspan fill="#3f5e8c">10.70.30.12</tspan></text>
+      
+    </g><g class="nd-node" data-id="kafka1">
+      <rect x="38" y="1439.2" width="248" height="60" rx="6" fill="#ffffff" stroke="#24344d" stroke-width="1.5"/>
+      <rect x="41" y="1442.2" width="242" height="54" rx="4" fill="none" stroke="#24344d" stroke-width=".8"/>
+      <g transform="translate(59,1448.2)"><g fill="none" stroke="#24344d" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" color="#24344d"><rect x="6" y="6" width="12" height="12" rx="1"/><rect x="10" y="10" width="4" height="4"/><path d="M9.5 6V3M14.5 6V3M9.5 21v-3M14.5 21v-3M6 9.5H3M6 14.5H3M21 9.5h-3M21 14.5h-3"/></g></g>
+      <text x="71" y="1485.2" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8.5" font-weight="700" letter-spacing=".5" fill="#7a8798">METAL</text>
+      <text x="104" y="1461.2" font-family="ui-monospace,Menlo,monospace" font-size="13" font-weight="600" fill="#1a2638">kafka-01</text>
+      <text x="104" y="1477.2" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#7a8798">os: </tspan><tspan fill="#3f5e8c">linux</tspan></text><text x="104" y="1491.2" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#7a8798">ip: </tspan><tspan fill="#3f5e8c">10.70.10.11</tspan></text>
+      <rect x="243" y="1445.2" width="36" height="12" rx="6" fill="#eef1f4" stroke="#9aa7ba" stroke-width=".8"/>
+      <text x="261" y="1454.2" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8" font-weight="700" letter-spacing=".8" fill="#5b6874">JMX</text>
+    </g><g class="nd-node" data-id="kafka2">
+      <rect x="38" y="1519.2" width="248" height="60" rx="6" fill="#ffffff" stroke="#24344d" stroke-width="1.5"/>
+      <rect x="41" y="1522.2" width="242" height="54" rx="4" fill="none" stroke="#24344d" stroke-width=".8"/>
+      <g transform="translate(59,1528.2)"><g fill="none" stroke="#24344d" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" color="#24344d"><rect x="6" y="6" width="12" height="12" rx="1"/><rect x="10" y="10" width="4" height="4"/><path d="M9.5 6V3M14.5 6V3M9.5 21v-3M14.5 21v-3M6 9.5H3M6 14.5H3M21 9.5h-3M21 14.5h-3"/></g></g>
+      <text x="71" y="1565.2" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8.5" font-weight="700" letter-spacing=".5" fill="#7a8798">METAL</text>
+      <text x="104" y="1541.2" font-family="ui-monospace,Menlo,monospace" font-size="13" font-weight="600" fill="#1a2638">kafka-02</text>
+      <text x="104" y="1557.2" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#7a8798">os: </tspan><tspan fill="#3f5e8c">linux</tspan></text><text x="104" y="1571.2" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#7a8798">ip: </tspan><tspan fill="#3f5e8c">10.70.10.12</tspan></text>
+      <rect x="243" y="1525.2" width="36" height="12" rx="6" fill="#eef1f4" stroke="#9aa7ba" stroke-width=".8"/>
+      <text x="261" y="1534.2" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8" font-weight="700" letter-spacing=".8" fill="#5b6874">JMX</text>
+    </g><g class="nd-node" data-id="kafka3">
+      <rect x="38" y="1599.2" width="248" height="60" rx="6" fill="#ffffff" stroke="#24344d" stroke-width="1.5"/>
+      <rect x="41" y="1602.2" width="242" height="54" rx="4" fill="none" stroke="#24344d" stroke-width=".8"/>
+      <g transform="translate(59,1608.2)"><g fill="none" stroke="#24344d" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" color="#24344d"><rect x="6" y="6" width="12" height="12" rx="1"/><rect x="10" y="10" width="4" height="4"/><path d="M9.5 6V3M14.5 6V3M9.5 21v-3M14.5 21v-3M6 9.5H3M6 14.5H3M21 9.5h-3M21 14.5h-3"/></g></g>
+      <text x="71" y="1645.2" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8.5" font-weight="700" letter-spacing=".5" fill="#7a8798">METAL</text>
+      <text x="104" y="1621.2" font-family="ui-monospace,Menlo,monospace" font-size="13" font-weight="600" fill="#1a2638">kafka-03</text>
+      <text x="104" y="1637.2" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#7a8798">os: </tspan><tspan fill="#3f5e8c">linux</tspan></text><text x="104" y="1651.2" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#7a8798">ip: </tspan><tspan fill="#3f5e8c">10.70.10.13</tspan></text>
+      <rect x="243" y="1605.2" width="36" height="12" rx="6" fill="#eef1f4" stroke="#9aa7ba" stroke-width=".8"/>
+      <text x="261" y="1614.2" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8" font-weight="700" letter-spacing=".8" fill="#5b6874">JMX</text>
+    </g><g class="nd-node" data-id="os1">
+      <rect x="1798.3727272727272" y="1439.2" width="181" height="60" rx="6" fill="#ffffff" stroke="#24344d" stroke-width="1.5" stroke-dasharray="5 3"/>
+      
+      <g transform="translate(1810.3727272727272,1448.2)"><g fill="none" stroke="#24344d" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" color="#24344d"><rect x="3" y="8" width="13" height="13" rx="1.5"/><path d="M8 8V5.5A1.5 1.5 0 0 1 9.5 4h9A1.5 1.5 0 0 1 20 5.5v9a1.5 1.5 0 0 1-1.5 1.5H16"/></g></g>
+      <text x="1822.3727272727272" y="1485.2" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8.5" font-weight="700" letter-spacing=".5" fill="#7a8798">VM</text>
+      <text x="1846.3727272727272" y="1461.2" font-family="ui-monospace,Menlo,monospace" font-size="13" font-weight="600" fill="#1a2638">opensearch-01</text>
+      <text x="1846.3727272727272" y="1477.2" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#7a8798">os: </tspan><tspan fill="#3f5e8c">linux</tspan></text><text x="1846.3727272727272" y="1491.2" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#7a8798">ip: </tspan><tspan fill="#3f5e8c">10.70.20.11</tspan></text>
+      
+    </g><g class="nd-node" data-id="os2">
+      <rect x="1798.3727272727272" y="1519.2" width="181" height="60" rx="6" fill="#ffffff" stroke="#24344d" stroke-width="1.5" stroke-dasharray="5 3"/>
+      
+      <g transform="translate(1810.3727272727272,1528.2)"><g fill="none" stroke="#24344d" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" color="#24344d"><rect x="3" y="8" width="13" height="13" rx="1.5"/><path d="M8 8V5.5A1.5 1.5 0 0 1 9.5 4h9A1.5 1.5 0 0 1 20 5.5v9a1.5 1.5 0 0 1-1.5 1.5H16"/></g></g>
+      <text x="1822.3727272727272" y="1565.2" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8.5" font-weight="700" letter-spacing=".5" fill="#7a8798">VM</text>
+      <text x="1846.3727272727272" y="1541.2" font-family="ui-monospace,Menlo,monospace" font-size="13" font-weight="600" fill="#1a2638">opensearch-02</text>
+      <text x="1846.3727272727272" y="1557.2" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#7a8798">os: </tspan><tspan fill="#3f5e8c">linux</tspan></text><text x="1846.3727272727272" y="1571.2" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#7a8798">ip: </tspan><tspan fill="#3f5e8c">10.70.20.12</tspan></text>
+      
+    </g><g class="nd-node" data-id="os3">
+      <rect x="1798.3727272727272" y="1599.2" width="181" height="60" rx="6" fill="#ffffff" stroke="#24344d" stroke-width="1.5" stroke-dasharray="5 3"/>
+      
+      <g transform="translate(1810.3727272727272,1608.2)"><g fill="none" stroke="#24344d" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" color="#24344d"><rect x="3" y="8" width="13" height="13" rx="1.5"/><path d="M8 8V5.5A1.5 1.5 0 0 1 9.5 4h9A1.5 1.5 0 0 1 20 5.5v9a1.5 1.5 0 0 1-1.5 1.5H16"/></g></g>
+      <text x="1822.3727272727272" y="1645.2" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8.5" font-weight="700" letter-spacing=".5" fill="#7a8798">VM</text>
+      <text x="1846.3727272727272" y="1621.2" font-family="ui-monospace,Menlo,monospace" font-size="13" font-weight="600" fill="#1a2638">opensearch-03</text>
+      <text x="1846.3727272727272" y="1637.2" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#7a8798">os: </tspan><tspan fill="#3f5e8c">linux</tspan></text><text x="1846.3727272727272" y="1651.2" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#7a8798">ip: </tspan><tspan fill="#3f5e8c">10.70.20.13</tspan></text>
+      
+    </g><g class="nd-node" data-id="lx1">
+      <rect x="385.9999999999999" y="1439.2" width="316" height="60" rx="6" fill="#ffffff" stroke="#24344d" stroke-width="1.5" stroke-dasharray="5 3"/>
+      
+      <g transform="translate(397.9999999999999,1448.2)"><g fill="none" stroke="#24344d" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" color="#24344d"><rect x="3" y="8" width="13" height="13" rx="1.5"/><path d="M8 8V5.5A1.5 1.5 0 0 1 9.5 4h9A1.5 1.5 0 0 1 20 5.5v9a1.5 1.5 0 0 1-1.5 1.5H16"/></g></g>
+      <text x="409.9999999999999" y="1485.2" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8.5" font-weight="700" letter-spacing=".5" fill="#7a8798">VM</text>
+      <text x="433.9999999999999" y="1461.2" font-family="ui-monospace,Menlo,monospace" font-size="13" font-weight="600" fill="#1a2638">app-01</text>
+      <text x="433.9999999999999" y="1477.2" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#7a8798">os: </tspan><tspan fill="#3f5e8c">linux</tspan></text><text x="433.9999999999999" y="1491.2" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#7a8798">ip: </tspan><tspan fill="#3f5e8c">10.70.50.11</tspan></text>
+      <rect x="572.9999999999999" y="1445.2" width="122" height="12" rx="6" fill="#eef1f4" stroke="#9aa7ba" stroke-width=".8"/>
+      <text x="633.9999999999999" y="1454.2" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8" font-weight="700" letter-spacing=".8" fill="#5b6874">NODE-EXPORTER</text>
+    </g><g class="nd-node" data-id="lx2">
+      <rect x="385.9999999999999" y="1519.2" width="316" height="60" rx="6" fill="#ffffff" stroke="#24344d" stroke-width="1.5" stroke-dasharray="5 3"/>
+      
+      <g transform="translate(397.9999999999999,1528.2)"><g fill="none" stroke="#24344d" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" color="#24344d"><rect x="3" y="8" width="13" height="13" rx="1.5"/><path d="M8 8V5.5A1.5 1.5 0 0 1 9.5 4h9A1.5 1.5 0 0 1 20 5.5v9a1.5 1.5 0 0 1-1.5 1.5H16"/></g></g>
+      <text x="409.9999999999999" y="1565.2" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8.5" font-weight="700" letter-spacing=".5" fill="#7a8798">VM</text>
+      <text x="433.9999999999999" y="1541.2" font-family="ui-monospace,Menlo,monospace" font-size="13" font-weight="600" fill="#1a2638">app-02</text>
+      <text x="433.9999999999999" y="1557.2" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#7a8798">os: </tspan><tspan fill="#3f5e8c">linux</tspan></text><text x="433.9999999999999" y="1571.2" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#7a8798">ip: </tspan><tspan fill="#3f5e8c">10.70.50.12</tspan></text>
+      <rect x="572.9999999999999" y="1525.2" width="122" height="12" rx="6" fill="#eef1f4" stroke="#9aa7ba" stroke-width=".8"/>
+      <text x="633.9999999999999" y="1534.2" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8" font-weight="700" letter-spacing=".8" fill="#5b6874">NODE-EXPORTER</text>
+    </g><g class="nd-node" data-id="lx3">
+      <rect x="385.9999999999999" y="1599.2" width="334" height="60" rx="6" fill="#ffffff" stroke="#24344d" stroke-width="1.5"/>
+      <rect x="388.9999999999999" y="1602.2" width="328" height="54" rx="4" fill="none" stroke="#24344d" stroke-width=".8"/>
+      <g transform="translate(406.9999999999999,1608.2)"><g fill="none" stroke="#24344d" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" color="#24344d"><ellipse cx="12" cy="5.5" rx="8" ry="3"/><path d="M4 5.5v13c0 1.66 3.58 3 8 3s8-1.34 8-3v-13M4 12c0 1.66 3.58 3 8 3s8-1.34 8-3"/></g></g>
+      <text x="418.9999999999999" y="1645.2" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8.5" font-weight="700" letter-spacing=".5" fill="#7a8798">METAL</text>
+      <text x="451.9999999999999" y="1621.2" font-family="ui-monospace,Menlo,monospace" font-size="13" font-weight="600" fill="#1a2638">db-01</text>
+      <text x="451.9999999999999" y="1637.2" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#7a8798">os: </tspan><tspan fill="#3f5e8c">linux</tspan></text><text x="451.9999999999999" y="1651.2" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#7a8798">ip: </tspan><tspan fill="#3f5e8c">10.70.50.13</tspan></text>
+      <rect x="590.9999999999999" y="1605.2" width="122" height="12" rx="6" fill="#eef1f4" stroke="#9aa7ba" stroke-width=".8"/>
+      <text x="651.9999999999999" y="1614.2" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8" font-weight="700" letter-spacing=".8" fill="#5b6874">NODE-EXPORTER</text>
+    </g><g class="nd-node" data-id="sre">
+      <rect x="1428.1954545454544" y="16" width="120" height="54" rx="6" fill="#ffffff" stroke="#24344d" stroke-width="1.5"/>
+      
+      <g transform="translate(1445.1954545454544,25)"><g fill="none" stroke="#24344d" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" color="#24344d"><circle cx="12" cy="7.5" r="4"/><path d="M4.5 20.5c0-4 3.4-6.5 7.5-6.5s7.5 2.5 7.5 6.5"/></g></g>
+      <text x="1457.1954545454544" y="62" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8.5" font-weight="700" letter-spacing=".5" fill="#7a8798">USER</text>
+      <text x="1486.1954545454544" y="38" font-family="ui-monospace,Menlo,monospace" font-size="13" font-weight="600" fill="#1a2638">SRE</text>
+      
+      
+    </g>
+      <text class="edge-lbl" data-conn="0" data-label="tcp/3000 grafana" x="1488.1954545454544" y="140.5" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="11" fill="#0f766e" stroke="#fafbf7" stroke-width="4" paint-order="stroke" stroke-linejoin="round">tcp/3000 grafana</text><text class="edge-lbl" data-conn="1" data-label="tcp/8080 promql" x="1488.1954545454544" y="328.2" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="11" fill="#7c3aed" stroke="#fafbf7" stroke-width="4" paint-order="stroke" stroke-linejoin="round">tcp/8080 promql</text><text class="edge-lbl" data-conn="2" data-label="tcp/8080 remote-write" x="1666.146212121212" y="328.2" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="11" fill="#1d4ed8" stroke="#fafbf7" stroke-width="4" paint-order="stroke" stroke-linejoin="round">tcp/8080 remote-write</text><text class="edge-lbl" data-conn="3" data-label="tcp/7071 jmx" x="1012.5" y="840.2" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="11" fill="#9d174d" stroke="#fafbf7" stroke-width="4" paint-order="stroke" stroke-linejoin="round">tcp/7071 jmx</text><text class="edge-lbl" data-conn="4" data-label="tcp/9200 metrics" x="1926.3727272727272" y="829.2" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="11" fill="#4d7c0f" stroke="#fafbf7" stroke-width="4" paint-order="stroke" stroke-linejoin="round">tcp/9200 metrics</text><text class="edge-lbl" data-conn="5" data-label="tcp/9598 vector" x="1871.6272727272726" y="700.0136363636364" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="11" fill="#0e7490" stroke="#fafbf7" stroke-width="4" paint-order="stroke" stroke-linejoin="round">tcp/9598 vector</text><text class="edge-lbl" data-conn="6" data-label="tcp/8080 open-webui" x="1479.5045454545455" y="884.2" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="11" fill="#a21caf" stroke="#fafbf7" stroke-width="4" paint-order="stroke" stroke-linejoin="round">tcp/8080 open-webui</text><text class="edge-lbl" data-conn="7" data-label="tcp/9400 dcgm" x="1674.440909090909" y="906.2" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="11" fill="#b45309" stroke="#fafbf7" stroke-width="4" paint-order="stroke" stroke-linejoin="round">tcp/9400 dcgm</text><text class="edge-lbl" data-conn="8" data-label="tcp/8000 vllm" x="1844.2545454545455" y="888.3272727272727" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="11" fill="#0f766e" stroke="#fafbf7" stroke-width="4" paint-order="stroke" stroke-linejoin="round">tcp/8000 vllm</text><text class="edge-lbl" data-conn="9" data-label="tcp/9100 node" x="1197.2939393939394" y="862.2" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="11" fill="#7c3aed" stroke="#fafbf7" stroke-width="4" paint-order="stroke" stroke-linejoin="round">tcp/9100 node</text><text class="edge-lbl" data-conn="10" data-label="tcp/9100 node" x="936.519696969697" y="818.2" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="11" fill="#7c3aed" stroke="#fafbf7" stroke-width="4" paint-order="stroke" stroke-linejoin="round">tcp/9100 node</text><text class="edge-lbl" data-conn="11" data-label="tcp/9100 node" x="1899" y="853.0136363636364" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="11" fill="#7c3aed" stroke="#fafbf7" stroke-width="4" paint-order="stroke" stroke-linejoin="round">tcp/9100 node</text>
+    </g>
+    <g>
+    <rect x="1820" y="1771" width="232" height="70" fill="#ffffff" stroke="#24344d" stroke-width="1.4"/>
+    <path d="M1820 1791 h232 M1970 1791 V1825" stroke="#24344d" stroke-width="1"/>
+    <text x="1829" y="1785.5" font-family="ui-monospace,Menlo,monospace" font-size="10.5" font-weight="700" letter-spacing="1.2" fill="#24344d">METRICS — PULL ARCHITECTURE</text>
+    <text x="1829" y="1808" font-family="ui-monospace,Menlo,monospace" font-size="9" letter-spacing="1" fill="#7a8798">DRAWN</text>
+    <text x="1829" y="1819" font-family="ui-monospace,Menlo,monospace" font-size="10" fill="#24344d">netdiagram vX</text>
+    <text x="1979" y="1808" font-family="ui-monospace,Menlo,monospace" font-size="9" letter-spacing="1" fill="#7a8798">DATE</text>
+    <text x="1979" y="1819" font-family="ui-monospace,Menlo,monospace" font-size="10" fill="#24344d">2000-01-01</text>
+    <path d="M1820 1825 h232" stroke="#24344d" stroke-width=".7"/>
+    <text x="1829" y="1837" font-family="ui-monospace,Menlo,monospace" font-size="9" letter-spacing="1" fill="#7a8798">OWNER</text>
+    <text x="2043" y="1837" text-anchor="end" font-family="ui-monospace,Menlo,monospace" font-size="10" fill="#24344d">sre-team</text>
+  </g>
+  </svg>

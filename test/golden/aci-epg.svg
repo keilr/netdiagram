@@ -1,0 +1,226 @@
+<svg xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="nd-title nd-desc" width="488" height="1628" viewBox="0 0 488 1628" font-family="ui-monospace,Menlo,monospace" data-theme="paper" data-bg="#fafbf7">
+    <title id="nd-title">ACI tenant — EPGs &amp; contracts</title>
+    <desc id="nd-desc">7 nodes, 5 groups, 4 connections</desc>
+    <metadata id="netdiagram-source" data-type="text/yaml"># Cisco ACI — Endpoint Groups (EPGs) and contracts.
+# In ACI, endpoints are grouped into EPGs, and EPGs may only talk through a
+# *contract*. Here one Tenant holds three EPGs (web / app / db) plus an L3Out
+# to the outside; each contract is drawn as a connection from the consumer to
+# the provider, labelled &quot;&lt;proto&gt;/&lt;port&gt; &lt;contract&gt;&quot;. Group info boxes show
+# ACI attributes (subnet + gateway, vrf); each endpoint carries its VMM/physical
+# domain, and endpoint pills note the EPG.
+diagram:
+  title: ACI tenant — EPGs &amp; contracts
+  direction: down
+  tenant: prod
+  fabric: aci-fab-1
+
+nodes:
+  - id: inet
+    label: Internet
+    type: internet
+  - id: border
+    label: Border Leaf (L3Out)
+    type: router
+    tags: [l3out]
+  - id: web1
+    label: web-01
+    type: container       # containerized web endpoint — dotted border
+    ip: 10.20.10.11
+    os: linux
+    domain: vmm-k8s       # VMM/physical domain the endpoint binds to
+    tags: [epg-web]
+  - id: web2
+    label: web-02
+    type: container
+    ip: 10.20.10.12
+    os: linux
+    domain: vmm-k8s
+    tags: [epg-web]
+  - id: app1
+    label: app-01
+    type: vm              # app endpoint on a VM — dashed border
+    ip: 10.20.20.11
+    os: linux
+    domain: vmm-vmware
+    tags: [epg-app]
+  - id: app2
+    label: app-02
+    type: vm
+    ip: 10.20.20.12
+    os: linux
+    domain: vmm-vmware
+    tags: [epg-app]
+  - id: db1
+    label: pg-primary
+    type: metal           # bare-metal database — double border; db glyph
+    icon: db
+    ips: [10.20.30.11]
+    os: linux
+    domain: phys-dom
+    tags: [epg-db]
+
+groups:
+  - id: tenant
+    label: Tenant · prod
+    class: tenant
+    groups:
+      - id: ext
+        label: L3Out · internet
+        class: l3out
+        scope: external
+        nodes: [border]
+      - id: epg-web
+        label: EPG · web
+        class: epg
+        cidr: 10.20.10.0/24
+        gw: 10.20.10.1         # subnet anycast gateway
+        vrf: prod-vrf          # VRF (routing/tenant context)
+        nodes: [web1, web2]
+      - id: epg-app
+        label: EPG · app
+        class: epg
+        cidr: 10.20.20.0/24
+        gw: 10.20.20.1
+        vrf: prod-vrf
+        nodes: [app1, app2]
+      - id: epg-db
+        label: EPG · db
+        class: epg
+        style: {color: red}    # override the epg color to flag the sensitive tier
+        cidr: 10.20.30.0/24
+        gw: 10.20.30.1
+        vrf: prod-vrf
+        nodes: [db1]
+
+connections:
+  # contracts flow consumer -&gt; provider, labelled &quot;&lt;proto&gt;/&lt;port&gt; &lt;contract&gt;&quot;
+  - {from: inet,    to: border,  label: internet,             protocol: any}
+  - {from: border,  to: epg-web, label: &quot;tcp/443 web-https&quot;,  protocol: tcp, port: 443}
+  - {from: epg-web, to: epg-app, label: &quot;tcp/8080 app-api&quot;,   protocol: tcp, port: 8080}
+  - {from: epg-app, to: epg-db,  label: &quot;tcp/5432 db-sql&quot;,    protocol: tcp, port: 5432}
+</metadata>
+    <defs>
+    <pattern id="gridS" width="12" height="12" patternUnits="userSpaceOnUse">
+      <path d="M12 0H0v12" fill="none" stroke="#e7ece2" stroke-width=".6"/>
+    </pattern>
+    <pattern id="gridL" width="60" height="60" patternUnits="userSpaceOnUse">
+      <rect width="60" height="60" fill="url(#gridS)"/>
+      <path d="M60 0H0v60" fill="none" stroke="#dde3d7" stroke-width="1"/>
+    </pattern>
+    <marker id="ah-0f766e" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse">
+      <path d="M0 .8 9.2 5 0 9.2z" fill="#0f766e"/>
+    </marker>
+    <marker id="ah-7c3aed" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse">
+      <path d="M0 .8 9.2 5 0 9.2z" fill="#7c3aed"/>
+    </marker>
+    <marker id="ah-1d4ed8" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse">
+      <path d="M0 .8 9.2 5 0 9.2z" fill="#1d4ed8"/>
+    </marker>
+    <marker id="ah-9d174d" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse">
+      <path d="M0 .8 9.2 5 0 9.2z" fill="#9d174d"/>
+    </marker></defs>
+    <rect width="488" height="1628" fill="#fafbf7"/>
+    <rect width="488" height="1628" fill="url(#gridL)"/>
+    <g transform="translate(26,26)">
+      <g class="nd-group" data-id="tenant">
+      <rect x="16" y="175" width="404" height="1284.2" rx="8" fill="rgba(87,99,111,.05)" stroke="#9ea5ab" stroke-width="1.4"/>
+      
+      <text x="30" y="197" font-family="ui-monospace,Menlo,monospace" font-size="11" font-weight="700" letter-spacing="1.6" fill="#57636f">TENANT · PROD</text>
+      </g><g class="nd-group" data-id="ext">
+      <rect x="43.5" y="230" width="349" height="143.2" rx="8" fill="rgba(194,65,12,.05)" stroke="#dc9172" stroke-width="1.4" stroke-dasharray="6 4"/>
+      
+      <text x="57.5" y="252" font-family="ui-monospace,Menlo,monospace" font-size="11" font-weight="700" letter-spacing="1.6" fill="#c2410c">L3OUT · INTERNET</text>
+      <rect class="attr-box" x="247.5" y="340.2" width="137" height="25" rx="3" fill="#ffffff" fill-opacity=".8" stroke="#dc9172" stroke-width=".9"/><text x="257.5" y="356.2" font-family="ui-monospace,Menlo,monospace" font-size="10.5" fill="#c2410c"><tspan opacity=".6">scope: </tspan><tspan opacity=".9">external</tspan></text></g><g class="nd-group" data-id="epg-web">
+      <rect x="38" y="478.2" width="360" height="287" rx="8" fill="rgba(21,128,61,.05)" stroke="#77b58e" stroke-width="1.4"/>
+      
+      <text x="52" y="500.2" font-family="ui-monospace,Menlo,monospace" font-size="11" font-weight="700" letter-spacing="1.6" fill="#15803d">EPG · WEB</text>
+      <rect class="attr-box" x="221" y="702.2" width="169" height="55" rx="3" fill="#ffffff" fill-opacity=".8" stroke="#77b58e" stroke-width=".9"/><text x="231" y="718.2" font-family="ui-monospace,Menlo,monospace" font-size="10.5" fill="#15803d"><tspan opacity=".6">cidr: </tspan><tspan opacity=".9">10.20.10.0/24</tspan></text><text x="231" y="733.2" font-family="ui-monospace,Menlo,monospace" font-size="10.5" fill="#15803d"><tspan opacity=".6">gw: </tspan><tspan opacity=".9">10.20.10.1</tspan></text><text x="231" y="748.2" font-family="ui-monospace,Menlo,monospace" font-size="10.5" fill="#15803d"><tspan opacity=".6">vrf: </tspan><tspan opacity=".9">prod-vrf</tspan></text></g><g class="nd-group" data-id="epg-app">
+      <rect x="51.5" y="861.2" width="333" height="287" rx="8" fill="rgba(21,128,61,.05)" stroke="#77b58e" stroke-width="1.4"/>
+      
+      <text x="65.5" y="883.2" font-family="ui-monospace,Menlo,monospace" font-size="11" font-weight="700" letter-spacing="1.6" fill="#15803d">EPG · APP</text>
+      <rect class="attr-box" x="207.5" y="1085.2" width="169" height="55" rx="3" fill="#ffffff" fill-opacity=".8" stroke="#77b58e" stroke-width=".9"/><text x="217.5" y="1101.2" font-family="ui-monospace,Menlo,monospace" font-size="10.5" fill="#15803d"><tspan opacity=".6">cidr: </tspan><tspan opacity=".9">10.20.20.0/24</tspan></text><text x="217.5" y="1116.2" font-family="ui-monospace,Menlo,monospace" font-size="10.5" fill="#15803d"><tspan opacity=".6">gw: </tspan><tspan opacity=".9">10.20.20.1</tspan></text><text x="217.5" y="1131.2" font-family="ui-monospace,Menlo,monospace" font-size="10.5" fill="#15803d"><tspan opacity=".6">vrf: </tspan><tspan opacity=".9">prod-vrf</tspan></text></g><g class="nd-group" data-id="epg-db">
+      <rect x="55" y="1244.2" width="326" height="193" rx="8" fill="rgba(192,57,43,.05)" stroke="#da8c84" stroke-width="1.4"/>
+      
+      <text x="69" y="1266.2" font-family="ui-monospace,Menlo,monospace" font-size="11" font-weight="700" letter-spacing="1.6" fill="#c0392b">EPG · DB</text>
+      <rect class="attr-box" x="204" y="1374.2" width="169" height="55" rx="3" fill="#ffffff" fill-opacity=".8" stroke="#da8c84" stroke-width=".9"/><text x="214" y="1390.2" font-family="ui-monospace,Menlo,monospace" font-size="10.5" fill="#c0392b"><tspan opacity=".6">cidr: </tspan><tspan opacity=".9">10.20.30.0/24</tspan></text><text x="214" y="1405.2" font-family="ui-monospace,Menlo,monospace" font-size="10.5" fill="#c0392b"><tspan opacity=".6">gw: </tspan><tspan opacity=".9">10.20.30.1</tspan></text><text x="214" y="1420.2" font-family="ui-monospace,Menlo,monospace" font-size="10.5" fill="#c0392b"><tspan opacity=".6">vrf: </tspan><tspan opacity=".9">prod-vrf</tspan></text></g>
+      <path class="edge" data-conn="0" data-label="internet" d="M218 70L218 276" fill="none" stroke="#0f766e" stroke-width="2" marker-end="url(#ah-0f766e)"/><path class="edge" data-conn="1" data-label="tcp/443 web-https" d="M218 330.2L218 478.2" fill="none" stroke="#7c3aed" stroke-width="2" marker-end="url(#ah-7c3aed)"/><path class="edge" data-conn="2" data-label="tcp/8080 app-api" d="M218 765.2L218 861.2" fill="none" stroke="#1d4ed8" stroke-width="2" marker-end="url(#ah-1d4ed8)"/><path class="edge" data-conn="3" data-label="tcp/5432 db-sql" d="M218 1148.2L218 1244.2" fill="none" stroke="#9d174d" stroke-width="2" marker-end="url(#ah-9d174d)"/>
+      <g class="nd-node" data-id="border">
+      <rect x="65.5" y="276.1" width="305" height="54" rx="6" fill="#ffffff" stroke="#24344d" stroke-width="1.5"/>
+      
+      <g transform="translate(90.5,285.1)"><g fill="none" stroke="#24344d" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" color="#24344d"><circle cx="12" cy="12" r="10"/><path d="M7 9h7m0 0-2.4-2.4M14 9l-2.4 2.4M17 15h-7m0 0 2.4-2.4M10 15l2.4 2.4"/></g></g>
+      <text x="102.5" y="322.1" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8.5" font-weight="700" letter-spacing=".5" fill="#7a8798">ROUTER</text>
+      <text x="139.5" y="298.1" font-family="ui-monospace,Menlo,monospace" font-size="13" font-weight="600" fill="#1a2638">Border Leaf (L3Out)</text>
+      
+      <rect x="310.5" y="282.1" width="53" height="12" rx="6" fill="#eef1f4" stroke="#9aa7ba" stroke-width=".8"/>
+      <text x="337" y="291.1" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8" font-weight="700" letter-spacing=".8" fill="#5b6874">L3OUT</text>
+    </g><g class="nd-node" data-id="web1">
+      <rect x="60" y="524.2" width="316" height="74" rx="6" fill="#ffffff" stroke="#24344d" stroke-width="1.5" stroke-dasharray="2 3"/>
+      
+      <g transform="translate(97.5,533.2)"><g fill="none" stroke="#24344d" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" color="#24344d"><rect x="2" y="7" width="20" height="11" rx="1.5"/><path d="M6.5 10v5M12 10v5M17.5 10v5"/></g></g>
+      <text x="109.5" y="570.2" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8.5" font-weight="700" letter-spacing=".5" fill="#7a8798">CONTAINER</text>
+      <text x="159" y="546.2" font-family="ui-monospace,Menlo,monospace" font-size="13" font-weight="600" fill="#1a2638">web-01</text>
+      <text x="159" y="562.2" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#7a8798">os: </tspan><tspan fill="#3f5e8c">linux</tspan></text><text x="159" y="576.2" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#7a8798">ip: </tspan><tspan fill="#3f5e8c">10.20.10.11</tspan></text><text x="159" y="590.2" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#7a8798">domain: </tspan><tspan fill="#3f5e8c">vmm-k8s</tspan></text>
+      <rect x="298" y="530.2" width="71" height="12" rx="6" fill="#eef1f4" stroke="#9aa7ba" stroke-width=".8"/>
+      <text x="333.5" y="539.2" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8" font-weight="700" letter-spacing=".8" fill="#5b6874">EPG-WEB</text>
+    </g><g class="nd-node" data-id="web2">
+      <rect x="60" y="618.2" width="316" height="74" rx="6" fill="#ffffff" stroke="#24344d" stroke-width="1.5" stroke-dasharray="2 3"/>
+      
+      <g transform="translate(97.5,627.2)"><g fill="none" stroke="#24344d" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" color="#24344d"><rect x="2" y="7" width="20" height="11" rx="1.5"/><path d="M6.5 10v5M12 10v5M17.5 10v5"/></g></g>
+      <text x="109.5" y="664.2" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8.5" font-weight="700" letter-spacing=".5" fill="#7a8798">CONTAINER</text>
+      <text x="159" y="640.2" font-family="ui-monospace,Menlo,monospace" font-size="13" font-weight="600" fill="#1a2638">web-02</text>
+      <text x="159" y="656.2" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#7a8798">os: </tspan><tspan fill="#3f5e8c">linux</tspan></text><text x="159" y="670.2" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#7a8798">ip: </tspan><tspan fill="#3f5e8c">10.20.10.12</tspan></text><text x="159" y="684.2" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#7a8798">domain: </tspan><tspan fill="#3f5e8c">vmm-k8s</tspan></text>
+      <rect x="298" y="624.2" width="71" height="12" rx="6" fill="#eef1f4" stroke="#9aa7ba" stroke-width=".8"/>
+      <text x="333.5" y="633.2" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8" font-weight="700" letter-spacing=".8" fill="#5b6874">EPG-WEB</text>
+    </g><g class="nd-node" data-id="app1">
+      <rect x="73.5" y="907.2" width="289" height="74" rx="6" fill="#ffffff" stroke="#24344d" stroke-width="1.5" stroke-dasharray="5 3"/>
+      
+      <g transform="translate(85.5,916.2)"><g fill="none" stroke="#24344d" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" color="#24344d"><rect x="3" y="8" width="13" height="13" rx="1.5"/><path d="M8 8V5.5A1.5 1.5 0 0 1 9.5 4h9A1.5 1.5 0 0 1 20 5.5v9a1.5 1.5 0 0 1-1.5 1.5H16"/></g></g>
+      <text x="97.5" y="953.2" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8.5" font-weight="700" letter-spacing=".5" fill="#7a8798">VM</text>
+      <text x="121.5" y="929.2" font-family="ui-monospace,Menlo,monospace" font-size="13" font-weight="600" fill="#1a2638">app-01</text>
+      <text x="121.5" y="945.2" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#7a8798">os: </tspan><tspan fill="#3f5e8c">linux</tspan></text><text x="121.5" y="959.2" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#7a8798">ip: </tspan><tspan fill="#3f5e8c">10.20.20.11</tspan></text><text x="121.5" y="973.2" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#7a8798">domain: </tspan><tspan fill="#3f5e8c">vmm-vmware</tspan></text>
+      <rect x="284.5" y="913.2" width="71" height="12" rx="6" fill="#eef1f4" stroke="#9aa7ba" stroke-width=".8"/>
+      <text x="320" y="922.2" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8" font-weight="700" letter-spacing=".8" fill="#5b6874">EPG-APP</text>
+    </g><g class="nd-node" data-id="app2">
+      <rect x="73.5" y="1001.2" width="289" height="74" rx="6" fill="#ffffff" stroke="#24344d" stroke-width="1.5" stroke-dasharray="5 3"/>
+      
+      <g transform="translate(85.5,1010.2)"><g fill="none" stroke="#24344d" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" color="#24344d"><rect x="3" y="8" width="13" height="13" rx="1.5"/><path d="M8 8V5.5A1.5 1.5 0 0 1 9.5 4h9A1.5 1.5 0 0 1 20 5.5v9a1.5 1.5 0 0 1-1.5 1.5H16"/></g></g>
+      <text x="97.5" y="1047.2" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8.5" font-weight="700" letter-spacing=".5" fill="#7a8798">VM</text>
+      <text x="121.5" y="1023.2" font-family="ui-monospace,Menlo,monospace" font-size="13" font-weight="600" fill="#1a2638">app-02</text>
+      <text x="121.5" y="1039.2" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#7a8798">os: </tspan><tspan fill="#3f5e8c">linux</tspan></text><text x="121.5" y="1053.2" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#7a8798">ip: </tspan><tspan fill="#3f5e8c">10.20.20.12</tspan></text><text x="121.5" y="1067.2" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#7a8798">domain: </tspan><tspan fill="#3f5e8c">vmm-vmware</tspan></text>
+      <rect x="284.5" y="1007.2" width="71" height="12" rx="6" fill="#eef1f4" stroke="#9aa7ba" stroke-width=".8"/>
+      <text x="320" y="1016.2" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8" font-weight="700" letter-spacing=".8" fill="#5b6874">EPG-APP</text>
+    </g><g class="nd-node" data-id="db1">
+      <rect x="77" y="1290.2" width="282" height="74" rx="6" fill="#ffffff" stroke="#24344d" stroke-width="1.5"/>
+      <rect x="80" y="1293.2" width="276" height="68" rx="4" fill="none" stroke="#24344d" stroke-width=".8"/>
+      <g transform="translate(98,1299.2)"><g fill="none" stroke="#24344d" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" color="#24344d"><ellipse cx="12" cy="5.5" rx="8" ry="3"/><path d="M4 5.5v13c0 1.66 3.58 3 8 3s8-1.34 8-3v-13M4 12c0 1.66 3.58 3 8 3s8-1.34 8-3"/></g></g>
+      <text x="110" y="1336.2" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8.5" font-weight="700" letter-spacing=".5" fill="#7a8798">METAL</text>
+      <text x="143" y="1312.2" font-family="ui-monospace,Menlo,monospace" font-size="13" font-weight="600" fill="#1a2638">pg-primary</text>
+      <text x="143" y="1328.2" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#7a8798">os: </tspan><tspan fill="#3f5e8c">linux</tspan></text><text x="143" y="1342.2" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#7a8798">ip: </tspan><tspan fill="#3f5e8c">10.20.30.11</tspan></text><text x="143" y="1356.2" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#7a8798">domain: </tspan><tspan fill="#3f5e8c">phys-dom</tspan></text>
+      <rect x="290" y="1296.2" width="62" height="12" rx="6" fill="#eef1f4" stroke="#9aa7ba" stroke-width=".8"/>
+      <text x="321" y="1305.2" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8" font-weight="700" letter-spacing=".8" fill="#5b6874">EPG-DB</text>
+    </g><g class="nd-node" data-id="inet">
+      <rect x="133" y="16" width="170" height="54" rx="6" fill="#ffffff" stroke="#24344d" stroke-width="1.5"/>
+      
+      <g transform="translate(166.5,25)"><g fill="none" stroke="#24344d" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" color="#24344d"><circle cx="12" cy="12" r="9.5"/><ellipse cx="12" cy="12" rx="4.2" ry="9.5"/><path d="M2.5 12h19M4 7h16M4 17h16"/></g></g>
+      <text x="178.5" y="62" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8.5" font-weight="700" letter-spacing=".5" fill="#7a8798">INTERNET</text>
+      <text x="224" y="38" font-family="ui-monospace,Menlo,monospace" font-size="13" font-weight="600" fill="#1a2638">Internet</text>
+      
+      
+    </g>
+      <text class="edge-lbl" data-conn="0" data-label="internet" x="218" y="168" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="11" fill="#0f766e" stroke="#fafbf7" stroke-width="4" paint-order="stroke" stroke-linejoin="round">internet</text><text class="edge-lbl" data-conn="1" data-label="tcp/443 web-https" x="218" y="399.2" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="11" fill="#7c3aed" stroke="#fafbf7" stroke-width="4" paint-order="stroke" stroke-linejoin="round">tcp/443 web-https</text><text class="edge-lbl" data-conn="2" data-label="tcp/8080 app-api" x="218" y="808.2" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="11" fill="#1d4ed8" stroke="#fafbf7" stroke-width="4" paint-order="stroke" stroke-linejoin="round">tcp/8080 app-api</text><text class="edge-lbl" data-conn="3" data-label="tcp/5432 db-sql" x="218" y="1191.2" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="11" fill="#9d174d" stroke="#fafbf7" stroke-width="4" paint-order="stroke" stroke-linejoin="round">tcp/5432 db-sql</text>
+    </g>
+    <g>
+    <rect x="238" y="1528" width="232" height="86" fill="#ffffff" stroke="#24344d" stroke-width="1.4"/>
+    <path d="M238 1548 h232 M388 1548 V1582" stroke="#24344d" stroke-width="1"/>
+    <text x="247" y="1542.5" font-family="ui-monospace,Menlo,monospace" font-size="10.5" font-weight="700" letter-spacing="1.2" fill="#24344d">ACI TENANT — EPGS &amp; CONTRACTS</text>
+    <text x="247" y="1565" font-family="ui-monospace,Menlo,monospace" font-size="9" letter-spacing="1" fill="#7a8798">DRAWN</text>
+    <text x="247" y="1576" font-family="ui-monospace,Menlo,monospace" font-size="10" fill="#24344d">netdiagram vX</text>
+    <text x="397" y="1565" font-family="ui-monospace,Menlo,monospace" font-size="9" letter-spacing="1" fill="#7a8798">DATE</text>
+    <text x="397" y="1576" font-family="ui-monospace,Menlo,monospace" font-size="10" fill="#24344d">2000-01-01</text>
+    <path d="M238 1582 h232" stroke="#24344d" stroke-width=".7"/>
+    <text x="247" y="1594" font-family="ui-monospace,Menlo,monospace" font-size="9" letter-spacing="1" fill="#7a8798">TENANT</text>
+    <text x="461" y="1594" text-anchor="end" font-family="ui-monospace,Menlo,monospace" font-size="10" fill="#24344d">prod</text><path d="M238 1598 h232" stroke="#24344d" stroke-width=".7"/>
+    <text x="247" y="1610" font-family="ui-monospace,Menlo,monospace" font-size="9" letter-spacing="1" fill="#7a8798">FABRIC</text>
+    <text x="461" y="1610" text-anchor="end" font-family="ui-monospace,Menlo,monospace" font-size="10" fill="#24344d">aci-fab-1</text>
+  </g>
+  </svg>

@@ -3,15 +3,18 @@
   "version": "0.4.0",
   "description": "YAML-described network architecture diagrams, rendered as blueprint-style SVG schematics. Ships as a single self-contained HTML file.",
   "license": "MIT",
+  "homepage": "https://keilr.github.io/netdiagram/",
   "type": "commonjs",
   "main": "src/netdiagram.js",
   "scripts": {
     "build": "node scripts/build.js",
     "watch": "node scripts/watch.js",
     "render": "node scripts/render.js",
+    "import": "node scripts/import.js",
     "lint": "eslint .",
     "pretest": "node scripts/build.js",
-    "test": "node test/test.js"
+    "test": "node test/test.js",
+    "test:golden": "node scripts/build.js && node test/test.js --update-golden"
   },
   "keywords": [
     "network",

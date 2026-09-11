@@ -1,0 +1,96 @@
+<svg xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="nd-title nd-desc" width="320" height="605" viewBox="0 0 320 605" font-family="ui-monospace,Menlo,monospace" data-theme="paper" data-bg="#fafbf7">
+    <title id="nd-title">Minimal starter</title>
+    <desc id="nd-desc">3 nodes, 1 group, 2 connections</desc>
+    <metadata id="netdiagram-source" data-type="text/yaml"># Minimal starter — copy this and grow it.
+# Four sections: diagram (options + title-block attributes), nodes, groups,
+# connections. Delete what you don&#39;t need; only nodes are required.
+diagram:
+  title: Minimal starter     # rename to your network
+  direction: down            # right | down
+
+nodes:
+  - id: user                 # id: unique across nodes AND groups
+    label: User
+    type: user               # type picks the glyph (router, firewall, server, db, …)
+  - id: web
+    label: web-01
+    type: server
+    ip: 10.0.0.10            # ip / ips: [..] render as lines on the node
+  - id: db
+    label: database
+    type: db
+    ip: 10.0.0.20
+
+groups:
+  - id: app                  # a boxed zone; a node belongs to at most one group
+    label: App tier
+    class: subnet            # zone | vlan | subnet | cloud | onprem | trust
+    # style: {color: blue, border: dashed}   # optional: override the class color/border
+    cidr: 10.0.0.0/24
+    nodes: [web, db]
+
+connections:                 # from/to are node or group ids
+  - {from: user, to: web, label: &quot;tcp/443 https&quot;, protocol: tcp, port: 443}
+  - {from: web,  to: db,  label: &quot;tcp/5432 sql&quot;,  protocol: tcp, port: 5432}
+</metadata>
+    <defs>
+    <pattern id="gridS" width="12" height="12" patternUnits="userSpaceOnUse">
+      <path d="M12 0H0v12" fill="none" stroke="#e7ece2" stroke-width=".6"/>
+    </pattern>
+    <pattern id="gridL" width="60" height="60" patternUnits="userSpaceOnUse">
+      <rect width="60" height="60" fill="url(#gridS)"/>
+      <path d="M60 0H0v60" fill="none" stroke="#dde3d7" stroke-width="1"/>
+    </pattern>
+    <marker id="ah-0f766e" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse">
+      <path d="M0 .8 9.2 5 0 9.2z" fill="#0f766e"/>
+    </marker>
+    <marker id="ah-7c3aed" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse">
+      <path d="M0 .8 9.2 5 0 9.2z" fill="#7c3aed"/>
+    </marker></defs>
+    <rect width="320" height="605" fill="#fafbf7"/>
+    <rect width="320" height="605" fill="url(#gridL)"/>
+    <g transform="translate(26,26)">
+      <g class="nd-group" data-id="app">
+      <rect x="16" y="175" width="236" height="293.2" rx="8" fill="rgba(71,105,155,.06)" stroke="#8aa2c4" stroke-width="1.4"/>
+      
+      <text x="30" y="197" font-family="ui-monospace,Menlo,monospace" font-size="11" font-weight="700" letter-spacing="1.6" fill="#3f5e8c">APP TIER</text>
+      <rect class="attr-box" x="91" y="435.2" width="153" height="25" rx="3" fill="#ffffff" fill-opacity=".8" stroke="#8aa2c4" stroke-width=".9"/><text x="101" y="451.2" font-family="ui-monospace,Menlo,monospace" font-size="10.5" fill="#3f5e8c"><tspan opacity=".6">cidr: </tspan><tspan opacity=".9">10.0.0.0/24</tspan></text></g>
+      <path class="edge" data-conn="0" data-label="tcp/443 https" d="M134 70L134 221" fill="none" stroke="#0f766e" stroke-width="2" marker-end="url(#ah-0f766e)"/><path class="edge" data-conn="1" data-label="tcp/5432 sql" d="M134 275.2L134 371.2" fill="none" stroke="#7c3aed" stroke-width="2" marker-end="url(#ah-7c3aed)"/>
+      <g class="nd-node" data-id="web">
+      <rect x="38" y="221.1" width="192" height="54" rx="6" fill="#ffffff" stroke="#24344d" stroke-width="1.5"/>
+      <rect x="41" y="224.1" width="186" height="48" rx="4" fill="none" stroke="#24344d" stroke-width=".8"/>
+      <g transform="translate(63,230.1)"><g fill="none" stroke="#24344d" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" color="#24344d"><rect x="6" y="6" width="12" height="12" rx="1"/><rect x="10" y="10" width="4" height="4"/><path d="M9.5 6V3M14.5 6V3M9.5 21v-3M14.5 21v-3M6 9.5H3M6 14.5H3M21 9.5h-3M21 14.5h-3"/></g></g>
+      <text x="75" y="267.1" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8.5" font-weight="700" letter-spacing=".5" fill="#7a8798">SERVER</text>
+      <text x="112" y="243.1" font-family="ui-monospace,Menlo,monospace" font-size="13" font-weight="600" fill="#1a2638">web-01</text>
+      <text x="112" y="259.1" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#7a8798">ip: </tspan><tspan fill="#3f5e8c">10.0.0.10</tspan></text>
+      
+    </g><g class="nd-node" data-id="db">
+      <rect x="51" y="371.2" width="166" height="54" rx="6" fill="#ffffff" stroke="#24344d" stroke-width="1.5"/>
+      
+      <g transform="translate(63,380.2)"><g fill="none" stroke="#24344d" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" color="#24344d"><ellipse cx="12" cy="5.5" rx="8" ry="3"/><path d="M4 5.5v13c0 1.66 3.58 3 8 3s8-1.34 8-3v-13M4 12c0 1.66 3.58 3 8 3s8-1.34 8-3"/></g></g>
+      <text x="75" y="417.2" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8.5" font-weight="700" letter-spacing=".5" fill="#7a8798">DB</text>
+      <text x="99" y="393.2" font-family="ui-monospace,Menlo,monospace" font-size="13" font-weight="600" fill="#1a2638">database</text>
+      <text x="99" y="409.2" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#7a8798">ip: </tspan><tspan fill="#3f5e8c">10.0.0.20</tspan></text>
+      
+    </g><g class="nd-node" data-id="user">
+      <rect x="74" y="16" width="120" height="54" rx="6" fill="#ffffff" stroke="#24344d" stroke-width="1.5"/>
+      
+      <g transform="translate(91,25)"><g fill="none" stroke="#24344d" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" color="#24344d"><circle cx="12" cy="7.5" r="4"/><path d="M4.5 20.5c0-4 3.4-6.5 7.5-6.5s7.5 2.5 7.5 6.5"/></g></g>
+      <text x="103" y="62" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8.5" font-weight="700" letter-spacing=".5" fill="#7a8798">USER</text>
+      <text x="132" y="38" font-family="ui-monospace,Menlo,monospace" font-size="13" font-weight="600" fill="#1a2638">User</text>
+      
+      
+    </g>
+      <text class="edge-lbl" data-conn="0" data-label="tcp/443 https" x="134" y="140.5" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="11" fill="#0f766e" stroke="#fafbf7" stroke-width="4" paint-order="stroke" stroke-linejoin="round">tcp/443 https</text><text class="edge-lbl" data-conn="1" data-label="tcp/5432 sql" x="134" y="318.2" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="11" fill="#7c3aed" stroke="#fafbf7" stroke-width="4" paint-order="stroke" stroke-linejoin="round">tcp/5432 sql</text>
+    </g>
+    <g>
+    <rect x="70" y="537" width="232" height="54" fill="#ffffff" stroke="#24344d" stroke-width="1.4"/>
+    <path d="M70 557 h232 M220 557 V591" stroke="#24344d" stroke-width="1"/>
+    <text x="79" y="551.5" font-family="ui-monospace,Menlo,monospace" font-size="10.5" font-weight="700" letter-spacing="1.2" fill="#24344d">MINIMAL STARTER</text>
+    <text x="79" y="574" font-family="ui-monospace,Menlo,monospace" font-size="9" letter-spacing="1" fill="#7a8798">DRAWN</text>
+    <text x="79" y="585" font-family="ui-monospace,Menlo,monospace" font-size="10" fill="#24344d">netdiagram vX</text>
+    <text x="229" y="574" font-family="ui-monospace,Menlo,monospace" font-size="9" letter-spacing="1" fill="#7a8798">DATE</text>
+    <text x="229" y="585" font-family="ui-monospace,Menlo,monospace" font-size="10" fill="#24344d">2000-01-01</text>
+    
+  </g>
+  </svg>

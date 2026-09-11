@@ -1,11 +1,11 @@
 /* CodeMirror 6 editor with YAML + JSON Schema autocomplete/lint/hover.
  * Bundled by esbuild into the dist HTML — not run directly. */
-import { EditorView, keymap, lineNumbers, drawSelection, highlightActiveLine } from "@codemirror/view";
-import { EditorState } from "@codemirror/state";
+import { EditorView, Decoration, keymap, lineNumbers, drawSelection, highlightActiveLine } from "@codemirror/view";
+import { EditorState, StateEffect, StateField } from "@codemirror/state";
 import { yaml, yamlLanguage } from "@codemirror/lang-yaml";
 import { history, defaultKeymap, historyKeymap, indentWithTab } from "@codemirror/commands";
 import { autocompletion, closeBrackets, closeBracketsKeymap, completionKeymap } from "@codemirror/autocomplete";
-import { lintGutter, lintKeymap } from "@codemirror/lint";
+import { linter, lintGutter, lintKeymap } from "@codemirror/lint";
 import { oneDark } from "@codemirror/theme-one-dark";
 import { yamlSchema } from "codemirror-json-schema/yaml";
 
@@ -20,6 +20,7 @@ function vocabularies(schema) {
   const typeValues = enums(defs.node?.properties?.type);
   const groupStyle = defs.group?.properties?.style?.properties || {};
   const colorValues = enums(groupStyle.color);
+  const diagramProps = schema.properties?.diagram?.properties || {};
   return {
     nodes:   { type: typeValues, icon: typeValues,
                os: defs.node?.properties?.os?.examples || [] },
@@ -27,7 +28,7 @@ function vocabularies(schema) {
                color: colorValues, colour: colorValues, border: enums(groupStyle.border) },
     connections: { protocol: defs.connection?.properties?.protocol?.examples || [],
                    direction: enums(defs.connection?.properties?.direction) },
-    diagram: { direction: enums(schema.properties?.diagram?.properties?.direction) },
+    diagram: { direction: enums(diagramProps.direction), theme: enums(diagramProps.theme) },
   };
 }
 
@@ -83,7 +84,29 @@ export function valueCompletion(schema) {
   };
 }
 
-window.makeEditor = function(parent, schema, onChange) {
+/* ---- reveal flash --------------------------------------------------------
+ * reveal() (diagram click -> YAML) briefly tints the revealed item's text. */
+const flashEffect = StateEffect.define();
+const flashMark = Decoration.mark({ class: "cm-nd-flash" });
+const flashField = StateField.define({
+  create: () => Decoration.none,
+  update(deco, tr) {
+    deco = deco.map(tr.changes);
+    for (const e of tr.effects)
+      if (e.is(flashEffect)) deco = e.value ? Decoration.set([flashMark.range(e.value.from, e.value.to)]) : Decoration.none;
+    return deco;
+  },
+  provide: f => EditorView.decorations.from(f),
+});
+
+/* opts.lint(text) -> [{from, to, message, severity?}]  extra diagnostics
+ *                    (spec validation: unknown ids, duplicates, …)
+ * opts.onCursor(pos) cursor moved or text changed */
+window.makeEditor = function(parent, schema, onChange, opts = {}) {
+  const clampDiag = (d, len) => {
+    const from = Math.max(0, Math.min(d.from, len));
+    return { severity: "error", ...d, from, to: Math.max(from, Math.min(d.to, len)) };
+  };
   const view = new EditorView({
     state: EditorState.create({
       extensions: [
@@ -99,8 +122,14 @@ window.makeEditor = function(parent, schema, onChange) {
           ".cm-scroller": { overflow: "auto", fontSize: "12.5px", lineHeight: "1.6" },
           "&.cm-editor": { backgroundColor: "var(--slate)" },
           ".cm-gutters": { backgroundColor: "var(--slate-2)", borderRight: "1px solid #2c3542" },
+          ".cm-nd-flash": { backgroundColor: "rgba(180,83,9,.35)", borderRadius: "2px" },
         }),
         ...yamlSchema(schema),
+        opts.lint ? linter(v => {
+          const len = v.state.doc.length;
+          return opts.lint(v.state.doc.toString()).map(d => clampDiag(d, len));
+        }) : [],
+        flashField,
         yamlLanguage.data.of({ autocomplete: valueCompletion(schema) }),
         autocompletion(),   // the popup itself — without this no source ever shows
         closeBrackets(),
@@ -114,18 +143,33 @@ window.makeEditor = function(parent, schema, onChange) {
         ]),
         EditorView.updateListener.of(v => {
           if (v.docChanged) onChange(v.state.doc.toString());
+          if ((v.docChanged || v.selectionSet) && opts.onCursor) opts.onCursor(v.state.selection.main.head);
         }),
       ],
     }),
     parent,
   });
 
+  let flashTimer = null;
   return {
     get value() { return view.state.doc.toString(); },
     setValue(text) {
       const len = view.state.doc.length;
       if (view.state.doc.toString() !== text)
         view.dispatch({ changes: { from: 0, to: len, insert: text } });
+    },
+    /* move the cursor to `from`, scroll it into view and flash from..to */
+    reveal(from, to) {
+      const len = view.state.doc.length;
+      from = Math.max(0, Math.min(from, len));
+      to = Math.max(from, Math.min(to, len));
+      view.dispatch({
+        selection: { anchor: from },
+        effects: [EditorView.scrollIntoView(from, { y: "center" }), flashEffect.of(to > from ? { from, to } : null)],
+      });
+      view.focus();
+      clearTimeout(flashTimer);
+      flashTimer = setTimeout(() => view.dispatch({ effects: flashEffect.of(null) }), 1200);
     },
   };
 };

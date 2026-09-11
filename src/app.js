@@ -5,95 +5,68 @@ const elk = new ELK();
 const statusEl = $('#status'), canvasEl = $('#canvas-pane'), connEl = $('#connections-pane');
 let renderSeq = 0;
 let lastCsv = '';
-let lastSpec = null;   // last successfully rendered spec (the SVG on screen)
+let lastSpec = null;   // spec of the SVG on screen (the view: filtered / compared)
+let lastSvg = '';      // renderSVG output on screen — downloads use it (zoom-free, no UI classes)
+let lastView = null;   // { source: doc parsed from the editor, doc: the doc actually drawn }
+let statusNote = '';   // one-shot note appended to the next OK status (imports, shared links)
+const tagFilter = new Set();   // selected tags, lowercase; empty = show everything
+let compare = null;            // { kind: 'project' | 'file', name, doc } baseline of the compare view
+
+function setStatus(text, isError){
+  statusEl.className = isError ? 'error' : '';
+  statusEl.textContent = text;
+}
 
 /* ---------------- connections table ---------------- */
-function renderConnections(spec){
-  const { doc, nodeMap, groupMap, claimed } = spec;
-  const connections = doc.connections || [];
-
-  /* A node's zone is its immediate parent group id (undefined if top-level).
-   * A group endpoint is its own zone.
-   * Connections where both ends share the same zone need no firewall rule. */
-  function zoneOf(id){
-    if (nodeMap.has(id)) return claimed.get(id);  // undefined = top-level / no group
-    if (groupMap.has(id)) return id;              // group is its own zone boundary
-    return undefined;
-  }
-  const filtered = connections.filter(l => {
-    const fz = zoneOf(String(l.from)), tz = zoneOf(String(l.to));
-    return fz === undefined || tz === undefined || fz !== tz;
-  });
-  const excluded = connections.length - filtered.length;
-
-  if (!filtered.length){
+/* rules come from connectionRules() in the core; `change` (connection index ->
+ * added/removed/changed) adds a change marker column in the compare view */
+function renderConnections(spec, change){
+  const { rules, excluded, considered } = connectionRules(spec);
+  if (!considered){
     connEl.innerHTML = '<p class="conn-empty">All connections are within the same zone — no firewall rules needed.</p>';
     lastCsv = '';
     return;
   }
-  function endpoint(id){
-    id = String(id);
-    const n = nodeMap.get(id);
-    if (n) return { name: String(n.label ?? id), addr: ipsOf(n) || '—' };
-    const g = groupMap.get(id);
-    if (g) return { name: String(g.label ?? id), addr: g.cidr ? String(g.cidr) : '—' };
-    return { name: id, addr: '—' };
-  }
-  // one directed row per connection; a bidirectional one (direction: both) yields
-  // two; a blocked one (direction: none) is not a rule, so it is left out
-  const flows = [];
-  for (const l of filtered){
-    const dir = dirOf(l);
-    if (dir === 'none') continue;
-    const meta = {
-      proto:   l.protocol != null ? String(l.protocol) : '',
-      port:    l.port     != null ? String(l.port)     : '',
-      label:   l.label    != null ? String(l.label)    : '',
-      comment: l.comment  != null ? String(l.comment)  : '',
-    };
-    flows.push({ src: endpoint(l.from), dst: endpoint(l.to), ...meta });
-    if (dir === 'both')
-      flows.push({ src: endpoint(l.to), dst: endpoint(l.from), ...meta });
-  }
-  if (!flows.length){
+  if (!rules.length){
     connEl.innerHTML = '<p class="conn-empty">No forwarding rules to list.</p>';
     lastCsv = '';
     return;
   }
-  const hasComment = flows.some(f => f.comment.trim() !== '');
+  const hasComment = rules.some(r => r.comment.trim() !== '');
   const dash = '<span class="conn-dash">—</span>';
+  const MARK = { added:'+', removed:'−', changed:'~' };
   // endpoint = name with its address beneath it, so the address is unambiguous
   const epCell = ep =>
     `<td class="conn-ep"><span class="conn-name">${esc(ep.name)}</span>${
       ep.addr && ep.addr !== '—' ? `<span class="conn-addr">${esc(ep.addr)}</span>` : ''}</td>`;
 
-  const rows = flows.map((f, i) => `<tr>
+  const rows = rules.map((r, i) => {
+    const s = change && change.get(r.conn);
+    return `<tr${s ? ` class="chg-${s}"` : ''}>
+      ${change ? `<td class="conn-chg">${s ? MARK[s] : ''}</td>` : ''}
       <td class="conn-n">${i+1}</td>
-      ${epCell(f.src)}${epCell(f.dst)}
-      <td class="conn-proto">${f.proto ? esc(f.proto).toUpperCase() : dash}</td>
-      <td class="conn-port">${f.port ? esc(f.port) : dash}</td>
-      <td class="conn-label">${f.label ? esc(f.label) : ''}</td>
-      ${hasComment ? `<td class="conn-comment">${f.comment ? esc(f.comment) : ''}</td>` : ''}
-    </tr>`).join('');
+      ${epCell(r.src)}${epCell(r.dst)}
+      <td class="conn-proto">${r.proto ? esc(r.proto).toUpperCase() : dash}</td>
+      <td class="conn-port">${r.port ? esc(r.port) : dash}</td>
+      <td class="conn-label">${r.label ? esc(r.label) : ''}</td>
+      ${hasComment ? `<td class="conn-comment">${r.comment ? esc(r.comment) : ''}</td>` : ''}
+    </tr>`;
+  }).join('');
+  lastCsv = rulesToCsv(rules, change);
 
-  const csvHead = ['#','Source','Source Address','Destination','Dest Address','Protocol','Port','Label'];
-  if (hasComment) csvHead.push('Comment');
-  const csvRows = [csvHead, ...flows.map((f, i) => {
-    const r = [i+1, f.src.name, f.src.addr, f.dst.name, f.dst.addr, f.proto, f.port, f.label];
-    if (hasComment) r.push(f.comment);
-    return r;
-  })];
-  lastCsv = csvRows.map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
-
-  const excl = excluded ? `<span class="conn-excl">${excluded} same-zone excluded</span>` : '';
+  const notes = [
+    excluded ? `${excluded} same-zone excluded` : '',
+    tagFilter.size ? `tags: ${[...tagFilter].join(', ')}` : '',
+    compare ? `vs ${compare.name}` : '',
+  ].filter(Boolean).map(t => `<span class="conn-excl">${esc(t)}</span>`).join('');
   connEl.innerHTML = `
     <div class="conn-toolbar">
-      <h2>Connections &mdash; ${flows.length} rule${flows.length !== 1 ? 's' : ''} ${excl}</h2>
+      <h2>Connections &mdash; ${rules.length} rule${rules.length !== 1 ? 's' : ''} ${notes}</h2>
       <button id="btn-copy-csv">Copy CSV</button>
     </div>
     <table class="conn-table">
       <thead><tr>
-        <th>#</th><th>Source</th><th>Destination</th>
+        ${change ? '<th></th>' : ''}<th>#</th><th>Source</th><th>Destination</th>
         <th>Protocol</th><th>Port</th><th>Label</th>${hasComment ? '<th>Comment</th>' : ''}
       </tr></thead>
       <tbody>${rows}</tbody>
@@ -228,37 +201,129 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
   });
 });
 
+/* ---------------- tag filter ---------------- */
+/* one toggle chip per tag in the document; selected tags narrow both the
+ * diagram and the Connections table (filterDoc in the core) */
+const tagBar = $('#tag-filter'), tagChips = $('#tag-chips');
+let tagKey = null;
+function updateTagBar(doc){
+  const tags = allTags(doc);
+  const present = new Set(tags.map(t => t.toLowerCase()));
+  for (const t of [...tagFilter]) if (!present.has(t)) tagFilter.delete(t);
+  const key = tags.join(' ') + '' + [...tagFilter].join(' ');
+  if (key === tagKey) return;
+  tagKey = key;
+  tagBar.hidden = !tags.length;
+  tagChips.innerHTML = tags.map(t =>
+    `<button class="tag-chip" data-tag="${esc(t)}" aria-pressed="${tagFilter.has(t.toLowerCase())}">${esc(t)}</button>`).join('');
+}
+tagChips.addEventListener('click', e => {
+  const chip = e.target.closest('.tag-chip'); if (!chip) return;
+  const t = chip.dataset.tag.toLowerCase();
+  if (tagFilter.has(t)) tagFilter.delete(t); else tagFilter.add(t);
+  tagKey = null;
+  fitNextRender = true;
+  renderNow();
+});
+
 /* ---------------- diagram render ---------------- */
 async function render(text){
   const seq = ++renderSeq;
   try{
-    const spec = parseSpec(text);
+    const source = jsyaml.load(text);
+    const sourceSpec = specFromDoc(source);   // validate what the author wrote, before any view narrows it
+    updateTagBar(source);
+    let doc = tagFilter.size ? filterDoc(source, [...tagFilter]) : source;
+    if (tagFilter.size && !doc.nodes.length){
+      const e = new Error(`Nothing is tagged ${[...tagFilter].join(' / ')} — click a highlighted tag to clear the filter.`);
+      e.isSpec = true; throw e;
+    }
+    let diff = null;
+    if (compare){
+      diff = diffDocs(tagFilter.size ? filterDoc(compare.doc, [...tagFilter]) : compare.doc, doc);
+      doc = diff.doc;
+    }
+    const spec = doc === source ? sourceSpec : specFromDoc(doc);
     const pass1 = await elk.layout(buildElk(spec));
     /* second pass with FIXED_ORDER hub ports (fresh graph — pass 1 mutated its own) */
     const ported = assignPorts(buildElk(spec), pass1);
     const layout = ported ? await elk.layout(ported) : pass1;
     if (seq !== renderSeq) return;
+    const rows = tagFilter.size ? [['filter', 'tags: ' + [...tagFilter].join(', ')]] : [];
+    const svg = renderSVG(spec, layout, { source: text, rows, diff: diff && { ...diff, base: compare.name } });
     activeLabel = null;
-    lastSpec = spec;
-    canvasEl.innerHTML = renderSVG(spec, layout);
+    lastSpec = spec; lastSvg = svg; lastView = { source, doc };
+    canvasEl.innerHTML = svg;
+    canvasEl.style.background = canvasEl.querySelector('svg')?.dataset.bg || '';
     if (fitNextRender){ fitNextRender = false; fitZoom(); }  // a freshly loaded doc: show all of it
     else applyZoom();               // an edit: keep the current zoom level
-    renderConnections(spec);
-    const n = spec.nodeMap.size, g = spec.groupMap.size, c = (spec.doc.connections||[]).length;
-    statusEl.className = '';
-    statusEl.textContent = `OK — ${n} nodes · ${g} groups · ${c} connections`;
+    renderConnections(spec, diff && diff.status.connections);
+    applyCursorHighlight();
+    const n = sourceSpec.nodeMap.size, g = sourceSpec.groupMap.size, c = (source.connections||[]).length;
+    const parts = [`OK — ${n} nodes · ${g} groups · ${c} connections`];
+    if (tagFilter.size) parts.push(`showing ${spec.nodeMap.size} tagged ${[...tagFilter].join(' / ')}`);
+    if (diff) parts.push(`vs ${compare.name}: +${diff.counts.added} −${diff.counts.removed} ~${diff.counts.changed}`);
+    if (statusNote) parts.push(statusNote);
+    statusNote = '';
+    setStatus(parts.join(' · '));
   }catch(err){
     if (seq !== renderSeq) return;
-    statusEl.className = 'error';
-    statusEl.textContent = (err.isSpec ? '' : 'YAML: ') + err.message;
+    setStatus((err.isSpec ? '' : 'YAML: ') + err.message, true);
   }
 }
 
 let timer = null;
 let activeLabel = null;
+const renderNow = () => { clearTimeout(timer); render(editor.value); };
 
-/* Edge click: highlight all edges sharing the same label, dim the rest.
- * Lives on the container so it survives SVG re-renders. */
+/* ---------------- diagram <-> YAML ---------------- */
+/* sourceMap of the editor text, memoized per text */
+let mapCache = { text: null, map: null };
+function currentMap(){
+  const text = editor.value;
+  if (mapCache.text !== text) mapCache = { text, map: sourceMap(text) };
+  return mapCache.map;
+}
+/* connection indices differ between the editor doc and the drawn view (tag
+ * filter drops some, compare appends removed ones); both keep the connection
+ * objects by reference, so indexOf maps between them */
+const viewIndexOf = i => lastView ? (lastView.doc.connections || []).indexOf((lastView.source.connections || [])[i]) : -1;
+const sourceIndexOf = i => lastView ? (lastView.source.connections || []).indexOf((lastView.doc.connections || [])[i]) : -1;
+
+/* click in the diagram: move the editor cursor to that node / group / connection */
+function revealInEditor(target){
+  const map = currentMap();
+  if (!map || !lastView) return;
+  let range = null;
+  const conn = target.closest('[data-conn]');
+  if (conn){
+    const si = sourceIndexOf(+conn.dataset.conn);
+    if (si >= 0) range = map.itemRange('connection', si);
+  } else {
+    const el = target.closest('.nd-node, .nd-group');
+    if (el) range = map.itemRange(el.classList.contains('nd-node') ? 'node' : 'group', el.dataset.id);
+  }
+  if (range) editor.reveal(range.from, range.to);
+}
+/* cursor in the editor: outline the item it sits on */
+let cursorPos = null, cursorFrame = 0;
+function applyCursorHighlight(){
+  canvasEl.querySelectorAll('.nd-sel').forEach(el => el.classList.remove('nd-sel'));
+  if (cursorPos == null || !lastView) return;
+  const item = currentMap()?.itemAt(cursorPos);
+  if (!item) return;
+  if (item.kind === 'connection'){
+    const vi = viewIndexOf(item.index);
+    if (vi >= 0) canvasEl.querySelectorAll(`.edge[data-conn="${vi}"]`).forEach(el => el.classList.add('nd-sel'));
+    return;
+  }
+  for (const el of canvasEl.querySelectorAll(item.kind === 'node' ? '.nd-node' : '.nd-group'))
+    if (el.dataset.id === item.id) el.classList.add('nd-sel');
+}
+
+/* Edge click: highlight all edges sharing the same label, dim the rest; any
+ * click on an item also reveals it in the editor. Lives on the container so it
+ * survives SVG re-renders. */
 canvasEl.addEventListener('click', e => {
   if (suppressClick){ suppressClick = false; return; }   // tail end of a pan drag
   const hit = e.target.closest('.edge, .edge-lbl');
@@ -269,14 +334,48 @@ canvasEl.addEventListener('click', e => {
   all.forEach(el => {
     el.classList.toggle('edge-lo', !!activeLabel && el.dataset.label !== activeLabel);
   });
+  revealInEditor(e.target);
 });
+
+/* spec validation as editor diagnostics, placed on the offending YAML (YAML
+ * syntax errors are left to the schema linter and the status line) */
+function specDiagnostics(text){
+  let doc;
+  try { doc = jsyaml.load(text); } catch (e) { return []; }
+  try { specFromDoc(doc); return []; }
+  catch (e) {
+    if (!e.errors) return [];
+    const map = sourceMap(text);
+    return e.errors.map(x => {
+      const r = map ? map.rangeOf(x.path) : null;
+      const at = r && r.depth ? r : { from: 0, to: 0 };
+      return { from: at.from, to: at.to, severity: 'error', source: 'netdiagram', message: x.message };
+    });
+  }
+}
 
 const editor = makeEditor($('#editor'), SCHEMA, text => {
   clearTimeout(timer);
   timer = setTimeout(() => render(text), 350);
   saveDraft(text);     // autosave the live buffer so a reload restores it
   updateDirty();       // reflect unsaved changes vs the active project
+}, {
+  lint: specDiagnostics,
+  onCursor: pos => {
+    cursorPos = pos;
+    cancelAnimationFrame(cursorFrame);
+    cursorFrame = requestAnimationFrame(applyCursorHighlight);
+  },
 });
+
+/* replace the editor buffer with a fresh, unsaved draft and show all of it */
+function loadText(text, note){
+  setActive('');
+  editor.setValue(text);
+  statusNote = note || '';
+  clearTimeout(timer); fitNextRender = true; render(text);
+  refreshProjects();
+}
 
 /* example picker (below the editor): choosing an entry loads it into the editor */
 const exampleSel = $('#sel-example');
@@ -287,33 +386,23 @@ EXAMPLES.forEach((ex, i)=>{
 });
 // the list is sorted by name; preselect the default (def) example for first load
 exampleSel.value = String(Math.max(0, EXAMPLES.findIndex(ex => ex.def)));
-function loadExample(){
-  const yaml = EXAMPLES[exampleSel.value].yaml;
-  setActive('');            // an example is a fresh, unsaved draft
-  editor.setValue(yaml);
-  clearTimeout(timer);
-  fitNextRender = true;     // show the whole diagram on load
-  render(yaml);
-  refreshProjects();
-}
+function loadExample(){ loadText(EXAMPLES[exampleSel.value].yaml); }
 exampleSel.addEventListener('change', loadExample);
 /* dash-concatenated file name from the diagram title (or any base string) */
 const slugName = s => String(s ?? '').toLowerCase().replace(/[^a-z0-9]+/g,'-')
   .replace(/^-+|-+$/g,'') || 'network-diagram';
-
-$('#btn-download').addEventListener('click', ()=>{
-  const svg = canvasEl.querySelector('svg'); if (!svg) return;
-  const clone = svg.cloneNode(true);       // download at natural size, zoom-free
-  if (svg.dataset.w){
-    clone.setAttribute('width', svg.dataset.w);
-    clone.setAttribute('height', svg.dataset.h);
-  }
-  delete clone.dataset.w; delete clone.dataset.h;
-  const blob = new Blob([clone.outerHTML], {type:'image/svg+xml'});
+function downloadBlob(blob, name){
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = slugName(lastSpec?.doc.diagram?.title) + '.svg';  // the SVG on screen came from lastSpec
-  a.click(); URL.revokeObjectURL(a.href);
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+/* Download SVG — the renderSVG output on screen: natural size, YAML source embedded */
+$('#btn-download').addEventListener('click', ()=>{
+  if (!lastSvg) return;
+  downloadBlob(new Blob([lastSvg], {type:'image/svg+xml'}), slugName(lastSpec?.doc.diagram?.title) + '.svg');
 });
 
 /* Download YAML — save the current editor source to a file (as typed, even if
@@ -321,31 +410,56 @@ $('#btn-download').addEventListener('click', ()=>{
 $('#btn-yaml').addEventListener('click', ()=>{
   const text = editor.value;
   const title = /^\s*title:\s*(.+?)\s*$/m.exec(text)?.[1]?.replace(/^["']|["']$/g,'');
-  const name = slugName(getActive() || title);
-  const blob = new Blob([text], {type:'text/yaml;charset=utf-8'});
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = name + '.yaml';
-  a.click(); URL.revokeObjectURL(a.href);
+  downloadBlob(new Blob([text], {type:'text/yaml;charset=utf-8'}), slugName(getActive() || title) + '.yaml');
 });
 
-/* Import YAML — load a .yaml file from disk into the editor as a fresh draft */
+/* ---------------- import (file picker + drag and drop) ---------------- */
+function readFile(file, then){
+  const reader = new FileReader();
+  reader.onload = () => then(String(reader.result), file.name);
+  reader.onerror = () => setStatus('Could not read the file.', true);
+  reader.readAsText(file);
+}
+const looksLikeSvg = (text, name) => /\.svg$/i.test(name || '') || /^\s*(<\?xml[^>]*>\s*)?(<!--[\s\S]*?-->\s*)*<svg[\s>]/i.test(text);
+/* netdiagram YAML loads as-is; an SVG exported by netdiagram opens its embedded
+ * source; inventories (Ansible / Terraform / NetBox) are converted to YAML */
+function importText(text, name){
+  if (looksLikeSvg(text, name)){
+    const src = extractSource(text);
+    if (src == null) setStatus(`${name || 'This SVG'} has no embedded netdiagram source — only SVGs downloaded from netdiagram can be opened.`, true);
+    else loadText(src, `opened the source embedded in ${name || 'the SVG'}`);
+    return;
+  }
+  let imported;
+  try { imported = Importers.detectImport(text, name); }
+  catch (e) { setStatus(`Import failed: ${e.message}`, true); return; }
+  if (imported) loadText(imported.yaml, `imported ${imported.label} (${imported.summary}) — add connections to finish`);
+  else loadText(text);
+}
 const fileInput = $('#file-yaml');
 $('#btn-import').addEventListener('click', ()=> fileInput.click());
 fileInput.addEventListener('change', ()=>{
   const file = fileInput.files && fileInput.files[0];
   fileInput.value = '';                 // let the same file be picked again later
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = ()=>{
-    const text = String(reader.result);
-    setActive('');                      // imported content is a fresh, unsaved draft
-    editor.setValue(text);
-    clearTimeout(timer); fitNextRender = true; render(text);
-    refreshProjects();
-  };
-  reader.onerror = ()=>{ statusEl.className = 'error'; statusEl.textContent = 'Could not read the file.'; };
-  reader.readAsText(file);
+  if (file) readFile(file, importText);
+});
+let dragDepth = 0;
+const draggingFiles = e => [...(e.dataTransfer?.types || [])].includes('Files');
+window.addEventListener('dragenter', e => {
+  if (!draggingFiles(e)) return;
+  dragDepth++; document.body.classList.add('dropping');
+});
+window.addEventListener('dragleave', e => {
+  if (!draggingFiles(e)) return;
+  if (--dragDepth <= 0){ dragDepth = 0; document.body.classList.remove('dropping'); }
+});
+window.addEventListener('dragover', e => { if (draggingFiles(e)) e.preventDefault(); });
+window.addEventListener('drop', e => {
+  if (!draggingFiles(e)) return;
+  e.preventDefault();
+  dragDepth = 0; document.body.classList.remove('dropping');
+  const file = e.dataTransfer.files[0];
+  if (file) readFile(file, importText);
 });
 
 /* Export PDF — print a page holding just the diagram; the browser's print
@@ -354,14 +468,9 @@ fileInput.addEventListener('change', ()=>{
  * oriented by the diagram's aspect; the frame's <title> is the slugged
  * diagram title, which browsers suggest as the PDF file name. */
 $('#btn-pdf').addEventListener('click', ()=>{
-  const svg = canvasEl.querySelector('svg'); if (!svg) return;
-  const clone = svg.cloneNode(true);        // print at natural size, zoom-free
-  if (svg.dataset.w){
-    clone.setAttribute('width', svg.dataset.w);
-    clone.setAttribute('height', svg.dataset.h);
-  }
-  delete clone.dataset.w; delete clone.dataset.h;
-  const landscape = (+clone.getAttribute('width') || 1) >= (+clone.getAttribute('height') || 1);
+  if (!lastSvg) return;
+  const size = /width="(\d+)" height="(\d+)"/.exec(lastSvg);
+  const landscape = !size || +size[1] >= +size[2];
   const title = esc(slugName(lastSpec?.doc.diagram?.title));
   const frame = document.createElement('iframe');
   frame.setAttribute('aria-hidden', 'true');
@@ -374,13 +483,48 @@ $('#btn-pdf').addEventListener('click', ()=>{
     + `html,body{margin:0;padding:0;height:100%}`
     + `body{display:flex;align-items:center;justify-content:center}`
     + `svg{max-width:100%;max-height:100%}</style></head>`
-    + `<body>${clone.outerHTML}</body></html>`);
+    + `<body>${lastSvg}</body></html>`);
   d.close();
   const win = frame.contentWindow;
   const go = ()=>{ win.focus(); win.print(); setTimeout(()=>frame.remove(), 1000); };
   if (d.readyState === 'complete') go(); else win.onload = go;
 });
-window.addEventListener('error', e=>{ statusEl.className='error'; statusEl.textContent = 'Runtime: ' + e.message; });
+window.addEventListener('error', e=>{ setStatus('Runtime: ' + e.message, true); });
+
+/* ---------------- share links ---------------- */
+/* The YAML travels deflated in the URL fragment (#src=…), which browsers never
+ * send to a server. Opened from a file, the link points at the hosted copy. */
+const HOMEPAGE = window.NETDIAGRAM_HOMEPAGE || '';
+const shareBase = () => /^https?:$/.test(location.protocol) || !HOMEPAGE
+  ? location.href.split('#')[0] : HOMEPAGE;
+$('#btn-share').addEventListener('click', async ()=>{
+  try {
+    const url = shareBase() + '#src=' + await encodeShare(editor.value);
+    let copied = false;
+    try { await navigator.clipboard.writeText(url); copied = true; } catch (e) {}
+    if (!copied) window.prompt('Copy this link:', url);
+    const hosted = shareBase() !== location.href.split('#')[0] ? ` — it opens ${HOMEPAGE}` : '';
+    setStatus(`Share link ${copied ? 'copied' : 'ready'} (${url.length} characters)${hosted}`);
+  } catch (err) {
+    setStatus('Could not create a share link: ' + err.message, true);
+  }
+});
+/* read (and clear) a #src= fragment; null when there is none */
+async function takeSharedText(){
+  const m = /^#src=([\w-]+)$/.exec(location.hash);
+  if (!m) return null;
+  try { history.replaceState(null, '', location.pathname + location.search); } catch (e) {}
+  try { return await decodeShare(m[1]); }
+  catch (e) { setStatus('Share link: ' + e.message, true); return null; }
+}
+/* true when `text` exists nowhere but in the editor buffer */
+const isUnsaved = text => !!text && !!text.trim() && !Object.values(readProjects()).some(p => p.yaml === text);
+window.addEventListener('hashchange', async ()=>{
+  const shared = await takeSharedText();
+  if (shared == null || shared === editor.value) return;
+  if (isUnsaved(editor.value) && !window.confirm('Open the shared diagram? It replaces your current unsaved draft.')) return;
+  loadText(shared, 'opened a shared link');
+});
 
 /* ---------------- local projects (autosave + named projects) ----------------
  * Everything lives in localStorage, which may be unavailable (private mode, or
@@ -432,13 +576,14 @@ function refreshProjects(){
   projectSel.value = (active && projects[active]) ? active : '';
   btnDel.hidden = !projectSel.value;
   updateDirty();
+  refreshCompare();
 }
 function suggestName(){
   const m = /^\s*title:\s*(.+?)\s*$/m.exec(editor.value);
   return m ? m[1].replace(/^["']|["']$/g, '') : 'my-network';
 }
 function saveProject(){
-  if (!LS){ statusEl.className='error'; statusEl.textContent='This browser has no local storage available — cannot save.'; return; }
+  if (!LS){ setStatus('This browser has no local storage available — cannot save.', true); return; }
   let name = getActive();
   if (!name){
     name = (window.prompt('Save project as:', suggestName()) || '').trim();
@@ -459,11 +604,7 @@ function openProject(name){
   refreshProjects();
 }
 function newProject(){
-  const STARTER = 'diagram:\n  title: New project\n  direction: down\n\nnodes:\n  - id: n1\n    label: node-1\n    type: server\n';
-  setActive('');
-  editor.setValue(STARTER);
-  clearTimeout(timer); fitNextRender = true; render(STARTER);
-  refreshProjects();
+  loadText('diagram:\n  title: New project\n  direction: down\n\nnodes:\n  - id: n1\n    label: node-1\n    type: server\n');
 }
 function deleteProject(){
   const name = getActive(); if (!name) return;
@@ -502,13 +643,69 @@ if (!LS){
   for (const el of [$('#project-picker'), btnSave, btnDel]) if (el) el.hidden = true;
 }
 
-/* initial load: restore the autosaved draft if present, else the default example */
-refreshProjects();
-const draft = readDraft();
-if (draft && draft.trim()){
-  editor.setValue(draft);
-  clearTimeout(timer); fitNextRender = true; render(draft);
-  refreshProjects();
-} else {
-  loadExample();
+/* ---------------- compare view ---------------- */
+/* Baseline: a saved project (e.g. the last saved state of the one being
+ * edited) or a YAML / netdiagram SVG file. Kept in memory only. */
+const compareSel = $('#sel-compare'), compareFile = $('#file-compare');
+function refreshCompare(){
+  const names = Object.keys(readProjects()).sort((a,b)=>a.localeCompare(b));
+  const active = getActive();
+  compareSel.innerHTML = '';
+  const opt = (value, text) => {
+    const o = document.createElement('option'); o.value = value; o.textContent = text;
+    compareSel.appendChild(o);
+  };
+  opt('', 'Off');
+  const loaded = compare && (compare.kind === 'file' || !names.includes(compare.name));
+  if (loaded) opt('loaded', compare.name);
+  names.forEach(n => opt('p:' + n, n === active ? `${n} (saved)` : n));
+  opt('file', 'File…');
+  compareSel.value = !compare ? '' : loaded ? 'loaded' : 'p:' + compare.name;
 }
+function baselineDoc(text, name){
+  try { return parseSpec(text).doc; }
+  catch (e) { setStatus(`Cannot compare with ${name}: ${e.message.split('\n')[0]}`, true); return null; }
+}
+function setCompare(next){
+  compare = next;
+  refreshCompare();
+  renderNow();
+}
+compareSel.addEventListener('change', () => {
+  const v = compareSel.value;
+  if (v === '') return setCompare(null);
+  if (v === 'loaded') return;
+  if (v === 'file'){ refreshCompare(); compareFile.click(); return; }
+  const name = v.slice(2), p = readProjects()[name];
+  const doc = p && baselineDoc(p.yaml, name);
+  if (doc) setCompare({ kind: 'project', name, doc }); else refreshCompare();
+});
+compareFile.addEventListener('change', () => {
+  const file = compareFile.files && compareFile.files[0];
+  compareFile.value = '';
+  if (!file) return;
+  readFile(file, (text, name) => {
+    const src = looksLikeSvg(text, name) ? extractSource(text) : text;
+    if (src == null){ setStatus(`${name} has no embedded netdiagram source.`, true); return; }
+    const doc = baselineDoc(src, name);
+    if (doc) setCompare({ kind: 'file', name, doc });
+  });
+});
+
+/* initial load: a shared link wins (asking before it replaces unsaved work),
+ * else the autosaved draft, else the default example */
+(async () => {
+  refreshProjects();
+  const draft = readDraft();
+  const shared = await takeSharedText();
+  if (shared != null && (shared === draft || !isUnsaved(draft)
+      || window.confirm('Open the shared diagram? It replaces your current unsaved draft.'))){
+    loadText(shared, 'opened a shared link');
+  } else if (draft && draft.trim()){
+    editor.setValue(draft);
+    clearTimeout(timer); fitNextRender = true; render(draft);
+    refreshProjects();
+  } else {
+    loadExample();
+  }
+})();

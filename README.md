@@ -15,6 +15,9 @@ and open it in any browser. That's the whole app: a YAML editor on the left, a
 live diagram on the right. Nothing to install, no network needed, and nothing
 leaves your machine.
 
+Or use the hosted copy at **<https://keilr.github.io/netdiagram/>** — the same
+file, published by CI on every release (share links from a local copy open it).
+
 > Building from source is only needed if you want to work on netdiagram itself —
 > see [Development](#development).
 
@@ -57,18 +60,37 @@ Load one of the bundled examples from the picker below the editor to see more.
 ## What's in the page
 
 - **Live editor** — schema-aware autocomplete (keys, enum values like
-  `type: f…` → `firewall`, and node/group ids for connection endpoints), inline
-  validation, and hover docs; the diagram re-renders as you type.
+  `type: f…` → `firewall`, and node/group ids for connection endpoints), hover
+  docs, and inline errors: an unknown endpoint, a duplicate id or a node listed
+  in two groups is underlined where it is written. The diagram re-renders as you
+  type.
+- **Diagram ↔ YAML** — click a node, group or connection to jump to its YAML;
+  wherever the cursor sits in the YAML, that item is outlined in the diagram.
 - **Projects, saved in your browser** — the editor autosaves and restores on
   reload; **Save** (<kbd>Ctrl/Cmd-S</kbd>) named projects to switch between
   later. All in local storage — nothing leaves your machine. (If the browser
   blocks local storage, the project controls hide themselves and examples still
   work.)
-- **Import / export** — import a `.yaml` file, download the source as **YAML**,
-  download the diagram as **SVG**, or **Export PDF** (opens the print dialog;
+- **Import / export** — import netdiagram YAML, an **SVG downloaded from
+  netdiagram** (every SVG carries its YAML source, so a diagram pasted into a
+  wiki can be reopened and edited), or scaffold a spec from an **Ansible
+  inventory**, **Terraform state** or a **NetBox export** (see
+  [Import an inventory](#import-an-inventory)); files can also be dropped onto
+  the page. Download the source as **YAML**, the diagram as **SVG**, or **Export PDF** (opens the print dialog;
   the diagram stays vector, A4 is preselected with orientation following the
   diagram's aspect, and the suggested file name is the diagram title,
   dash-concatenated — as for the SVG/YAML downloads).
+- **Share link** — copies a link carrying the diagram (compressed) in the URL
+  fragment, which browsers never send to a server. Opened from a local file, the
+  link points at the hosted copy.
+- **Compare** — pick a saved project (such as the last saved state of the one
+  you are editing) or a YAML / netdiagram SVG file as the baseline: added,
+  removed and changed nodes, groups and connections are marked **+ / − / ~** in
+  the diagram, and the Connections table marks the rule changes — a firewall
+  change review in one view.
+- **Tag filter** — when the document uses `tags`, chips above the diagram show
+  only what carries the selected tags (a tagged group keeps its whole contents);
+  the title block notes the filter.
 - **Navigate** — zoom, pan and fit-to-view; the diagram auto-fits when loaded.
 
 ## Schema
@@ -82,6 +104,8 @@ editor's completion and validation). The shape is `diagram`, `nodes`, `groups`,
 |---|---|
 | `title` | shown in the drafting title block |
 | `direction` | `down` (default) or `right` |
+| `theme` | `paper` (default) or `blueprint` — white linework on cyanotype blue |
+| `date` | shown in the title block's DATE cell instead of today; pin it to keep rendered SVGs reproducible |
 | *anything else* | any other scalar key (`author`, `revision`, `site`, …) is rendered as a row in the drafting title block |
 
 ### `nodes[]`
@@ -154,9 +178,17 @@ You don't have to write YAML in the browser app — a CLI renders any spec file
 straight to SVG (this is also how the image above is produced):
 
 ```bash
-npm run render -- mynet.yaml                  # -> mynet.svg
-npm run render -- mynet.yaml out.svg --watch  # re-render on every save
+npm run render -- mynet.yaml                       # -> mynet.svg
+npm run render -- mynet.yaml out.svg --watch       # re-render on every save
+npm run render -- mynet.yaml --theme blueprint     # cyanotype colors
+npm run render -- mynet.yaml --tags prod,pci       # only what carries these tags
+npm run render -- mynet.yaml pr.svg --compare main.yaml --csv rules.csv
+                                                   # change review: marked diagram + rule CSV
+npm run render -- old.svg --extract > old.yaml     # the YAML back out of an exported SVG
 ```
+
+The title-block date comes from `--date`, else `diagram.date`, else
+`$SOURCE_DATE_EPOCH`, else today — so renders in CI are byte-reproducible.
 
 Opening this repo in VS Code gives the same schema-driven IntelliSense via
 `.vscode/settings.json` and the recommended
@@ -170,6 +202,31 @@ outside this repo, put a modeline on the first line instead:
 # yaml-language-server: $schema=/path/to/netdiagram-schema.json
 ```
 
+## Import an inventory
+
+Start from what you already have. Importers build nodes and groups; inventories
+don't describe traffic, so `connections:` are left to you.
+
+```bash
+npm run import -- inventory.ini -o net.yaml         # Ansible INI or YAML inventory
+ansible-inventory -i inventory --list | npm run import -- - -o net.yaml
+terraform show -json | npm run import -- - --from terraform -o net.yaml
+npm run import -- devices.json -o net.yaml          # NetBox devices / virtual-machines API JSON
+```
+
+- **Ansible** — `children` nest groups; a host lives in its most specific group
+  and its other groups become tags; `ansible_host` becomes the address. No other
+  variables are read — they often hold credentials.
+- **Terraform** — VPCs / VNets / networks and their subnets become nested groups
+  with CIDRs; instances, databases, load balancers and gateways (AWS, Azure, GCP;
+  instances also for OpenStack, Proxmox, vSphere, libvirt, Hetzner, DigitalOcean)
+  land in their subnet.
+- **NetBox** — devices group by site, then rack; VMs by site, then cluster. The
+  role picks the icon, the primary IP the address, the platform the `os`.
+
+The format is detected (`--from ansible|terraform|netbox` forces one). The page's
+**Import** button and drag & drop use the same importers.
+
 ## Development
 
 Only needed to change netdiagram itself — the app ships as the prebuilt HTML.
@@ -178,19 +235,23 @@ Only needed to change netdiagram itself — the app ships as the prebuilt HTML.
 npm install
 npm run build   # -> dist/netdiagram.html (self-contained)
 npm run lint    # eslint (flat config; runs first in CI)
-npm test        # builds, then the assertion suite (pipeline, features, jsdom boot)
+npm test        # builds, then the assertion suite (pipeline, features, importers, CLI, golden SVGs, jsdom)
+npm run test:golden   # re-render test/golden/*.svg after an intended visual change — review the diff
 ```
 
 ```
 src/netdiagram.js    core: parseSpec -> buildElk -> renderSVG (browser + node)
 src/app.js           browser wire-up (editor, render, projects, exports, zoom/pan)
 src/editor.js        CodeMirror setup: schema-driven completion, lint, hover
+src/importers.js     Ansible / Terraform / NetBox -> netdiagram YAML (browser + node)
 src/template.html    page shell with injection placeholders
 scripts/build.js     vendors js-yaml + elkjs, assembles dist/netdiagram.html
-scripts/render.js    CLI: YAML -> SVG (--watch), for external editors
+scripts/render.js    CLI: YAML -> SVG (--watch --theme --tags --compare --csv --extract)
+scripts/import.js    CLI: inventory -> YAML scaffold
 examples/            bundled examples (injected into the app's picker at build)
 docs/example.yaml    source of the screenshot above
-test/                npm test — pipeline, features, validation, jsdom boot
+test/                npm test — pipeline, features, validation, importers, CLI, jsdom
+test/golden/         reference SVGs for every example (npm run test:golden)
 eslint.config.js     npm run lint — flat config
 ```
 
