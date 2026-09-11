@@ -12,13 +12,15 @@ const USAGE = `usage: node scripts/render.js <input.yaml|input.svg> [output.svg]
   --watch                re-render on every save of the input
   --theme paper|blueprint
   --tags a,b             draw only what carries one of these tags
+  --view id              render a named view from the spec's views: list
+  --list-views           list the views this spec defines and exit
   --compare base.yaml    mark what changed since base (YAML or a netdiagram SVG)
   --csv rules.csv        also write the Connections table (firewall rules) as CSV
   --date YYYY-MM-DD      title-block date (else diagram.date, $SOURCE_DATE_EPOCH, today)
   --no-source            don't embed the YAML source in the SVG
   --extract              print the YAML embedded in a netdiagram SVG and exit`;
-const VALUE_FLAGS = new Set(["theme", "tags", "compare", "csv", "date"]);
-const BOOL_FLAGS = new Set(["watch", "no-source", "extract", "help"]);
+const VALUE_FLAGS = new Set(["theme", "tags", "compare", "csv", "date", "view"]);
+const BOOL_FLAGS = new Set(["watch", "no-source", "extract", "list-views", "help"]);
 
 function fail(message) {
   console.error(message);
@@ -69,7 +71,20 @@ async function render() {
   try {
     const text = readSpecText(input);
     const sourceSpec = nd.parseSpec(text);
-    let doc = tags.length ? nd.filterDoc(sourceSpec.doc, tags) : sourceSpec.doc;
+    const views = nd.viewsOf(sourceSpec.doc);
+    if (opts["list-views"]) {
+      if (!views.length) console.log(`${input} defines no views`);
+      else for (const v of views) console.log(`${String(v.id).padEnd(16)} ${v.title || ""}`);
+      return;
+    }
+    /* a view narrows the document before every other lens (tags, compare) */
+    let base = sourceSpec.doc;
+    if (opts.view) {
+      const v = nd.viewById(base, opts.view);
+      if (!v) throw new Error(`unknown view "${opts.view}" — this spec defines ${views.length ? views.map(x => `"${x.id}"`).join(", ") : "none"}`);
+      base = nd.applyView(base, v, sourceSpec);
+    }
+    let doc = tags.length ? nd.filterDoc(base, tags) : base;
     if (tags.length && !nd.flatNodes(doc).length) throw new Error(`nothing is tagged ${tags.join(", ")}`);
     let diff = null;
     if (opts.compare) {
@@ -78,6 +93,7 @@ async function render() {
       doc = diff.doc;
     }
     const spec = doc === sourceSpec.doc ? sourceSpec : nd.specFromDoc(doc);
+    const viewNote = opts.view ? ` · view ${opts.view}` : "";
     const pass1 = await elk.layout(nd.buildElk(spec));
     const ported = nd.assignPorts(nd.buildElk(spec), pass1);
     const svg = nd.renderSVG(spec, ported ? await elk.layout(ported) : pass1, {
@@ -90,7 +106,7 @@ async function render() {
     fs.writeFileSync(output, svg);
     if (opts.csv) fs.writeFileSync(opts.csv, nd.rulesToCsv(nd.connectionRules(spec).rules, diff && diff.status.connections) + "\n");
     const counts = diff ? ` · +${diff.counts.added} −${diff.counts.removed} ~${diff.counts.changed} vs ${diff.base}` : "";
-    console.log(`${output} — ${spec.nodeMap.size} nodes · ${spec.groupMap.size} groups · ${(spec.doc.connections || []).length} connections${counts}`);
+    console.log(`${output} — ${spec.nodeMap.size} nodes · ${spec.groupMap.size} groups · ${(spec.doc.connections || []).length} connections${viewNote}${counts}`);
   } catch (e) {
     console.error(e.message);
     if (!opts.watch) process.exit(1);

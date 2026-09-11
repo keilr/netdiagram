@@ -168,6 +168,15 @@ connections:
   - {from: awx, to: esx, label: &quot;tcp/443 https&quot;,  protocol: tcp, port: 443,  comment: &quot;community.vmware modules&quot;}
   - {from: awx, to: bak, label: &quot;tcp/22 ssh&quot;,     protocol: tcp, port: 22,   comment: &quot;snapshot + restore jobs&quot;}
   - {from: awx, to: sec, label: &quot;tcp/8200 vault&quot;, protocol: tcp, port: 8200, comment: &quot;openbao secrets lookup&quot;}
+
+# views: a big inventory is unreadable as one picture — slice it per target
+# group. Each focus is a connection endpoint, so depth: 1 pulls the control
+# node in with it.
+views:
+  - {id: windows, title: &quot;Ansible — windows (winrm)&quot;, focus: win, depth: 1}
+  - {id: network, title: &quot;Ansible — network devices&quot;, focus: net, depth: 1}
+  - {id: gpu, title: &quot;Ansible — gpu fleet&quot;, focus: gpu, depth: 1}
+  - {id: secrets, title: &quot;Ansible — openbao secrets&quot;, focus: sec, depth: 1}
 </metadata>
     <defs>
     <pattern id="gridS" width="12" height="12" patternUnits="userSpaceOnUse">

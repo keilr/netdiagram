@@ -837,6 +837,311 @@ test("render CLI: --date --tags --compare --csv --theme and --extract", () => {
   }
 });
 
+// ---------- views ----------
+const VIEWS = `
+diagram:
+  title: Whole thing
+nodes:
+  - {id: inet, type: internet}
+  - {id: fw, type: firewall}
+  - {id: web, type: server, tags: [prod]}
+  - {id: db, type: db}
+  - {id: far}
+groups:
+  - {id: dmz, class: zone, nodes: [web]}
+  - {id: lan, class: trust, nodes: [db]}
+connections:
+  - {from: inet, to: fw}
+  - {from: fw, to: web}
+  - {from: web, to: db}
+  - {from: db, to: far}
+views:
+  - {id: edge, title: Edge, focus: fw, depth: 1}
+  - {id: prod, tags: [prod]}
+  - {id: deep, focus: fw, depth: 2, direction: right}
+`;
+const viewDoc = (id) => {
+  const spec = parseSpec(VIEWS);
+  return nd.applyView(spec.doc, nd.viewById(spec.doc, id), spec);
+};
+const nodeIds = (d) => nd.flatNodes(d).map((n) => String(n.id)).sort();
+
+test("views: focus keeps the target, its contents and `depth` connection hops", () => {
+  assert.deepStrictEqual(nodeIds(viewDoc("edge")), ["fw", "inet", "web"]);
+  assert.deepStrictEqual(nodeIds(viewDoc("deep")), ["db", "fw", "inet", "web"]);
+  // a surviving node keeps the group that draws it, and nothing else
+  assert.deepStrictEqual((viewDoc("edge").groups || []).map((g) => g.id), ["dmz"]);
+  // connections survive only when both ends do
+  assert.strictEqual((viewDoc("edge").connections || []).length, 2);
+});
+
+test("views: tags narrow like the tag filter; options fold into diagram", () => {
+  assert.deepStrictEqual(nodeIds(viewDoc("prod")), ["web"]);
+  assert.strictEqual(viewDoc("edge").diagram.title, "Edge");
+  assert.strictEqual(viewDoc("deep").diagram.direction, "right");
+  assert.strictEqual(viewDoc("deep").diagram.title, "Whole thing", "options the view does not set are inherited");
+});
+
+test("views: a narrowed document never carries views onward", () => {
+  const spec = parseSpec(VIEWS);
+  for (const id of ["edge", "prod", "deep"]) {
+    const d = nd.applyView(spec.doc, nd.viewById(spec.doc, id), spec);
+    assert.strictEqual(d.views, undefined, `${id} strips views`);
+    // must still validate: another view's focus may have just been pruned away
+    nd.specFromDoc(d);
+  }
+  assert.strictEqual(nd.viewsOf(spec.doc).length, 3, "the source document is untouched");
+  assert.strictEqual(nd.flatNodes(spec.doc).length, 5);
+  assert.strictEqual(nd.filterDoc(spec.doc, ["prod"]).views, undefined, "the tag filter strips them too");
+});
+
+test("views: focusing a guest keeps the host that draws it", () => {
+  const spec = parseSpec(`
+nodes:
+  - {id: sw, type: switch}
+  - id: host
+    type: hypervisor
+    nodes:
+      - {id: g1, type: vm}
+      - {id: g2, type: vm}
+connections:
+  - {from: sw, to: g1, protocol: tcp, port: 22}
+views:
+  - {id: guest, focus: g1, depth: 1}
+`);
+  const d = nd.applyView(spec.doc, nd.viewById(spec.doc, "guest"), spec);
+  // must still validate: dropping the host would strand the connection's endpoint
+  const s = nd.specFromDoc(d);
+  assert.ok(s.nodeMap.has("host"), "the host comes along as the box that draws the guest");
+  assert.ok(s.nodeMap.has("g1"));
+  assert.ok(!s.nodeMap.has("g2"), "a sibling guest outside the focus is still dropped");
+  assert.strictEqual((d.connections || []).length, 1, "the connection survives intact");
+});
+
+test("validation: views need a known focus, unique ids and a numeric depth", () => {
+  expectError("nodes:\n  - {id: a}\nviews:\n  - {id: v, focus: ghost}\n", 'unknown focus "ghost"');
+  expectError("nodes:\n  - {id: a}\nviews:\n  - {id: v}\n  - {id: v}\n", 'duplicate view id "v"');
+  expectError("nodes:\n  - {id: a}\nviews:\n  - {id: v, depth: soon}\n", "depth must be a number");
+  expectError("nodes:\n  - {id: a}\nviews:\n  - {title: no id}\n", "views[0]: missing id");
+});
+
+test("views CLI: --list-views, --view, and an unknown view", () => {
+  const { execFileSync } = require("child_process");
+  const os = require("os");
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "netdiagram-views-"));
+  const script = path.join(root, "scripts/render.js");
+  const run = (...args) => {
+    try {
+      return { code: 0, out: execFileSync(process.execPath, [script, ...args], { encoding: "utf8", stdio: "pipe" }) };
+    } catch (e) {
+      return { code: e.status, out: String(e.stdout || "") + String(e.stderr || "") };
+    }
+  };
+  try {
+    const spec = path.join(dir, "net.yaml");
+    fs.writeFileSync(spec, VIEWS);
+    const list = run(spec, "--list-views");
+    assert.strictEqual(list.code, 0);
+    assert.ok(/edge\s+Edge/.test(list.out), list.out);
+
+    const out = path.join(dir, "edge.svg");
+    const r = run(spec, out, "--view", "edge", "--date", "2000-01-01");
+    assert.strictEqual(r.code, 0, r.out);
+    assert.ok(r.out.includes("view edge"), r.out);
+    const svg = fs.readFileSync(out, "utf8");
+    assert.ok(svg.includes(">Edge</title>"), "the view title reaches the title block");
+    assert.ok(svg.includes('data-id="fw"'), "the focus is drawn");
+    assert.ok(!svg.includes('data-id="far"'), "what is out of range is not");
+
+    const bad = run(spec, path.join(dir, "x.svg"), "--view", "nope");
+    assert.strictEqual(bad.code, 1);
+    assert.ok(bad.out.includes('unknown view "nope"'), bad.out);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// ---------- architecture lint + drift ----------
+const lintOf = (yaml) => nd.lintSpec(parseSpec(yaml));
+const rulesFired = (yaml) => lintOf(yaml).map((f) => f.rule).sort();
+
+test("lint: every bundled example is clean", () => {
+  for (const f of fs.readdirSync(path.join(root, "examples")).filter((x) => x.endsWith(".yaml"))) {
+    const found = lintOf(fs.readFileSync(path.join(root, "examples", f), "utf8"));
+    assert.deepStrictEqual(found, [], `${f}: ${found.map((x) => x.rule + " " + x.message).join("; ")}`);
+  }
+});
+
+test("lint: an address in no declared subnet is an error, dual-homing is not", () => {
+  const base = (ips) => `
+nodes:
+  - {id: a, ip: 10.0.10.5}
+  - {id: b, ips: [${ips}]}
+groups:
+  - {id: dmz, cidr: 10.0.10.0/24, nodes: [a]}
+  - {id: lan, cidr: 10.0.20.0/24, nodes: [b]}
+connections:
+  - {from: a, to: b}
+`;
+  // a second NIC on another DECLARED subnet is legitimate
+  assert.deepStrictEqual(rulesFired(base("10.0.20.5, 10.0.10.9")), []);
+  // an address in no declared subnet at all is a typo
+  const bad = lintOf(base("10.0.20.5, 10.0.99.9"));
+  assert.deepStrictEqual(bad.map((f) => f.rule), ["ip-outside-cidr"]);
+  assert.strictEqual(bad[0].severity, "error");
+  assert.ok(bad[0].message.includes("10.0.99.9"), bad[0].message);
+  assert.deepStrictEqual(bad[0].path, ["nodes", 1]);
+});
+
+test("lint: duplicate addresses and overlapping subnets are errors", () => {
+  assert.ok(rulesFired(`
+nodes:
+  - {id: a, ip: 10.0.10.5}
+  - {id: b, ip: 10.0.10.5}
+groups:
+  - {id: g, cidr: 10.0.10.0/24, nodes: [a, b]}
+connections:
+  - {from: a, to: b}
+`).includes("duplicate-ip"));
+  assert.ok(rulesFired(`
+nodes:
+  - {id: a, ip: 10.0.10.5}
+  - {id: b, ip: 10.0.10.9}
+groups:
+  - {id: g1, cidr: 10.0.0.0/16, nodes: [a]}
+  - {id: g2, cidr: 10.0.10.0/24, nodes: [b]}
+connections:
+  - {from: a, to: b}
+`).includes("cidr-overlap"), "unrelated groups that overlap are flagged");
+  // a subnet nested inside its supernet is the normal case, not an overlap
+  assert.deepStrictEqual(rulesFired(`
+nodes:
+  - {id: a, ip: 10.0.10.5}
+groups:
+  - id: outer
+    cidr: 10.0.0.0/16
+    groups:
+      - {id: inner, cidr: 10.0.10.0/24, nodes: [a]}
+connections:
+  - {from: a, to: outer}
+`), []);
+});
+
+test("lint: a pair both blocked and allowed contradicts itself", () => {
+  const f = lintOf(`
+nodes:
+  - {id: a}
+  - {id: b}
+connections:
+  - {from: a, to: b, protocol: tcp, port: 443}
+  - {from: b, to: a, direction: none}
+`);
+  assert.deepStrictEqual(f.map((x) => x.rule), ["blocked-contradiction"]);
+  assert.strictEqual(f[0].severity, "error");
+});
+
+test("lint: silent degradation is warned about, not hidden", () => {
+  const f = lintOf(`
+nodes:
+  - {id: a, type: sw1tch}
+  - {id: b, type: switch}
+groups:
+  - {id: g, class: zoen, nodes: [a, b]}
+connections:
+  - {from: a, to: b}
+`);
+  assert.deepStrictEqual(f.map((x) => x.rule).sort(), ["unknown-class", "unknown-type"]);
+  assert.ok(f.every((x) => x.severity === "warning"));
+});
+
+test("lint: an unconnected node is warned about; a guest and a grouped node are not", () => {
+  const f = lintOf(`
+nodes:
+  - {id: a}
+  - {id: lonely}
+  - id: host
+    nodes:
+      - {id: guest}
+  - {id: member}
+groups:
+  - {id: g, nodes: [member]}
+connections:
+  - {from: a, to: g}
+  - {from: a, to: host}
+`);
+  assert.deepStrictEqual(f.map((x) => x.rule), ["isolated"]);
+  assert.ok(f[0].message.includes("lonely"), f[0].message);
+});
+
+test("drift: reports what the inventory has, the diagram has, and readdressing", () => {
+  const live = {
+    nodes: [
+      { id: "web-01", label: "web-01", ip: "10.0.10.11" },
+      { id: "web-02", label: "web-02", ip: "10.0.10.12" },
+    ],
+  };
+  const authored = {
+    nodes: [
+      { id: "w1", label: "web-01", ip: "10.0.10.99" }, // matched by label, readdressed
+      { id: "old", label: "decommissioned", ip: "10.0.10.50" },
+    ],
+  };
+  const d = nd.driftReport(live, authored);
+  const by = (r) => d.filter((x) => x.rule === r).map((x) => x.id);
+  assert.deepStrictEqual(by("missing"), ["web-02"], "in the inventory, not in the diagram");
+  assert.deepStrictEqual(by("extra"), ["old"], "in the diagram, not in the inventory");
+  assert.deepStrictEqual(by("address"), ["w1"], "matched by label but readdressed");
+  assert.deepStrictEqual(nd.driftReport(live, live), [], "a document does not drift from itself");
+});
+
+test("check CLI: exit codes, --strict, --json and --against", () => {
+  const { execFileSync } = require("child_process");
+  const os = require("os");
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "netdiagram-check-"));
+  const script = path.join(root, "scripts/check.js");
+  const run = (...args) => {
+    try {
+      return { code: 0, out: execFileSync(process.execPath, [script, ...args], { encoding: "utf8", stdio: "pipe" }) };
+    } catch (e) {
+      return { code: e.status, out: String(e.stdout || "") + String(e.stderr || "") };
+    }
+  };
+  try {
+    const clean = path.join(root, "examples/hq-edge-core.yaml");
+    assert.strictEqual(run(clean).code, 0, "a clean spec exits 0");
+    assert.ok(run(clean).out.includes("clean"));
+
+    const warn = path.join(dir, "warn.yaml");
+    fs.writeFileSync(warn, "nodes:\n  - {id: a, type: nonsense}\n  - {id: b}\nconnections:\n  - {from: a, to: b}\n");
+    assert.strictEqual(run(warn).code, 0, "warnings alone do not fail");
+    assert.strictEqual(run(warn, "--strict").code, 1, "--strict makes warnings fail");
+
+    const bad = path.join(dir, "bad.yaml");
+    fs.writeFileSync(bad, "nodes:\n  - {id: a, ip: 10.9.9.9}\n  - {id: b}\ngroups:\n  - {id: g, cidr: 10.0.0.0/24, nodes: [a]}\nconnections:\n  - {from: a, to: b}\n");
+    const r = run(bad);
+    assert.strictEqual(r.code, 1, "an error exits 1");
+    assert.ok(r.out.includes("ip-outside-cidr"), r.out);
+    const parsed = JSON.parse(run(bad, "--json").out);
+    assert.strictEqual(parsed.ok, false);
+    assert.strictEqual(parsed.findings[0].rule, "ip-outside-cidr");
+
+    // drift: an Ansible inventory that has a host the diagram doesn't
+    const inv = path.join(dir, "hosts.ini");
+    fs.writeFileSync(inv, "[web]\nweb-01 ansible_host=10.0.10.11\nweb-99 ansible_host=10.0.10.99\n");
+    const spec = path.join(dir, "net.yaml");
+    fs.writeFileSync(spec, "nodes:\n  - {id: web-01, label: web-01, ip: 10.0.10.11}\n  - {id: b}\nconnections:\n  - {from: web-01, to: b}\n");
+    const dr = run(spec, "--against", inv);
+    assert.strictEqual(dr.code, 1, "drift fails the check");
+    assert.ok(dr.out.includes("web-99"), dr.out);
+    assert.strictEqual(run(spec, "--against", inv, "--json").code, 1);
+
+    assert.strictEqual(run(clean, "--nope").code, 2, "bad usage exits 2");
+    assert.strictEqual(run(path.join(dir, "missing.yaml")).code, 2, "unreadable input exits 2");
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 // ---------- node containment ----------
 const CONTAIN = `
 nodes:
@@ -1048,6 +1353,33 @@ test("app: tag chips narrow the diagram", async () => {
   assert.deepStrictEqual(ids, ["fw1", "fw2"]);
   assert.ok(doc.querySelector("#canvas-pane svg").outerHTML.includes(">FILTER</text>"), "title block notes the filter");
   assert.strictEqual(doc.querySelector('.tag-chip[data-tag="ha"]').getAttribute("aria-pressed"), "true");
+});
+
+test("app: the View picker appears only with views, and narrows the diagram", async () => {
+  const plain = await bootPage({ draft: "nodes:\n  - {id: a}\n" });
+  assert.ok(plain.doc.querySelector("#view-picker").hidden, "hidden for a document without views");
+
+  const { win, doc, statusEl } = await bootPage({ draft: VIEWS });
+  assert.ok(!doc.querySelector("#view-picker").hidden, "shown for a document with views");
+  const sel = doc.querySelector("#sel-view");
+  assert.deepStrictEqual([...sel.options].map((o) => o.value), ["", "edge", "prod", "deep"],
+    "the whole diagram plus every declared view");
+  assert.deepStrictEqual([...sel.options].map((o) => o.textContent),
+    ["Whole diagram", "Edge", "prod", "deep"], "titles label the views, ids stand in without one");
+
+  sel.value = "edge";
+  sel.dispatchEvent(new win.Event("change", { bubbles: true }));
+  assert.ok(await waitFor(() => statusEl.textContent.includes('view "edge"')),
+    "status reports the view: " + statusEl.textContent);
+  const ids = [...doc.querySelectorAll("#canvas-pane .nd-node")].map((n) => n.dataset.id).sort();
+  assert.deepStrictEqual(ids, ["fw", "inet", "web"], "only the focus and one hop are drawn");
+  assert.ok(doc.querySelector("#canvas-pane svg").outerHTML.includes(">VIEW</text>"),
+    "the title block records which view is drawn");
+
+  sel.value = "";
+  sel.dispatchEvent(new win.Event("change", { bubbles: true }));
+  assert.ok(await waitFor(() => doc.querySelectorAll("#canvas-pane .nd-node").length === 5),
+    "switching back to the whole diagram restores every node");
 });
 
 test("app: a #src= share link opens on load and clears the fragment", async () => {

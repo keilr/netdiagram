@@ -87,3 +87,9 @@ connections:
   - {from: web,       to: app,       label: "tcp/8080 api",    protocol: tcp, port: 8080}
   - {from: app,       to: db1,       label: "tcp/5432 pgsql",  protocol: tcp, port: 5432}
   - {from: db1,       to: db2,       label: "tcp/5432 repl",   protocol: tcp, port: 5432, direction: both, comment: "streaming replication"}
+
+# views: the auth path is the reviewable story here; the tiers are the rest
+views:
+  - {id: auth, title: "3-tier — auth path", focus: authproxy, depth: 1}
+  - {id: tiers, title: "3-tier — tier to tier", focus: app, depth: 1}
+  - {id: data, title: "3-tier — data tier", focus: db1, depth: 1}

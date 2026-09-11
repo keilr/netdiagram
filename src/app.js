@@ -204,6 +204,30 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
 /* ---------------- tag filter ---------------- */
 /* one toggle chip per tag in the document; selected tags narrow both the
  * diagram and the Connections table (filterDoc in the core) */
+/* ---------------- view picker ---------------- */
+/* Named views (views: in the document) each narrow the diagram. The picker
+ * only appears for documents that define any; "" means the whole diagram. */
+const viewPicker = $('#view-picker'), viewSel = $('#sel-view');
+let currentView = '';
+let viewKey = null;            // rebuild the options only when the list changes
+function updateViewPicker(doc){
+  const views = viewsOf(doc);
+  const key = JSON.stringify(views.map(v => [String(v.id), String(v.title ?? '')]));
+  if (key === viewKey) return;
+  viewKey = key;
+  viewPicker.hidden = !views.length;
+  if (!views.length){ currentView = ''; viewSel.innerHTML = ''; return; }
+  if (!views.some(v => String(v.id) === currentView)) currentView = '';
+  viewSel.innerHTML = '<option value="">Whole diagram</option>' + views.map(v =>
+    `<option value="${esc(String(v.id))}">${esc(String(v.title ?? v.id))}</option>`).join('');
+  viewSel.value = currentView;
+}
+viewSel.addEventListener('change', () => {
+  currentView = viewSel.value;
+  fitNextRender = true;
+  renderNow();
+});
+
 const tagBar = $('#tag-filter'), tagChips = $('#tag-chips');
 let tagKey = null;
 function updateTagBar(doc){
@@ -232,8 +256,12 @@ async function render(text){
   try{
     const source = jsyaml.load(text);
     const sourceSpec = specFromDoc(source);   // validate what the author wrote, before any view narrows it
+    updateViewPicker(source);
     updateTagBar(source);
-    let doc = tagFilter.size ? filterDoc(source, [...tagFilter]) : source;
+    /* a view narrows the document before every other lens (tags, compare) */
+    const view = currentView ? viewById(source, currentView) : null;
+    let doc = view ? applyView(source, view, sourceSpec) : source;
+    if (tagFilter.size) doc = filterDoc(doc, [...tagFilter]);
     if (tagFilter.size && !flatNodes(doc).length){
       const e = new Error(`Nothing is tagged ${[...tagFilter].join(' / ')} — click a highlighted tag to clear the filter.`);
       e.isSpec = true; throw e;
@@ -249,7 +277,10 @@ async function render(text){
     const ported = assignPorts(buildElk(spec), pass1);
     const layout = ported ? await elk.layout(ported) : pass1;
     if (seq !== renderSeq) return;
-    const rows = tagFilter.size ? [['filter', 'tags: ' + [...tagFilter].join(', ')]] : [];
+    const rows = [
+      ...(view ? [['view', String(view.title ?? view.id)]] : []),
+      ...(tagFilter.size ? [['filter', 'tags: ' + [...tagFilter].join(', ')]] : [])
+    ];
     const svg = renderSVG(spec, layout, { source: text, rows, diff: diff && { ...diff, base: compare.name } });
     activeLabel = null;
     lastSpec = spec; lastSvg = svg; lastView = { source, doc };
@@ -261,6 +292,7 @@ async function render(text){
     applyCursorHighlight();
     const n = sourceSpec.nodeMap.size, g = sourceSpec.groupMap.size, c = (source.connections||[]).length;
     const parts = [`OK — ${n} nodes · ${g} groups · ${c} connections`];
+    if (view) parts.push(`view "${view.id}": ${spec.nodeMap.size} nodes`);
     if (tagFilter.size) parts.push(`showing ${spec.nodeMap.size} tagged ${[...tagFilter].join(' / ')}`);
     if (diff) parts.push(`vs ${compare.name}: +${diff.counts.added} −${diff.counts.removed} ~${diff.counts.changed}`);
     if (statusNote) parts.push(statusNote);

@@ -77,8 +77,17 @@ connections:
   - {from: ctl,     to: juju,   label: &quot;tcp/17070 juju&quot;,    protocol: tcp, port: 17070, comment: &quot;machine agents&quot;}
   - {from: compute, to: juju,   label: &quot;tcp/17070 juju&quot;,    protocol: tcp, port: 17070, comment: &quot;machine agents&quot;}
   # placement associations
+  # both are aggregate-to-aggregate associations: microk8s (a cluster) on the
+  # control machines, and the tenant network on the hypervisors. Node
+  # containment cannot express either — and the tenant VMs carry their own
+  # subnet, which a group has to declare.
   - {from: mk8s,   to: ctl,     label: &quot;runs on&quot;, direction: none}
   - {from: tenant, to: compute, label: &quot;runs on&quot;, direction: none}
+
+views:
+  - {id: admin, title: &quot;Sunbeam — admin access&quot;, focus: admin, depth: 1}
+  - {id: compute, title: &quot;Sunbeam — compute plane&quot;, focus: compute, depth: 1}
+  - {id: juju, title: &quot;Sunbeam — juju control&quot;, focus: juju, depth: 1}
 </metadata>
     <defs>
     <pattern id="gridS" width="12" height="12" patternUnits="userSpaceOnUse">

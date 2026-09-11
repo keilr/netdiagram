@@ -122,6 +122,13 @@ connections:
   - {from: dmz,   to: siem, label: &quot;udp/514 syslog&quot;,  protocol: udp,  port: 514}
   - {from: lan,   to: siem, label: &quot;udp/514 syslog&quot;,  protocol: udp,  port: 514}
   - {from: web1,  to: db1,  label: &quot;blocked&quot;,         direction: none, comment: &quot;web tier must not reach the DB directly&quot;}
+
+# views: one document, several pictures of it. Pick one with
+# `npm run render -- file.yaml --view edge`, or from the View picker in the app.
+views:
+  - {id: edge,  title: &quot;HQ — edge&quot;,            focus: fw1, depth: 1}
+  - {id: pci,   title: &quot;HQ — PCI scope&quot;,       tags: [pci]}
+  - {id: mgmt,  title: &quot;HQ — management access&quot;, focus: oob, depth: 1, direction: right}
 </metadata>
     <defs>
     <pattern id="gridS" width="12" height="12" patternUnits="userSpaceOnUse">

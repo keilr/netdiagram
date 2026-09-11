@@ -82,3 +82,10 @@ connections:
   # host metrics also come from node-exporter on the kafka and search nodes
   - {from: prom, to: kafka,  label: "tcp/9100 node",         protocol: tcp, port: 9100, comment: "node-exporter"}
   - {from: prom, to: search, label: "tcp/9100 node",         protocol: tcp, port: 9100, comment: "node-exporter"}
+
+# views: the scrape fan-out is the whole point, but it is not the only picture
+views:
+  - {id: scrape, title: "Pull — scrape targets", focus: prom, depth: 1}
+  - {id: storage, title: "Pull — long-term storage", focus: mimir, depth: 1}
+  - {id: dashboards, title: "Pull — dashboards", focus: graf, depth: 1}
+  - {id: gpu, title: "Pull — vllm pool", focus: gpus, depth: 1}

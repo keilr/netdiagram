@@ -29,3 +29,10 @@ groups:
 connections:                 # from/to are node or group ids
   - {from: user, to: web, label: "tcp/443 https", protocol: tcp, port: 443}
   - {from: web,  to: db,  label: "tcp/5432 sql",  protocol: tcp, port: 5432}
+
+# A node can also hold its own nodes: — child nodes drawn INSIDE its box
+# (a hypervisor's VMs, a host's containers). See examples/virt-hosts.yaml.
+#
+# views:                     # optional: named pictures of this one document
+#   - {id: app, title: App tier only, focus: app, depth: 1}
+#   - {id: edge, title: Edge, focus: user, depth: 1}

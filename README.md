@@ -205,6 +205,48 @@ destination (each with its address beneath it), protocol, port, label and any
 comment — skipping pairs that sit in the same zone; a `both` connection appears
 as two rows, one per direction.
 
+### `views[]`
+
+One document, several pictures of it. A **view** narrows the diagram and may
+override render options, so an overview, a per-zone detail and one
+application's flow all stay derived from the same model instead of drifting
+apart in copied files:
+
+```yaml
+views:
+  - {id: edge, title: "HQ — edge",      focus: fw1, depth: 1}
+  - {id: pci,  title: "HQ — PCI scope", tags: [pci]}
+  - {id: mgmt, title: "Management",     focus: oob, depth: 1, direction: right}
+```
+
+| key | notes |
+|---|---|
+| `id` | required; selects the view (`--view edge`, or the app's **View** picker) |
+| `title` | title-block text for this view, overriding `diagram.title` |
+| `tags` | show only what carries one of these tags — the same narrowing as the tag filter |
+| `focus` | a node or group id: keep it and everything inside it, plus whatever is within `depth` connection hops |
+| `depth` | how many hops from `focus` to include (default 1; `0` = focus and its contents only) |
+| `direction`, `theme` | per-view overrides of the `diagram` options |
+
+Narrowing runs `tags` first, then `focus`. Hops are counted over the
+connections as written, so a connection that ends at a *group* is one hop like
+any other — which is what makes `focus: <a group>` with `depth: 1` a useful
+"this zone and what touches it" view.
+
+Two things follow from that. A `focus` that is not itself a connection endpoint
+has nothing to expand, so `depth` does nothing — point it at a node or group
+that connections actually reach. And a kept guest always brings the host that
+draws it: the host survives as a shell holding only the guests that were kept,
+so `focus: <a VM>` shows that VM inside its hypervisor.
+
+```bash
+npm run render -- hq.yaml --list-views      # what this spec defines
+npm run render -- hq.yaml out.svg --view edge
+```
+
+In the app a **View** picker appears in the diagram tab bar whenever the
+document defines any; the title block records which view is drawn.
+
 ## Use your own editor (CLI + VS Code)
 
 You don't have to write YAML in the browser app — a CLI renders any spec file
@@ -215,6 +257,8 @@ npm run render -- mynet.yaml                       # -> mynet.svg
 npm run render -- mynet.yaml out.svg --watch       # re-render on every save
 npm run render -- mynet.yaml --theme blueprint     # cyanotype colors
 npm run render -- mynet.yaml --tags prod,pci       # only what carries these tags
+npm run render -- mynet.yaml --view edge           # one named view (see views: above)
+npm run render -- mynet.yaml --list-views          # what views this spec defines
 npm run render -- mynet.yaml pr.svg --compare main.yaml --csv rules.csv
                                                    # change review: marked diagram + rule CSV
 npm run render -- old.svg --extract > old.yaml     # the YAML back out of an exported SVG
@@ -260,6 +304,43 @@ npm run import -- devices.json -o net.yaml          # NetBox devices / virtual-m
 The format is detected (`--from ansible|terraform|netbox` forces one). The page's
 **Import** button and drag & drop use the same importers.
 
+## Check it in CI
+
+`npm run check` reads the spec as a **model**, not as text, and exits non-zero
+when something is wrong — so a diagram can gate a pull request:
+
+```bash
+npm run check -- net.yaml                       # architecture lint
+npm run check -- net.yaml --strict              # warnings fail too
+npm run check -- net.yaml --json                # machine-readable findings
+terraform show -json | npm run check -- net.yaml --against - --from terraform
+```
+
+Validation asks whether the document is well *formed*; this asks whether the
+network it describes is *coherent*:
+
+| rule | severity | what it catches |
+|---|---|---|
+| `ip-outside-cidr` | error | an address that falls in **no** declared subnet. A second NIC on another declared subnet is legitimate dual-homing and is not flagged |
+| `duplicate-ip` | error | the same address on two nodes |
+| `cidr-overlap` | error | two unrelated groups claiming overlapping ranges (a subnet nested in its supernet is fine) |
+| `blocked-contradiction` | error | a pair that is both `direction: none` and allowed elsewhere |
+| `self-connection` | error | a connection from a node to itself |
+| `unknown-type` / `unknown-icon` | warning | a token that draws no glyph — a typo the renderer would swallow |
+| `unknown-class` | warning | a group class that silently falls back to default styling |
+| `isolated` | warning | a node no connection reaches, directly or through its group |
+
+All bundled examples are clean, and the test suite asserts they stay that way.
+
+**Drift.** `--against` imports a live inventory (Ansible, Terraform, NetBox) and
+compares it with the spec, so CI can fail when the picture stops matching
+reality: a host in the inventory that the diagram never got (`missing`), a node
+the inventory no longer has (`extra`), or one whose address changed
+(`address`). Ids differ between the two — importers slugify hostnames — so
+nodes are matched on id, then on any shared IP, then on label. Group membership
+is deliberately not compared: group identity isn't stable across importers, so
+"moved" would be guesswork.
+
 ## Development
 
 Only needed to change netdiagram itself — the app ships as the prebuilt HTML.
@@ -279,8 +360,9 @@ src/editor.js        CodeMirror setup: schema-driven completion, lint, hover
 src/importers.js     Ansible / Terraform / NetBox -> netdiagram YAML (browser + node)
 src/template.html    page shell with injection placeholders
 scripts/build.js     vendors js-yaml + elkjs, assembles dist/netdiagram.html
-scripts/render.js    CLI: YAML -> SVG (--watch --theme --tags --compare --csv --extract)
+scripts/render.js    CLI: YAML -> SVG (--watch --theme --tags --view --compare --csv --extract)
 scripts/import.js    CLI: inventory -> YAML scaffold
+scripts/check.js     CLI: architecture lint + drift vs a live inventory (CI gate)
 examples/            bundled examples (injected into the app's picker at build)
 docs/example.yaml    source of the screenshot above
 test/                npm test — pipeline, features, validation, importers, CLI, jsdom

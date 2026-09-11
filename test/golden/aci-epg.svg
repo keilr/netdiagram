@@ -98,6 +98,12 @@ connections:
   - {from: border,  to: epg-web, label: &quot;tcp/443 web-https&quot;,  protocol: tcp, port: 443}
   - {from: epg-web, to: epg-app, label: &quot;tcp/8080 app-api&quot;,   protocol: tcp, port: 8080}
   - {from: epg-app, to: epg-db,  label: &quot;tcp/5432 db-sql&quot;,    protocol: tcp, port: 5432}
+
+# views: one tenant, several pictures of it — `--view db`, or the View picker
+views:
+  - {id: north-south, title: &quot;ACI — north-south (L3Out)&quot;, focus: border, depth: 1}
+  - {id: web, title: &quot;ACI — EPG web contracts&quot;, focus: epg-web, depth: 1}
+  - {id: db, title: &quot;ACI — what reaches EPG db&quot;, focus: epg-db, depth: 1}
 </metadata>
     <defs>
     <pattern id="gridS" width="12" height="12" patternUnits="userSpaceOnUse">
