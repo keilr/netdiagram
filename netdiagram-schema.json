@@ -138,6 +138,11 @@
         "rank": {
           "type": "integer",
           "description": "Placement hint among siblings: lower rank lays out earlier in the flow (higher up in a down layout, further left in a right layout). Unranked siblings sit at rank 0 — use negative ranks to place before them, positive to place after. Within the same rank, YAML order controls the side-by-side order."
+        },
+        "nodes": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/node" },
+          "description": "Child nodes drawn INSIDE this node's box — a hypervisor's VMs, a host's containers, a chassis' line cards. Children are full node objects (as groups nest groups), so the top-level nodes: list holds whatever is not inside something else. Ids stay unique across all nodes and groups at every depth, connections may address a child directly, and a node that sits inside another cannot also be listed in a group's nodes:"
         }
       },
       "additionalProperties": {

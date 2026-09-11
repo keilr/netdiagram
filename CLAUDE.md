@@ -125,6 +125,12 @@ nodes:
                            # and border come from type/icon
     rank: int              # layout hint: lower = earlier in the flow; unranked
                            # siblings sit at rank 0 (ELK partitioning)
+    nodes: [node, ...]     # CHILD NODES drawn inside this node's box (a
+                           # hypervisor's VMs, a host's containers). Full node
+                           # objects, nesting to any depth, like groups.groups.
+                           # The node's own chrome becomes the box's top
+                           # padding; ids stay unique across every level; a
+                           # hosted node may NOT also be a group member
     <any-scalar-key>: val  # unknown scalar keys render as "key: value" lines
 groups:
   - id, label, class: zone|vlan|subnet|cloud|onprem|trust (+ Cisco ACI:

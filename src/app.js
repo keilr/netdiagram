@@ -234,7 +234,7 @@ async function render(text){
     const sourceSpec = specFromDoc(source);   // validate what the author wrote, before any view narrows it
     updateTagBar(source);
     let doc = tagFilter.size ? filterDoc(source, [...tagFilter]) : source;
-    if (tagFilter.size && !doc.nodes.length){
+    if (tagFilter.size && !flatNodes(doc).length){
       const e = new Error(`Nothing is tagged ${[...tagFilter].join(' / ')} — click a highlighted tag to clear the filter.`);
       e.isSpec = true; throw e;
     }

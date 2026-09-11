@@ -177,7 +177,24 @@ function ipListOf(n){
   return v == null ? [] : (Array.isArray(v) ? v : [v]).map(String);
 }
 function ipsOf(n){ return ipListOf(n).join(' · '); }
-const NODE_KNOWN_KEYS = new Set(['id','label','type','icon','ip','ips','addr','os','tags','rank']);
+/* ---------------- node containment ----------------
+ * A node may carry `nodes:` — child nodes drawn INSIDE its box (a hypervisor's
+ * VMs, a host's containers, a chassis' line cards). Children are full node
+ * objects, mirroring the way groups nest groups; the top-level nodes: array
+ * therefore holds what is not inside something else. Groups stay a separate
+ * concept: a group is a boundary drawn around nodes, a host IS a node. */
+const childrenOf = n => (Array.isArray(n?.nodes) ? n.nodes.filter(Boolean) : []);
+/* every node at every depth, parents before children, in document order;
+ * fn(node, host) — host is null at the top level */
+function walkNodes(list, fn, host = null){
+  (list || []).forEach(n => {
+    if (!n || typeof n !== 'object') return;
+    fn(n, host);
+    walkNodes(n.nodes, fn, n);
+  });
+}
+function flatNodes(doc){ const out = []; walkNodes(doc?.nodes, n => out.push(n)); return out; }
+const NODE_KNOWN_KEYS = new Set(['id','label','type','icon','ip','ips','addr','os','tags','rank','nodes']);
 /* option keys control rendering; every other scalar key is a displayed attribute */
 const DIAGRAM_OPTION_KEYS = new Set(['title','direction','theme','date']);
 const GROUP_KNOWN_KEYS = new Set(['id','label','class','cidr','nodes','groups','style','tags','rank']);
@@ -251,15 +268,24 @@ function specFromDoc(doc){
   const nodes = Array.isArray(doc.nodes) ? doc.nodes : [];
   if (!nodes.length) err(['nodes'], 'No nodes defined.');
   const nodeMap = new Map();
-  nodes.forEach((n,i)=>{
-    if (!n || !n.id) { err(['nodes', i], `nodes[${i}]: missing id`); return; }
-    if (nodeMap.has(String(n.id))) err(['nodes', i, 'id'], `duplicate node id "${n.id}"`);
-    if (badTags(n.tags))
-      err(['nodes', i, 'tags'], `nodes[${i}] "${n.id}": tags must be a scalar or a list of scalars`);
-    if (n.rank != null && !Number.isFinite(Number(n.rank)))
-      err(['nodes', i, 'rank'], `nodes[${i}] "${n.id}": rank must be a number`);
-    nodeMap.set(String(n.id), n);
-  });
+  const hosted = new Map();   // nodeId -> id of the node it sits inside
+  /* nodes nest: walk every depth, registering ids in one flat namespace.
+   * `prefix` reproduces the document position in messages (nodes[2].nodes[0]) */
+  (function walkNodeList(list, path, prefix, host){
+    (list||[]).forEach((n,i)=>{
+      const np = [...path, i], at = `${prefix}[${i}]`;
+      if (!n || !n.id) { err(np, `${at}: missing id`); return; }
+      const id = String(n.id);
+      if (nodeMap.has(id)) err([...np, 'id'], `duplicate node id "${n.id}"`);
+      if (badTags(n.tags))
+        err([...np, 'tags'], `${at} "${n.id}": tags must be a scalar or a list of scalars`);
+      if (n.rank != null && !Number.isFinite(Number(n.rank)))
+        err([...np, 'rank'], `${at} "${n.id}": rank must be a number`);
+      nodeMap.set(id, n);
+      if (host) hosted.set(id, String(host.id));
+      walkNodeList(n.nodes, [...np, 'nodes'], `${at}.nodes`, n);
+    });
+  })(nodes, ['nodes'], 'nodes', null);
 
   const groupMap = new Map();
   const claimed = new Map(); // nodeId -> groupId
@@ -277,6 +303,7 @@ function specFromDoc(doc){
       (g.nodes||[]).forEach((nid, k)=>{
         nid = String(nid);
         if (!nodeMap.has(nid)) err([...gp, 'nodes', k], `group "${gid}": unknown node "${nid}"`);
+        else if (hosted.has(nid)) err([...gp, 'nodes', k], `node "${nid}" is inside "${hosted.get(nid)}" and cannot also be a member of "${gid}"`);
         else if (claimed.has(nid)) err([...gp, 'nodes', k], `node "${nid}" is in both "${claimed.get(nid)}" and "${gid}"`);
         else claimed.set(nid, gid);
       });
@@ -298,7 +325,7 @@ function specFromDoc(doc){
     e.isSpec = true; e.errors = errors;
     throw e;
   }
-  return { doc, nodeMap, groupMap, claimed };
+  return { doc, nodeMap, groupMap, claimed, hosted };
 }
 
 /* ---------------- source map (YAML offsets for document paths) ----------------
@@ -363,9 +390,17 @@ function sourceMap(text){
     }
     return null;
   }
+  function findNode(list, id){        // nodes nest, so search every depth
+    for (const n of (list && list.kind === 'seq') ? list.items : []){
+      if (idOf(n) === id) return n;
+      const sub = findNode(treeGet(n, 'nodes'), id);
+      if (sub) return sub;
+    }
+    return null;
+  }
   function itemRange(kind, key){
     let n = null;
-    if (kind === 'node') n = (treeGet(root, 'nodes')?.items || []).find(it => idOf(it) === key);
+    if (kind === 'node') n = findNode(treeGet(root, 'nodes'), key);
     else if (kind === 'group') n = findGroup(treeGet(root, 'groups'), key);
     else if (kind === 'connection') n = (treeGet(root, 'connections')?.items || [])[key];
     return n ? { from:n.from, to:n.to } : null;
@@ -373,8 +408,18 @@ function sourceMap(text){
   /* what the cursor is on: a node / group / connection item, or a member id
    * inside a group's nodes: list (that node) */
   function itemAt(pos){
-    const nodes = treeGet(root, 'nodes');
-    for (const it of nodes?.items || []) if (inside(it, pos) && idOf(it)) return { kind:'node', id:idOf(it) };
+    /* innermost wins: the cursor on a child picks the child, not its host */
+    function inNodes(list){
+      for (const it of (list && list.kind === 'seq') ? list.items : []){
+        if (!inside(it, pos)) continue;
+        const deeper = inNodes(treeGet(it, 'nodes'));
+        if (deeper) return deeper;
+        return idOf(it) ? { kind:'node', id:idOf(it) } : null;
+      }
+      return null;
+    }
+    const onNode = inNodes(treeGet(root, 'nodes'));
+    if (onNode) return onNode;
     const conns = treeGet(root, 'connections');
     const ci = (conns?.items || []).findIndex(it => inside(it, pos));
     if (ci >= 0) return { kind:'connection', index:ci };
@@ -398,7 +443,7 @@ function sourceMap(text){
 /* every distinct tag on nodes and groups, sorted */
 function allTags(doc){
   const out = new Set();
-  (doc?.nodes || []).forEach(n => n && tagsOf(n).forEach(t => out.add(t)));
+  walkNodes(doc?.nodes, n => tagsOf(n).forEach(t => out.add(t)));
   (function walk(list){
     (list || []).forEach(g => { if (!g) return; tagsOf(g).forEach(t => out.add(t)); walk(g.groups); });
   })(doc?.groups);
@@ -414,15 +459,28 @@ function filterDoc(doc, tags){
   if (!want.size || !doc) return doc;
   const hit = o => tagsOf(o).some(t => want.has(t.toLowerCase()));
   const byId = new Map((doc.nodes || []).filter(n => n && n.id != null).map(n => [String(n.id), n]));
-  const keep = new Set(), grouped = new Set();
+  const keep = new Set(), grouped = new Set(), pruned = new Map();
+  /* A node survives when it is tagged, inherits a tag from its host or group,
+   * or still has a surviving child. Leaf nodes are kept BY REFERENCE; only a
+   * host whose child list actually changed is rebuilt. */
+  function pruneNode(n, on){
+    if (!n || n.id == null) return null;
+    const inTag = on || hit(n);
+    const kids = childrenOf(n);
+    const kept = kids.map(k => pruneNode(k, inTag)).filter(Boolean);
+    if (!inTag && !kept.length) return null;
+    keep.add(String(n.id));
+    return kids.length ? { ...n, nodes: kept } : n;
+  }
   function walk(list, on){
     return (list || []).flatMap(g => {
       if (!g || g.id == null) return [];
       const inTag = on || hit(g);
       (g.nodes || []).forEach(id => grouped.add(String(id)));
       const nodes = (g.nodes || []).filter(id => {
-        const n = byId.get(String(id));
-        return n && (inTag || hit(n)) && keep.add(String(id));
+        const p = pruneNode(byId.get(String(id)), inTag);
+        if (p) pruned.set(String(id), p);
+        return !!p;
       });
       const groups = walk(g.groups, inTag);
       if (!inTag && !nodes.length && !groups.length) return [];
@@ -431,10 +489,14 @@ function filterDoc(doc, tags){
     });
   }
   const groups = walk(doc.groups, false);
-  for (const [id, n] of byId) if (!grouped.has(id) && hit(n)) keep.add(id);
+  for (const [id, n] of byId){
+    if (grouped.has(id)) continue;
+    const p = pruneNode(n, false);
+    if (p) pruned.set(id, p);
+  }
   return {
     ...doc,
-    nodes: (doc.nodes || []).filter(n => n && keep.has(String(n.id))),
+    nodes: (doc.nodes || []).filter(n => n && pruned.has(String(n.id))).map(n => pruned.get(String(n.id))),
     groups,
     connections: (doc.connections || []).filter(l => l && keep.has(String(l.from)) && keep.has(String(l.to)))
   };
@@ -469,8 +531,12 @@ function diffDocs(base, cur){
     for (const [gid, { g }] of groups) (g.nodes || []).forEach(id => { if (!out.has(String(id))) out.set(String(id), gid); });
     return out;
   };
-  const byId = doc => new Map((doc.nodes || []).filter(n => n && n.id != null).map(n => [String(n.id), n]));
+  /* nodes nest, so both maps are flat over every depth (parents first) and a
+   * second map records which node each one sits inside */
+  const byId = doc => { const m = new Map(); walkNodes(doc.nodes, n => { if (n.id != null) m.set(String(n.id), n); }); return m; };
+  const hostOf = doc => { const m = new Map(); walkNodes(doc.nodes, (n, host) => { if (n.id != null && host) m.set(String(n.id), String(host.id)); }); return m; };
   const bNodes = byId(base), cNodes = byId(cur);
+  const bHost = hostOf(base), cHost = hostOf(cur);
   const bGroups = flatGroups(base), cGroups = flatGroups(cur);
   const bMember = memberOf(bGroups), cMember = memberOf(cGroups);
   const status = { nodes:new Map(), groups:new Map(), connections:new Map() };
@@ -480,8 +546,12 @@ function diffDocs(base, cur){
   /* merged doc: deep copy of the current groups so re-parenting can't touch cur */
   const copyGroups = list => (list || []).map(g => (g && typeof g === 'object')
     ? { ...g, nodes:[...(g.nodes || [])], groups:copyGroups(g.groups) } : g);
-  const doc = { ...cur, nodes:[...(cur.nodes || [])], groups:copyGroups(cur.groups), connections:[...(cur.connections || [])] };
+  const copyNodes = list => (list || []).map(n => (n && typeof n === 'object' && childrenOf(n).length)
+    ? { ...n, nodes:copyNodes(n.nodes) } : n);
+  const doc = { ...cur, nodes:copyNodes(cur.nodes), groups:copyGroups(cur.groups), connections:[...(cur.connections || [])] };
   const merged = flatGroups(doc);
+  const mergedNodes = new Map();
+  walkNodes(doc.nodes, n => { if (n.id != null) mergedNodes.set(String(n.id), n); });
   const taken = new Set([...cNodes.keys(), ...cGroups.keys()]);
 
   for (const [id, { g, parent }] of cGroups){
@@ -501,18 +571,28 @@ function diffDocs(base, cur){
     merged.set(id, { g:copy, parent });
     taken.add(id);
   }
+  /* a host's own change is judged without its children — each child carries
+   * its own status, so a changed VM must not also repaint its hypervisor */
+  const stripKids = x => canon({ ...x, nodes: undefined });
   for (const [id, n] of cNodes){
     const b = bNodes.get(id);
     if (!b) mark(status.nodes, id, 'added');
-    else if (canon(b) !== canon(n) || bMember.get(id) !== cMember.get(id)) mark(status.nodes, id, 'changed');
+    else if (stripKids(b) !== stripKids(n) || bMember.get(id) !== cMember.get(id)
+             || bHost.get(id) !== cHost.get(id)) mark(status.nodes, id, 'changed');
   }
-  for (const [id, n] of bNodes){
+  for (const [id, n] of bNodes){      // walk order: hosts before their children
     if (cNodes.has(id)) continue;
     mark(status.nodes, id, 'removed');
     if (taken.has(id)) continue;
-    doc.nodes.push(n);
-    const host = bMember.has(id) && merged.get(bMember.get(id));
-    if (host) host.g.nodes.push(id);
+    const copy = childrenOf(n).length ? { ...n, nodes:[] } : n;
+    const inside = bHost.has(id) && mergedNodes.get(bHost.get(id));
+    if (inside) (inside.nodes = inside.nodes || []).push(copy);   // back inside its old host
+    else {
+      doc.nodes.push(copy);
+      const host = bMember.has(id) && merged.get(bMember.get(id));
+      if (host) host.g.nodes.push(id);
+    }
+    mergedNodes.set(id, copy);
     taken.add(id);
   }
 
@@ -547,9 +627,16 @@ function diffDocs(base, cur){
  * (a node's parent group; a group is its own zone) need no rule. `conn` is
  * the connection index each rule came from. */
 function connectionRules(spec){
-  const { doc, nodeMap, groupMap, claimed } = spec;
+  const { doc, nodeMap, groupMap, claimed, hosted } = spec;
   const connections = doc.connections || [];
-  const zoneOf = id => nodeMap.has(id) ? claimed.get(id) : groupMap.has(id) ? id : undefined;
+  /* A hosted node's immediate container is its host, so the host is its zone:
+   * guests on one hypervisor need no rule between them, exactly as members of
+   * one group don't. Inheriting the host's GROUP instead would collapse every
+   * guest in a rack into a single zone and silently drop real cross-host flows. */
+  const zoneOf = id => groupMap.has(id) ? id
+    : !nodeMap.has(id) ? undefined
+    : hosted && hosted.has(id) ? hosted.get(id)
+    : claimed.get(id);
   function endpoint(id){
     id = String(id);
     const n = nodeMap.get(id);
@@ -647,14 +734,38 @@ const ELK_SPACING = {
 const edgeId = i => 'e' + i;
 const edgeIndex = id => parseInt(String(id).slice(1), 10);
 
+/* padding between a container node's border and the children inside it */
+const NODE_PAD = 14;
+/* chrome size of container nodes, keyed by the ELK node object buildElk made.
+ * ELK derives a compound node's size from its children, so a host whose own
+ * chrome is wider than the child grid needs correcting once pass-1 geometry
+ * exists (assignPorts). elkjs does NOT honor elk.nodeSize.minimum — every
+ * encoding either ignores the width or corrupts the height — so this is the
+ * supported way to impose one. */
+const CHROME = new WeakMap();
+
 function buildElk(spec){
   const { doc, nodeMap, claimed } = spec;
   const dirRaw = String(doc.diagram?.direction || 'down').toLowerCase();
   const direction = /right|lr/.test(dirRaw) ? 'RIGHT' : 'DOWN';
 
+  /* A node carrying `nodes:` becomes an ELK compound node: its own chrome
+   * (glyph, label, attribute lines) is reserved as top padding and the children
+   * lay out underneath. Leaf nodes keep the exact shape they always had. */
   function elkNode(n){
     const m = nodeMetrics(n);
-    return { id:String(n.id), width:m.w, height:m.h };
+    const kids = childrenOf(n);
+    if (!kids.length) return { id:String(n.id), width:m.w, height:m.h };
+    const children = kids.map(elkNode);
+    const layoutOptions = {
+      'elk.padding': `[top=${m.h},left=${NODE_PAD},bottom=${NODE_PAD},right=${NODE_PAD}]`,
+      ...ELK_SPACING,
+      ...(kids.some(nodeTouched) ? {} : PACK_OPTIONS)
+    };
+    applyRanks(kids, children, layoutOptions);
+    const node = { id:String(n.id), layoutOptions, children };
+    CHROME.set(node, { w:m.w, top:m.h });
+    return node;
   }
   /* Auto-packing: layered assigns every neighbor of a hub to the same layer, so
    * "hub -> group of N" renders the N members as one very wide row. When no
@@ -663,8 +774,13 @@ function buildElk(spec){
    * crosses its boundary to a member — which re-enables ELK's component packing
    * and grids the disconnected members near the root aspect ratio instead. */
   const endpoints = new Set((doc.connections||[]).flatMap(l => [String(l.from), String(l.to)]));
+  /* a node is "touched" when it or anything nested inside it is an endpoint */
+  const nodeTouched = n => endpoints.has(String(n.id)) || childrenOf(n).some(nodeTouched);
   function touchesInterior(g){
-    return (g.nodes||[]).some(id => endpoints.has(String(id)))
+    return (g.nodes||[]).some(id => {
+          const n = nodeMap.get(String(id));
+          return n ? nodeTouched(n) : endpoints.has(String(id));
+        })
         || (g.groups||[]).some(sub => sub && (endpoints.has(String(sub.id)) || touchesInterior(sub)));
   }
   /* aspectRatio feeds ELK's component-row packer (row width ~ ar*sqrt(area)):
@@ -705,7 +821,9 @@ function buildElk(spec){
     return { id:String(g.id), layoutOptions, children };
   }
   const topGroups = doc.groups||[];
-  const looseNodes = [...nodeMap.values()].filter(n=>!claimed.has(String(n.id)));
+  /* only top-level nodes sit at the root — nested ones are drawn by their host */
+  const topNodes = (Array.isArray(doc.nodes) ? doc.nodes : []).filter(n => n && n.id != null);
+  const looseNodes = topNodes.filter(n=>!claimed.has(String(n.id)));
   const rootChildren = [...topGroups.map(elkGroup), ...looseNodes.map(elkNode)];
   const edges = (doc.connections||[]).map((l,i)=>({ id:edgeId(i), sources:[String(l.from)], targets:[String(l.to)] }));
 
@@ -726,7 +844,7 @@ function buildElk(spec){
 }
 
 /* ---------------- two-pass refinement (ports + edge direction) ---------------- */
-/* Two fixes that need pass-1 geometry, applied to a fresh graph for pass 2:
+/* Three fixes that need pass-1 geometry, applied to a fresh graph for pass 2:
  * 1. Against-flow edges (rank places the target BEFORE the source, e.g.
  *    hub -> rank:-1 group) are handed to ELK reversed — otherwise ELK routes
  *    them around the whole diagram and into the target's far side. renderSVG
@@ -815,6 +933,25 @@ function assignPorts(graph, layout){
     }
     assigned = true;
   }
+  /* 3. container nodes: ELK sizes a compound node from its children, so a host
+   *    whose own chrome is wider than the child grid would have its label spill
+   *    out of the box. Pass-1 gives the natural width; reserve the shortfall as
+   *    extra right padding for pass 2 (see CHROME). */
+  (function fixContainers(n){
+    for (const c of n.children||[]){
+      const chrome = CHROME.get(c), box = abs[c.id];
+      if (chrome && box){
+        const grow = Math.ceil(chrome.w - (box.x1 - box.x0));
+        if (grow > 0){
+          c.layoutOptions = { ...(c.layoutOptions||{}),
+            'elk.padding': `[top=${chrome.top},left=${NODE_PAD},bottom=${NODE_PAD},right=${NODE_PAD + grow}]` };
+          assigned = true;
+        }
+      }
+      fixContainers(c);
+    }
+  })(graph);
+
   return assigned ? graph : null;
 }
 
@@ -1169,7 +1306,7 @@ function renderSVG(spec, layout, opts = {}){
 
 if (typeof module !== "undefined" && module.exports)
   module.exports = { parseSpec, specFromDoc, sourceMap, buildElk, assignPorts, renderSVG,
-    allTags, filterDoc, diffDocs, connectionRules, rulesToCsv, extractSource, encodeShare, decodeShare,
+    allTags, filterDoc, diffDocs, flatNodes, connectionRules, rulesToCsv, extractSource, encodeShare, decodeShare,
     CONNECTION_STYLES, GROUP_STYLES, GLYPHS, LABEL_PALETTE, THEMES,
     // helpers the browser app (concatenated after this file at build time) reuses
     esc, dirOf, ipsOf };
