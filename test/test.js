@@ -837,6 +837,107 @@ test("render CLI: --date --tags --compare --csv --theme and --extract", () => {
   }
 });
 
+// ---------- views ----------
+const VIEWS = `
+diagram:
+  title: Whole thing
+nodes:
+  - {id: inet, type: internet}
+  - {id: fw, type: firewall}
+  - {id: web, type: server, tags: [prod]}
+  - {id: db, type: db}
+  - {id: far}
+groups:
+  - {id: dmz, class: zone, nodes: [web]}
+  - {id: lan, class: trust, nodes: [db]}
+connections:
+  - {from: inet, to: fw}
+  - {from: fw, to: web}
+  - {from: web, to: db}
+  - {from: db, to: far}
+views:
+  - {id: edge, title: Edge, focus: fw, depth: 1}
+  - {id: prod, tags: [prod]}
+  - {id: deep, focus: fw, depth: 2, direction: right}
+`;
+const viewDoc = (id) => {
+  const spec = parseSpec(VIEWS);
+  return nd.applyView(spec.doc, nd.viewById(spec.doc, id), spec);
+};
+const nodeIds = (d) => nd.flatNodes(d).map((n) => String(n.id)).sort();
+
+test("views: focus keeps the target, its contents and `depth` connection hops", () => {
+  assert.deepStrictEqual(nodeIds(viewDoc("edge")), ["fw", "inet", "web"]);
+  assert.deepStrictEqual(nodeIds(viewDoc("deep")), ["db", "fw", "inet", "web"]);
+  // a surviving node keeps the group that draws it, and nothing else
+  assert.deepStrictEqual((viewDoc("edge").groups || []).map((g) => g.id), ["dmz"]);
+  // connections survive only when both ends do
+  assert.strictEqual((viewDoc("edge").connections || []).length, 2);
+});
+
+test("views: tags narrow like the tag filter; options fold into diagram", () => {
+  assert.deepStrictEqual(nodeIds(viewDoc("prod")), ["web"]);
+  assert.strictEqual(viewDoc("edge").diagram.title, "Edge");
+  assert.strictEqual(viewDoc("deep").diagram.direction, "right");
+  assert.strictEqual(viewDoc("deep").diagram.title, "Whole thing", "options the view does not set are inherited");
+});
+
+test("views: a narrowed document never carries views onward", () => {
+  const spec = parseSpec(VIEWS);
+  for (const id of ["edge", "prod", "deep"]) {
+    const d = nd.applyView(spec.doc, nd.viewById(spec.doc, id), spec);
+    assert.strictEqual(d.views, undefined, `${id} strips views`);
+    // must still validate: another view's focus may have just been pruned away
+    nd.specFromDoc(d);
+  }
+  assert.strictEqual(nd.viewsOf(spec.doc).length, 3, "the source document is untouched");
+  assert.strictEqual(nd.flatNodes(spec.doc).length, 5);
+  assert.strictEqual(nd.filterDoc(spec.doc, ["prod"]).views, undefined, "the tag filter strips them too");
+});
+
+test("validation: views need a known focus, unique ids and a numeric depth", () => {
+  expectError("nodes:\n  - {id: a}\nviews:\n  - {id: v, focus: ghost}\n", 'unknown focus "ghost"');
+  expectError("nodes:\n  - {id: a}\nviews:\n  - {id: v}\n  - {id: v}\n", 'duplicate view id "v"');
+  expectError("nodes:\n  - {id: a}\nviews:\n  - {id: v, depth: soon}\n", "depth must be a number");
+  expectError("nodes:\n  - {id: a}\nviews:\n  - {title: no id}\n", "views[0]: missing id");
+});
+
+test("views CLI: --list-views, --view, and an unknown view", () => {
+  const { execFileSync } = require("child_process");
+  const os = require("os");
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "netdiagram-views-"));
+  const script = path.join(root, "scripts/render.js");
+  const run = (...args) => {
+    try {
+      return { code: 0, out: execFileSync(process.execPath, [script, ...args], { encoding: "utf8", stdio: "pipe" }) };
+    } catch (e) {
+      return { code: e.status, out: String(e.stdout || "") + String(e.stderr || "") };
+    }
+  };
+  try {
+    const spec = path.join(dir, "net.yaml");
+    fs.writeFileSync(spec, VIEWS);
+    const list = run(spec, "--list-views");
+    assert.strictEqual(list.code, 0);
+    assert.ok(/edge\s+Edge/.test(list.out), list.out);
+
+    const out = path.join(dir, "edge.svg");
+    const r = run(spec, out, "--view", "edge", "--date", "2000-01-01");
+    assert.strictEqual(r.code, 0, r.out);
+    assert.ok(r.out.includes("view edge"), r.out);
+    const svg = fs.readFileSync(out, "utf8");
+    assert.ok(svg.includes(">Edge</title>"), "the view title reaches the title block");
+    assert.ok(svg.includes('data-id="fw"'), "the focus is drawn");
+    assert.ok(!svg.includes('data-id="far"'), "what is out of range is not");
+
+    const bad = run(spec, path.join(dir, "x.svg"), "--view", "nope");
+    assert.strictEqual(bad.code, 1);
+    assert.ok(bad.out.includes('unknown view "nope"'), bad.out);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 // ---------- architecture lint + drift ----------
 const lintOf = (yaml) => nd.lintSpec(parseSpec(yaml));
 const rulesFired = (yaml) => lintOf(yaml).map((f) => f.rule).sort();
@@ -1229,6 +1330,33 @@ test("app: tag chips narrow the diagram", async () => {
   assert.deepStrictEqual(ids, ["fw1", "fw2"]);
   assert.ok(doc.querySelector("#canvas-pane svg").outerHTML.includes(">FILTER</text>"), "title block notes the filter");
   assert.strictEqual(doc.querySelector('.tag-chip[data-tag="ha"]').getAttribute("aria-pressed"), "true");
+});
+
+test("app: the View picker appears only with views, and narrows the diagram", async () => {
+  const plain = await bootPage({ draft: "nodes:\n  - {id: a}\n" });
+  assert.ok(plain.doc.querySelector("#view-picker").hidden, "hidden for a document without views");
+
+  const { win, doc, statusEl } = await bootPage({ draft: VIEWS });
+  assert.ok(!doc.querySelector("#view-picker").hidden, "shown for a document with views");
+  const sel = doc.querySelector("#sel-view");
+  assert.deepStrictEqual([...sel.options].map((o) => o.value), ["", "edge", "prod", "deep"],
+    "the whole diagram plus every declared view");
+  assert.deepStrictEqual([...sel.options].map((o) => o.textContent),
+    ["Whole diagram", "Edge", "prod", "deep"], "titles label the views, ids stand in without one");
+
+  sel.value = "edge";
+  sel.dispatchEvent(new win.Event("change", { bubbles: true }));
+  assert.ok(await waitFor(() => statusEl.textContent.includes('view "edge"')),
+    "status reports the view: " + statusEl.textContent);
+  const ids = [...doc.querySelectorAll("#canvas-pane .nd-node")].map((n) => n.dataset.id).sort();
+  assert.deepStrictEqual(ids, ["fw", "inet", "web"], "only the focus and one hop are drawn");
+  assert.ok(doc.querySelector("#canvas-pane svg").outerHTML.includes(">VIEW</text>"),
+    "the title block records which view is drawn");
+
+  sel.value = "";
+  sel.dispatchEvent(new win.Event("change", { bubbles: true }));
+  assert.ok(await waitFor(() => doc.querySelectorAll("#canvas-pane .nd-node").length === 5),
+    "switching back to the whole diagram restores every node");
 });
 
 test("app: a #src= share link opens on load and clears the fragment", async () => {

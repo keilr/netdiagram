@@ -54,6 +54,7 @@ module.exports = [
         parseSpec: "readonly", specFromDoc: "readonly", sourceMap: "readonly",
         buildElk: "readonly", assignPorts: "readonly", renderSVG: "readonly",
         allTags: "readonly", filterDoc: "readonly", diffDocs: "readonly", flatNodes: "readonly",
+        viewsOf: "readonly", viewById: "readonly", applyView: "readonly",
         connectionRules: "readonly", rulesToCsv: "readonly", extractSource: "readonly",
         encodeShare: "readonly", decodeShare: "readonly", esc: "readonly",
         // from src/importers.js

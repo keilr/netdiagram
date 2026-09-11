@@ -119,3 +119,10 @@ connections:
   - {from: dmz,   to: siem, label: "udp/514 syslog",  protocol: udp,  port: 514}
   - {from: lan,   to: siem, label: "udp/514 syslog",  protocol: udp,  port: 514}
   - {from: web1,  to: db1,  label: "blocked",         direction: none, comment: "web tier must not reach the DB directly"}
+
+# views: one document, several pictures of it. Pick one with
+# `npm run render -- file.yaml --view edge`, or from the View picker in the app.
+views:
+  - {id: edge,  title: "HQ — edge",            focus: fw1, depth: 1}
+  - {id: pci,   title: "HQ — PCI scope",       tags: [pci]}
+  - {id: mgmt,  title: "HQ — management access", focus: oob, depth: 1, direction: right}

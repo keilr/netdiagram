@@ -111,6 +111,8 @@
   #canvas-pane .nd-pulse{animation:nd-pulse .6s ease-in-out 3}
   @keyframes nd-pulse{50%{filter:drop-shadow(0 0 3px var(--glow)) drop-shadow(0 0 14px var(--glow))}}
   @media (prefers-reduced-motion:reduce){#canvas-pane .nd-pulse{animation:none}}
+  #view-picker{padding:0 12px;border-left:1px solid #2c3542;margin-left:8px;flex-shrink:0}
+  #view-picker[hidden]{display:none}
   #tag-filter{display:flex;align-items:center;gap:6px;margin-left:auto;padding:0 12px;flex-wrap:wrap;min-width:0}
   #tag-filter[hidden]{display:none}
   #tag-chips{display:flex;gap:5px;flex-wrap:wrap}
@@ -190,6 +192,10 @@
     <div id="view-tabs">
       <button class="tab-btn active" data-pane="canvas-pane">Diagram</button>
       <button class="tab-btn" data-pane="connections-pane">Connections</button>
+      <div class="picker" id="view-picker" hidden>
+        <label class="picker-label" for="sel-view">View</label>
+        <select id="sel-view" title="Draw one of the named views this document defines (views: in the YAML) instead of the whole diagram"></select>
+      </div>
       <div id="tag-filter" hidden>
         <span class="picker-label">Show tags</span>
         <span id="tag-chips"></span>

@@ -21,6 +21,7 @@ npm test           # builds, then runs test/test.js (pipeline, features, validat
 npm run test:golden  # rebuild + rewrite test/golden/*.svg — ONLY after an intended
                    # visual change; review the SVG diff before committing
 npm run render -- in.yaml [out.svg] [--theme --tags --compare --csv --date --extract]
+                   #        [--view id --list-views]  named views (views: below)
 npm run import -- <file|-> [--from ansible|terraform|netbox] [-o out.yaml]
 npm run check -- net.yaml [--against inv|-] [--from ...] [--strict] [--json]
                    # CI gate: architecture lint (+ drift vs a live inventory);
@@ -160,7 +161,20 @@ connections:               # renamed from links: (parseSpec errors on the old ke
     port: int|str          # dest port or range — shown in the Connections table
     direction: forward|both|none   # table: both -> two rows; none -> excluded
     comment: str           # free-form note; Connections-table column only, not on the edge
+views:                     # one document, several pictures of it
+  - id: str                # required; --view <id>, or the app's View picker
+    title: str             # overrides diagram.title for this view
+    tags: [str]            # narrow by tag (same lens as the tag filter)
+    focus: id              # keep this node/group + its contents + `depth` hops
+    depth: int             # connection hops from focus (default 1)
+    direction/theme        # per-view overrides of the diagram options
 ```
+
+`applyView(doc, view, spec)` narrows (tags first, then focus) and folds
+title/direction/theme into `doc.diagram`, so the rest of the pipeline needs no
+knowledge of views. A narrowed doc NEVER carries `views:` onward
+(`withoutViews`): re-validating it would check focus ids against a document the
+narrowing just pruned.
 
 Connection color: shared-label palette color if the connection has a label,
 else default ink. The app (`src/app.js`) also renders a Connections tab: a

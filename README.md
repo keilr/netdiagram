@@ -205,6 +205,42 @@ destination (each with its address beneath it), protocol, port, label and any
 comment — skipping pairs that sit in the same zone; a `both` connection appears
 as two rows, one per direction.
 
+### `views[]`
+
+One document, several pictures of it. A **view** narrows the diagram and may
+override render options, so an overview, a per-zone detail and one
+application's flow all stay derived from the same model instead of drifting
+apart in copied files:
+
+```yaml
+views:
+  - {id: edge, title: "HQ — edge",      focus: fw1, depth: 1}
+  - {id: pci,  title: "HQ — PCI scope", tags: [pci]}
+  - {id: mgmt, title: "Management",     focus: oob, depth: 1, direction: right}
+```
+
+| key | notes |
+|---|---|
+| `id` | required; selects the view (`--view edge`, or the app's **View** picker) |
+| `title` | title-block text for this view, overriding `diagram.title` |
+| `tags` | show only what carries one of these tags — the same narrowing as the tag filter |
+| `focus` | a node or group id: keep it and everything inside it, plus whatever is within `depth` connection hops |
+| `depth` | how many hops from `focus` to include (default 1; `0` = focus and its contents only) |
+| `direction`, `theme` | per-view overrides of the `diagram` options |
+
+Narrowing runs `tags` first, then `focus`. Hops are counted over the
+connections as written, so a connection that ends at a *group* is one hop like
+any other — which is what makes `focus: <a group>` with `depth: 1` a useful
+"this zone and what touches it" view.
+
+```bash
+npm run render -- hq.yaml --list-views      # what this spec defines
+npm run render -- hq.yaml out.svg --view edge
+```
+
+In the app a **View** picker appears in the diagram tab bar whenever the
+document defines any; the title block records which view is drawn.
+
 ## Use your own editor (CLI + VS Code)
 
 You don't have to write YAML in the browser app — a CLI renders any spec file
@@ -215,6 +251,8 @@ npm run render -- mynet.yaml                       # -> mynet.svg
 npm run render -- mynet.yaml out.svg --watch       # re-render on every save
 npm run render -- mynet.yaml --theme blueprint     # cyanotype colors
 npm run render -- mynet.yaml --tags prod,pci       # only what carries these tags
+npm run render -- mynet.yaml --view edge           # one named view (see views: above)
+npm run render -- mynet.yaml --list-views          # what views this spec defines
 npm run render -- mynet.yaml pr.svg --compare main.yaml --csv rules.csv
                                                    # change review: marked diagram + rule CSV
 npm run render -- old.svg --extract > old.yaml     # the YAML back out of an exported SVG

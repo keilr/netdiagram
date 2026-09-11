@@ -194,6 +194,11 @@ function walkNodes(list, fn, host = null){
   });
 }
 function flatNodes(doc){ const out = []; walkNodes(doc?.nodes, n => out.push(n)); return out; }
+/* A narrowed document is a PICTURE of the model, not the model: it must not
+ * carry views: onward. Keeping them re-validates focus ids against a document
+ * the narrowing may have pruned, which fails on a view that is not even the
+ * one being drawn. */
+const withoutViews = d => { const out = { ...d }; delete out.views; return out; };
 const NODE_KNOWN_KEYS = new Set(['id','label','type','icon','ip','ips','addr','os','tags','rank','nodes']);
 /* option keys control rendering; every other scalar key is a displayed attribute */
 const DIAGRAM_OPTION_KEYS = new Set(['title','direction','theme','date']);
@@ -318,6 +323,20 @@ function specFromDoc(doc){
     for (const end of ['from', 'to'])
       if (!nodeMap.has(String(l[end])) && !groupMap.has(String(l[end])))
         err(['connections', i, end], `connections[${i}]: unknown endpoint "${l[end]}"`);
+  });
+
+  const viewIds = new Set();
+  (Array.isArray(doc.views) ? doc.views : []).forEach((v, i) => {
+    if (!v || v.id == null) { err(['views', i], `views[${i}]: missing id`); return; }
+    const vid = String(v.id);
+    if (viewIds.has(vid)) err(['views', i, 'id'], `duplicate view id "${vid}"`);
+    viewIds.add(vid);
+    if (badTags(v.tags))
+      err(['views', i, 'tags'], `view "${vid}": tags must be a scalar or a list of scalars`);
+    if (v.focus != null && !nodeMap.has(String(v.focus)) && !groupMap.has(String(v.focus)))
+      err(['views', i, 'focus'], `view "${vid}": unknown focus "${v.focus}"`);
+    if (v.depth != null && !Number.isFinite(Number(v.depth)))
+      err(['views', i, 'depth'], `view "${vid}": depth must be a number`);
   });
 
   if (errors.length){
@@ -494,12 +513,94 @@ function filterDoc(doc, tags){
     const p = pruneNode(n, false);
     if (p) pruned.set(id, p);
   }
-  return {
+  return withoutViews({
     ...doc,
     nodes: (doc.nodes || []).filter(n => n && pruned.has(String(n.id))).map(n => pruned.get(String(n.id))),
     groups,
     connections: (doc.connections || []).filter(l => l && keep.has(String(l.from)) && keep.has(String(l.to)))
+  });
+}
+
+/* ---------------- views ----------------
+ * One document, many pictures of it: an L3 overview, a per-zone detail, one
+ * application's flow. A view narrows the doc and may override render options,
+ * so every picture stays derived from the same model instead of drifting apart
+ * in copied files. Narrowing runs tags first, then focus. */
+const viewsOf = doc => (Array.isArray(doc?.views) ? doc.views.filter(v => v && v.id != null) : []);
+const viewById = (doc, id) => viewsOf(doc).find(v => String(v.id) === String(id)) || null;
+
+/* Keep `focusId` with everything inside it, plus whatever sits within `depth`
+ * connection hops. Hops are counted over the connection graph as written, so a
+ * group endpoint is one hop like any other. */
+function focusDoc(doc, spec, focusId, depth = 1){
+  const { nodeMap, groupMap } = spec;
+  const start = String(focusId);
+  if (!nodeMap.has(start) && !groupMap.has(start)) return doc;
+
+  const adj = new Map();
+  const link = (a, b) => {
+    if (!adj.has(a)) adj.set(a, new Set());
+    adj.get(a).add(b);
   };
+  for (const l of doc.connections || []){
+    if (!l || l.from == null || l.to == null) continue;
+    link(String(l.from), String(l.to));
+    link(String(l.to), String(l.from));
+  }
+  const near = new Set([start]);
+  let frontier = [start];
+  for (let d = 0; d < Math.max(0, Number(depth) || 0); d++){
+    const next = [];
+    for (const cur of frontier)
+      for (const nb of adj.get(cur) || [])
+        if (!near.has(nb)){ near.add(nb); next.push(nb); }
+    frontier = next;
+  }
+
+  /* whatever is reached brings its contents along: a group its whole subtree,
+   * a host its guests */
+  const keep = new Set();
+  const addNode = n => { if (!n || n.id == null) return; keep.add(String(n.id)); childrenOf(n).forEach(addNode); };
+  const addGroup = g => {
+    if (!g || g.id == null) return;
+    keep.add(String(g.id));
+    (g.nodes || []).forEach(id => addNode(nodeMap.get(String(id))));
+    (g.groups || []).forEach(addGroup);
+  };
+  for (const id of near){
+    if (groupMap.has(id)) addGroup(groupMap.get(id));
+    else addNode(nodeMap.get(id));
+  }
+
+  const pruneNodes = list => (list || []).filter(n => n && keep.has(String(n.id)))
+    .map(n => childrenOf(n).length ? { ...n, nodes: pruneNodes(n.nodes) } : n);
+  const pruneGroups = list => (list || []).flatMap(g => {
+    if (!g || g.id == null) return [];
+    const nodes = (g.nodes || []).filter(id => keep.has(String(id)));
+    const groups = pruneGroups(g.groups);
+    if (!keep.has(String(g.id)) && !nodes.length && !groups.length) return [];
+    return [{ ...g, nodes, groups }];
+  });
+  return withoutViews({
+    ...doc,
+    nodes: pruneNodes(doc.nodes),
+    groups: pruneGroups(doc.groups),
+    connections: (doc.connections || []).filter(l => l && keep.has(String(l.from)) && keep.has(String(l.to)))
+  });
+}
+
+/* Narrow `doc` to `view` and fold its option overrides into diagram, so the
+ * rest of the pipeline (buildElk direction, renderSVG theme/title) needs no
+ * knowledge of views at all. Connection objects stay by reference. */
+function applyView(doc, view, spec){
+  if (!view) return doc;
+  let out = doc;
+  if (view.tags != null) out = filterDoc(out, [].concat(view.tags).map(String));
+  if (view.focus != null) out = focusDoc(out, spec, view.focus, view.depth ?? 1);
+  const over = {};
+  for (const k of ['title', 'direction', 'theme']) if (view[k] != null) over[k] = view[k];
+  if (Object.keys(over).length) out = { ...out, diagram: { ...(out.diagram || {}), ...over } };
+  return withoutViews(out);
 }
 
 /* order-independent JSON for change detection */
@@ -1498,6 +1599,7 @@ function renderSVG(spec, layout, opts = {}){
 if (typeof module !== "undefined" && module.exports)
   module.exports = { parseSpec, specFromDoc, sourceMap, buildElk, assignPorts, renderSVG,
     allTags, filterDoc, diffDocs, flatNodes, lintSpec, driftReport,
+    viewsOf, viewById, applyView, focusDoc,
     connectionRules, rulesToCsv, extractSource, encodeShare, decodeShare,
     CONNECTION_STYLES, GROUP_STYLES, GLYPHS, LABEL_PALETTE, THEMES,
     // helpers the browser app (concatenated after this file at build time) reuses

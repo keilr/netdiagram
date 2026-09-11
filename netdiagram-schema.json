@@ -50,6 +50,11 @@
       "type": "array",
       "description": "Connections between nodes and/or groups",
       "items": { "$ref": "#/$defs/connection" }
+    },
+    "views": {
+      "type": "array",
+      "description": "Named views of this one document — an overview, a per-zone detail, one application's flow. Each narrows the diagram and may override render options, so every picture stays derived from the same model instead of drifting in a copied file.",
+      "items": { "$ref": "#/$defs/view" }
     }
   },
   "$defs": {
@@ -221,6 +226,49 @@
           "type": "array",
           "items": { "$ref": "#/$defs/group" },
           "description": "Nested child groups"
+        }
+      }
+    },
+    "view": {
+      "type": "object",
+      "required": ["id"],
+      "additionalProperties": false,
+      "description": "One named picture of the document. Narrowing is applied in order: tags first, then focus.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Identifier used to select the view (render CLI --view, the app's View picker)"
+        },
+        "title": {
+          "type": "string",
+          "description": "Title block text for this view, overriding diagram.title"
+        },
+        "tags": {
+          "description": "Show only what carries one of these tags — the same narrowing as the app's tag filter. A tagged group keeps its whole contents.",
+          "oneOf": [
+            { "type": "string" },
+            { "type": "array", "items": { "type": "string" }, "minItems": 1 }
+          ]
+        },
+        "focus": {
+          "type": "string",
+          "description": "Node or group id to centre the view on: it is kept with everything inside it, plus whatever sits within `depth` connection hops"
+        },
+        "depth": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 1,
+          "description": "How many connection hops from focus to include (0 = focus and its contents only). Ignored without focus."
+        },
+        "direction": {
+          "type": "string",
+          "enum": ["down", "right"],
+          "description": "Layout direction for this view, overriding diagram.direction"
+        },
+        "theme": {
+          "type": "string",
+          "enum": ["paper", "blueprint"],
+          "description": "Theme for this view, overriding diagram.theme"
         }
       }
     },
