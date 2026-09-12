@@ -12,6 +12,7 @@
     "render": "node scripts/render.js",
     "import": "node scripts/import.js",
     "check": "node scripts/check.js",
+    "mcp": "node scripts/mcp.js",
     "lint": "eslint .",
     "pretest": "node scripts/build.js",
     "test": "node test/test.js",

@@ -341,6 +341,85 @@ nodes are matched on id, then on any shared IP, then on label. Group membership
 is deliberately not compared: group identity isn't stable across importers, so
 "moved" would be guesswork.
 
+## Work with an LLM (optional)
+
+Both halves are **opt-in and offline-safe**. The shipped HTML makes no network
+request unless you configure a provider and press Send, and the MCP server is a
+separate command the app never loads.
+
+The rule in both: **the model proposes, the parser disposes.** An LLM only ever
+produces YAML, which must survive `parseSpec` and the architecture lint before
+it can reach a diagram — so a hallucination becomes a caught error instead of a
+silently wrong picture.
+
+### netdiagram as a tool for your agent (MCP)
+
+```bash
+claude mcp add netdiagram -- node /path/to/netdiagram/scripts/mcp.js
+```
+
+A stdio MCP server exposing the same pipeline the CLIs use, so an agent can
+author a spec and have it checked by code rather than by hope:
+
+| tool | what it does |
+|---|---|
+| `netdiagram_schema` | the JSON Schema — the authoritative vocabulary to author against |
+| `netdiagram_check` | validate + lint; returns errors and findings as JSON |
+| `netdiagram_render` | lay out and render to SVG (writes to `out_path`) |
+| `netdiagram_rules` | the firewall-rule table, as JSON or CSV |
+| `netdiagram_diff` | what changed between two revisions |
+| `netdiagram_import` | Ansible / Terraform / NetBox → a spec |
+| `netdiagram_views` | the named views a spec defines |
+| `netdiagram_extract` | recover the YAML embedded in an exported SVG |
+
+Nothing here is part of the browser build — `dist/netdiagram.html` is untouched
+by it.
+
+### Assist, in the app
+
+The **Assist** button drafts or revises the YAML using an endpoint **you**
+choose. Local engines come first in the dropdown, because they keep your
+topology on your machine:
+
+| | |
+|---|---|
+| local | Ollama, llama.cpp, LM Studio, vLLM |
+| hosted | Anthropic (Claude), OpenAI, OpenRouter, Groq, or any OpenAI-compatible endpoint |
+
+Most providers share OpenAI's `/chat/completions`; Anthropic uses its own
+`/messages` shape, so it has a small dedicated adapter.
+
+- **Nothing is sent until you press Send**, and the panel shows the exact
+  request first — a topology is precisely the thing you may not be able to
+  leak. Hosted providers are labelled as leaving your machine.
+- **The API key is not stored** unless you tick "Remember"; the other settings
+  are.
+- **Proposals are reviewed, never applied.** The result loads with your previous
+  document as the compare baseline, so changes appear as **+ / − / ~** in the
+  diagram and the Connections table. **Accept** keeps it, **Discard** puts your
+  original text back.
+- Output that fails validation is sent back **once** with the exact errors
+  (which carry document paths); if it still fails, it is refused rather than
+  applied.
+
+**Air-gapped build:** `npm run build -- --no-assist` omits the assistant
+entirely — no provider code, no `Assist` global, and the button stays hidden.
+The test suite asserts that.
+
+> **Local engines and the browser:** a page opened from `file://` calling
+> `http://localhost:…` is a cross-origin request, so the engine must allow this
+> page's origin or the browser blocks it before it ever leaves the machine:
+>
+> - **Ollama** — start it with `OLLAMA_ORIGINS="*"`
+> - **LM Studio** — Developer tab → start the server → Settings → **Enable CORS**
+>
+> The symptom is confusing, because the failure happens on the preflight: you
+> see one `OPTIONS /v1/chat/completions` in the engine's log and no completion.
+> LM Studio in particular reports it as `'messages' field is required`
+> ([lmstudio-ai/lmstudio-bug-tracker#443](https://github.com/lmstudio-ai/lmstudio-bug-tracker/issues/443)),
+> which looks like a malformed request but is not one. netdiagram's own error
+> names the switch for whichever provider you picked.
+
 ## Development
 
 Only needed to change netdiagram itself — the app ships as the prebuilt HTML.
@@ -363,6 +442,8 @@ scripts/build.js     vendors js-yaml + elkjs, assembles dist/netdiagram.html
 scripts/render.js    CLI: YAML -> SVG (--watch --theme --tags --view --compare --csv --extract)
 scripts/import.js    CLI: inventory -> YAML scaffold
 scripts/check.js     CLI: architecture lint + drift vs a live inventory (CI gate)
+scripts/mcp.js       MCP server: netdiagram as a tool for LLM agents (stdio)
+src/assist.js        optional in-app LLM assistant (dropped by --no-assist)
 examples/            bundled examples (injected into the app's picker at build)
 docs/example.yaml    source of the screenshot above
 test/                npm test — pipeline, features, validation, importers, CLI, jsdom
