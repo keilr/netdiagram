@@ -1274,6 +1274,39 @@ test("containment: sourceMap locates a nested node; the cursor picks the innermo
   assert.deepStrictEqual(m.itemAt(text.indexOf("id: v") + 2), { kind: "node", id: "v" });
 });
 
+// ---------- source hygiene ----------
+/* A raw control byte in a source file makes `file` report it as `data` and
+ * makes GNU grep SILENTLY report no matches — a search then looks like proof
+ * that code is absent when it is right there. Separators must be written as
+ * escapes (see CLAUDE.md gotcha 16). This guard is why they cannot come back. */
+test("no source or doc file contains a raw control byte", () => {
+  const roots = ["src", "scripts", "test", "examples", "docs"];
+  const files = [];
+  function walk(dir) {
+    for (const e of fs.readdirSync(path.join(root, dir), { withFileTypes: true })) {
+      const rel = path.join(dir, e.name);
+      if (e.isDirectory()) { if (e.name !== "golden") walk(rel); }
+      else if (/\.(js|json|ya?ml|md|html)$/.test(e.name)) files.push(rel);
+    }
+  }
+  for (const r of roots) walk(r);
+  for (const f of ["CLAUDE.md", "README.md", "netdiagram-schema.json", "package.json"]) files.push(f);
+
+  const offenders = [];
+  for (const rel of files) {
+    const text = fs.readFileSync(path.join(root, rel), "utf8");
+    text.split("\n").forEach((line, n) => {
+      [...line].forEach((ch) => {
+        const cp = ch.codePointAt(0);
+        if (cp < 0x20 && ch !== "\t") offenders.push(`${rel}:${n + 1} U+${cp.toString(16).padStart(4, "0")}`);
+      });
+    });
+  }
+  assert.deepStrictEqual(offenders, [],
+    "write the escape (\\u0000), never the byte — see CLAUDE.md gotcha 16");
+  assert.ok(files.length > 25, `scanned a plausible number of files (${files.length})`);
+});
+
 // ---------- paint order ----------
 /* A container node's box is opaque. Painted after the edges it covers every
  * edge routed inside it — an edge between two of its guests then shows only

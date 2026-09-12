@@ -311,6 +311,17 @@ suggestions from the schema, so it follows automatically).
     failures are returned as `isError` content rather than thrown, because the
     spec error text (with its document paths) is the most useful thing the
     agent can act on.
+16. **Never put a RAW control byte in source — always write `'\u0000'`.**
+    `diffDocs`, `lintSpec` and app.js's tag-filter cache use NUL (and SOH) as
+    key separators, which is fine; writing them as literal bytes is not. With
+    raw bytes present, `file` classifies the source as `data`, and **GNU grep
+    silently reports no matches** — not an error, just nothing, so a search
+    looks like proof that code is absent when it is right there. It also
+    breaks `git diff` and GitHub rendering. This cost real time three separate
+    times in one session: greps that "proved" a function did not exist, and
+    two Edits that failed because the file held `join('<NUL>')` where every
+    tool rendered `join(' ')`. The escape is the same string at runtime, so
+    there is no reason to ever write the byte.
 17. **List endpoints are desugared in `specFromDoc`, and nowhere later.** Every
     lens (filterDoc, focusDoc, diffDocs) matches endpoints with `String(l.to)`:
     a list stringifies to `"a,b"`, matches no id, and the edge is SILENTLY
@@ -323,12 +334,12 @@ suggestions from the schema, so it follows automatically).
     changes), `_src` is never overwritten because specFromDoc runs again on
     narrowed docs holding the same object references, and YAML -> diagram is
     one-to-many (`drawnForAuthored`).
-16. **The LLM assistant must never be required.** Anything it produces is YAML
+18. **The LLM assistant must never be required.** Anything it produces is YAML
     that goes through `parseSpec` + `lintSpec` before it can reach the diagram,
     and it is applied only through the compare view (Accept / Discard), never
     written over the buffer. Keep it behind `typeof Assist`, keep the network
     call in one injectable place, and keep the tests offline.
-18. **Paint order: groups, CONTAINER nodes, edges, leaf nodes, labels.** A node
+19. **Paint order: groups, CONTAINER nodes, edges, leaf nodes, labels.** A node
     holding other nodes is drawn with an opaque `nodeFill` box, so painted
     after the edges it covers every edge routed inside it — an edge between two
     of its guests shows only its label, because labels paint last. Containers
