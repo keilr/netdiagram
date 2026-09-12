@@ -254,8 +254,11 @@ tagChips.addEventListener('click', e => {
 async function render(text){
   const seq = ++renderSeq;
   try{
-    const source = jsyaml.load(text);
-    const sourceSpec = specFromDoc(source);   // validate what the author wrote, before any view narrows it
+    const parsed = jsyaml.load(text);
+    const sourceSpec = specFromDoc(parsed);   // validate what the author wrote, before any view narrows it
+    /* specFromDoc desugars list endpoints; every lens below matches ids with
+     * String(l.to), so they must all see the EXPANDED connections */
+    const source = sourceSpec.doc;
     updateViewPicker(source);
     updateTagBar(source);
     /* a view narrows the document before every other lens (tags, compare) */
@@ -319,8 +322,20 @@ function currentMap(){
 /* connection indices differ between the editor doc and the drawn view (tag
  * filter drops some, compare appends removed ones); both keep the connection
  * objects by reference, so indexOf maps between them */
-const viewIndexOf = i => lastView ? (lastView.doc.connections || []).indexOf((lastView.source.connections || [])[i]) : -1;
 const sourceIndexOf = i => lastView ? (lastView.source.connections || []).indexOf((lastView.doc.connections || [])[i]) : -1;
+/* YAML -> diagram is one-to-many: a list endpoint fans out into several drawn
+ * edges from ONE authored line (_src, set by specFromDoc). Only edges that are
+ * also in the source doc count — the compare view appends connections from the
+ * BASE document, whose _src indexes a different file. */
+const drawnForAuthored = a => {
+  if (!lastView) return [];
+  const authored = new Set(lastView.source.connections || []);
+  const out = [];
+  (lastView.doc.connections || []).forEach((l, i) => {
+    if (l && l._src === a && authored.has(l)) out.push(i);
+  });
+  return out;
+};
 
 /* the diagram item under a click: selection key + YAML range (range is null
  * for items only the compare view draws); null for empty paper */
@@ -330,7 +345,12 @@ function clickedItem(target){
   const conn = target.closest('[data-conn]');
   if (conn){
     const si = sourceIndexOf(+conn.dataset.conn);
-    return si < 0 ? null : { key: `connection:${si}`, range: map.itemRange('connection', si) };
+    if (si < 0) return null;
+    /* several drawn edges can share one YAML line (list endpoints) — reveal
+     * the line that authored this one, and key the selection by it */
+    const l = (lastView.source.connections || [])[si];
+    const at = (l && l._src !== undefined) ? l._src : si;
+    return { key: `connection:${at}`, range: map.itemRange('connection', at) };
   }
   const el = target.closest('.nd-node, .nd-group');
   if (!el) return null;
@@ -348,8 +368,10 @@ function applyCursorHighlight(){
   const key = item ? `${item.kind}:${item.kind === 'connection' ? item.index : item.id}` : null;
   let els = [];
   if (item?.kind === 'connection'){
-    const vi = viewIndexOf(item.index);
-    if (vi >= 0) els = [...canvasEl.querySelectorAll(`[data-conn="${vi}"]`)];   // path + its label
+    /* itemAt reports the AUTHORED connection; one line can draw several edges,
+     * so glow every one of them (each: path + its label) */
+    els = drawnForAuthored(item.index)
+      .flatMap(vi => [...canvasEl.querySelectorAll(`[data-conn="${vi}"]`)]);
   } else if (item){
     els = [...canvasEl.querySelectorAll(item.kind === 'node' ? '.nd-node' : '.nd-group')]
       .filter(el => el.dataset.id === item.id);

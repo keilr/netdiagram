@@ -29,7 +29,11 @@ groups:
     cidr: 10.0.0.0/24
     nodes: [web, db]
 
-connections:                 # from/to are node or group ids
+connections:                 # from/to are node or group ids — or a LIST of
+                             # them, which fans out into one connection per
+                             # pair: {from: lb, to: [web1, web2]}
+                             # (when the targets share a group, connecting to
+                             #  the group instead keeps the drawing compact)
   - {from: user, to: web, label: &quot;tcp/443 https&quot;, protocol: tcp, port: 443}
   - {from: web,  to: db,  label: &quot;tcp/5432 sql&quot;,  protocol: tcp, port: 5432}
 

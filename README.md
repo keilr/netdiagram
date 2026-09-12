@@ -182,12 +182,31 @@ instead — `rank: -1` groups lay out above it, `rank: 1` below (see
 ### `connections[]`
 | key | notes |
 |---|---|
-| `from`, `to` | node **or group** ids |
+| `from`, `to` | node **or group** ids — or a **list**, which fans out into one connection per pair (see below) |
 | `label` | shown at the edge midpoint (e.g. `"tcp/443 https"`) |
 | `protocol` | `tcp`, `udp`, … — shown in the Connections table |
 | `port` | destination port number or range — shown in the Connections table |
 | `direction` | `forward` (default), `both`, `none`. In the Connections table a `both` connection is listed twice (once per direction) and a `none` (blocked) connection is left out |
 | `comment` | free-form note (e.g. a rule justification) — shown in the Connections table, not drawn on the edge |
+
+**Fan-out:** either end may be a list, and each pair inherits the label,
+protocol, port, direction and comment:
+
+```yaml
+connections:
+  - {from: lb, to: [web1, web2, web3], label: "tcp/8443 https", protocol: tcp, port: 8443}
+  - {from: [fw1, fw2], to: core, protocol: any}      # both ends may be lists
+```
+
+That is exactly equivalent to writing the pairs out: each one is a separate
+edge, a separate row in the Connections table, and is marked separately when
+comparing. Clicking any of them reveals the line that wrote it, and putting the
+cursor on that line glows all of them.
+
+> **Prefer a group when you can.** A group whose interior no connection touches
+> is packed into a compact grid; connecting to its *members* disables that and
+> stretches the diagram into one wide row. If the targets are all in one group,
+> `to: <the group>` draws better than `to: [every, member]`.
 
 **Crossings:** connection points on a node are automatically ordered toward
 their targets (a second layout pass), so edges fan out of a hub without

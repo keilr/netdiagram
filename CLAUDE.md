@@ -192,7 +192,9 @@ groups:
                            # (bottom padding grows with the box — see
                            # groupHeader() in src/netdiagram.js)
 connections:               # renamed from links: (parseSpec errors on the old key)
-  - from/to: node OR group id
+  - from/to: id | [ids]    # a LIST fans out into one connection per pair (both
+                           # ends may be lists = cross product, self-pairs
+                           # dropped). specFromDoc desugars it — see gotcha 17
     label: str             # shown on edge; equal labels share a palette color
     protocol: str          # tcp|udp|… — shown in the Connections table
     port: int|str          # dest port or range — shown in the Connections table
@@ -309,6 +311,18 @@ suggestions from the schema, so it follows automatically).
     failures are returned as `isError` content rather than thrown, because the
     spec error text (with its document paths) is the most useful thing the
     agent can act on.
+17. **List endpoints are desugared in `specFromDoc`, and nowhere later.** Every
+    lens (filterDoc, focusDoc, diffDocs) matches endpoints with `String(l.to)`:
+    a list stringifies to `"a,b"`, matches no id, and the edge is SILENTLY
+    dropped — and diffDocs would key the whole line, reporting a grown list as
+    one rewritten rule instead of one added rule. Expanding before any lens
+    runs keeps all of them on simple pairs. Consequences: `doc.connections` is
+    always expanded (app.js must use `sourceSpec.doc`, not its own
+    `jsyaml.load` result), each pair carries a NON-ENUMERABLE `_src` pointing
+    at the authored connection (enumerable would make compare see phantom
+    changes), `_src` is never overwritten because specFromDoc runs again on
+    narrowed docs holding the same object references, and YAML -> diagram is
+    one-to-many (`drawnForAuthored`).
 16. **The LLM assistant must never be required.** Anything it produces is YAML
     that goes through `parseSpec` + `lintSpec` before it can reach the diagram,
     and it is applied only through the compare view (Accept / Discard), never

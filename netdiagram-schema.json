@@ -278,12 +278,18 @@
       "additionalProperties": false,
       "properties": {
         "from": {
-          "type": "string",
-          "description": "Source node or group id"
+          "description": "Source node or group id, or a list of them. A list fans out into one connection per pair (both ends may be lists, giving the cross product), and every pair inherits this connection's label, protocol, port, direction and comment. Tip: when the targets are all in one group, connect to the GROUP instead — a group whose interior no connection touches is packed into a compact grid, which a member-level fan-out disables.",
+          "oneOf": [
+            { "type": "string" },
+            { "type": "array", "items": { "type": "string" }, "minItems": 1 }
+          ]
         },
         "to": {
-          "type": "string",
-          "description": "Target node or group id"
+          "description": "Target node or group id, or a list of them — see `from`",
+          "oneOf": [
+            { "type": "string" },
+            { "type": "array", "items": { "type": "string" }, "minItems": 1 }
+          ]
         },
         "label": {
           "type": "string",
