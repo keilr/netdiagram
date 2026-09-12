@@ -92,7 +92,6 @@ views:
       
       <text x="30" y="347.2" font-family="ui-monospace,Menlo,monospace" font-size="11" font-weight="700" letter-spacing="1.6" fill="#4b5866">DC — RACK 3</text>
       <rect class="attr-box" x="346.3166666666666" y="1005.5999999999999" width="161" height="25" rx="3" fill="#ffffff" fill-opacity=".8" stroke="#9aa6b4" stroke-width=".9"/><text x="356.3166666666666" y="1021.5999999999999" font-family="ui-monospace,Menlo,monospace" font-size="10.5" fill="#4b5866"><tspan opacity=".6">cidr: </tspan><tspan opacity=".9">10.40.0.0/16</tspan></text></g>
-      <path class="edge" data-conn="0" data-label="tcp/443 https" d="M189.16666666666666 70L189.16666666666669 166" fill="none" stroke="#0f766e" stroke-width="2" marker-end="url(#ah-0f766e)"/><path class="edge" data-conn="1" data-label="tcp/443 https" d="M151.81666666666666 220.2L151.81666666666666 440.2" fill="none" stroke="#0f766e" stroke-width="2" marker-end="url(#ah-0f766e)"/><path class="edge" data-conn="2" data-label="tcp/443 https" d="M226.51666666666668 220.2L226.51666666666668 256.2L388.81666666666666 256.2L388.81666666666666 440.2" fill="none" stroke="#0f766e" stroke-width="2" marker-end="url(#ah-0f766e)"/><path class="edge" data-conn="3" data-label="tcp/8080 api" d="M151.81666666666666 500.4L151.81666666666666 688.4" fill="none" stroke="#7c3aed" stroke-width="2" marker-end="url(#ah-7c3aed)"/><path class="edge" data-conn="4" data-label="tcp/8080 api" d="M388.81666666666666 500.4L388.81666666666666 559.4L212.18333333333337 559.4L212.18333333333337 688.4" fill="none" stroke="#7c3aed" stroke-width="2" marker-end="url(#ah-7c3aed)"/><path class="edge" data-conn="5" data-label="tcp/6432 pool" d="M182 748.6L182 913.5999999999999" fill="none" stroke="#1d4ed8" stroke-width="2" marker-end="url(#ah-1d4ed8)"/>
       <g class="nd-node" data-id="esx1">
       <rect x="47.31666666666666" y="380.2" width="446" height="134.2" rx="6" fill="#ffffff" stroke="#24344d" stroke-width="1.5"/>
       <rect x="50.31666666666666" y="383.2" width="440" height="128.2" rx="4" fill="none" stroke="#24344d" stroke-width=".8"/>
@@ -102,7 +101,26 @@ views:
       <text x="154.31666666666666" y="418.2" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#7a8798">os: </tspan><tspan fill="#3f5e8c">esxi</tspan></text><text x="154.31666666666666" y="432.2" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#7a8798">ip: </tspan><tspan fill="#3f5e8c">10.40.0.11</tspan></text>
       <rect x="441.31666666666666" y="386.2" width="45" height="12" rx="6" fill="#eef1f4" stroke="#9aa7ba" stroke-width=".8"/>
       <text x="463.81666666666666" y="395.2" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8" font-weight="700" letter-spacing=".8" fill="#5b6874">PROD</text>
-    </g><g class="nd-node" data-id="web1">
+    </g><g class="nd-node" data-id="esx2">
+      <rect x="38" y="628.4" width="291" height="367.2" rx="6" fill="#ffffff" stroke="#24344d" stroke-width="1.5"/>
+      <rect x="41" y="631.4" width="285" height="361.2" rx="4" fill="none" stroke="#24344d" stroke-width=".8"/>
+      <g transform="translate(79.5,637.4)"><g fill="none" stroke="#24344d" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" color="#24344d"><rect x="6" y="6" width="12" height="12" rx="1"/><rect x="10" y="10" width="4" height="4"/><path d="M9.5 6V3M14.5 6V3M9.5 21v-3M14.5 21v-3M6 9.5H3M6 14.5H3M21 9.5h-3M21 14.5h-3"/></g></g>
+      <text x="91.5" y="674.4" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8.5" font-weight="700" letter-spacing=".5" fill="#7a8798">HYPERVISOR</text>
+      <text x="145" y="650.4" font-family="ui-monospace,Menlo,monospace" font-size="13" font-weight="600" fill="#1a2638">esx-02</text>
+      <text x="145" y="666.4" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#7a8798">os: </tspan><tspan fill="#3f5e8c">esxi</tspan></text><text x="145" y="680.4" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#7a8798">ip: </tspan><tspan fill="#3f5e8c">10.40.0.12</tspan></text>
+      <rect x="277" y="634.4" width="45" height="12" rx="6" fill="#eef1f4" stroke="#9aa7ba" stroke-width=".8"/>
+      <text x="299.5" y="643.4" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8" font-weight="700" letter-spacing=".8" fill="#5b6874">PROD</text>
+    </g><g class="nd-node" data-id="db1">
+      <rect x="52" y="853.5999999999999" width="260" height="128" rx="6" fill="#ffffff" stroke="#24344d" stroke-width="1.5" stroke-dasharray="5 3"/>
+      
+      <g transform="translate(64,862.5999999999999)"><g fill="none" stroke="#24344d" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" color="#24344d"><ellipse cx="12" cy="5.5" rx="8" ry="3"/><path d="M4 5.5v13c0 1.66 3.58 3 8 3s8-1.34 8-3v-13M4 12c0 1.66 3.58 3 8 3s8-1.34 8-3"/></g></g>
+      <text x="76" y="899.5999999999999" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8.5" font-weight="700" letter-spacing=".5" fill="#7a8798">VM</text>
+      <text x="100" y="875.5999999999999" font-family="ui-monospace,Menlo,monospace" font-size="13" font-weight="600" fill="#1a2638">pg-primary</text>
+      <text x="100" y="891.5999999999999" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#7a8798">os: </tspan><tspan fill="#3f5e8c">linux</tspan></text><text x="100" y="905.5999999999999" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#7a8798">ip: </tspan><tspan fill="#3f5e8c">10.40.20.21</tspan></text>
+      
+    </g>
+      <path class="edge" data-conn="0" data-label="tcp/443 https" d="M189.16666666666666 70L189.16666666666669 166" fill="none" stroke="#0f766e" stroke-width="2" marker-end="url(#ah-0f766e)"/><path class="edge" data-conn="1" data-label="tcp/443 https" d="M151.81666666666666 220.2L151.81666666666666 440.2" fill="none" stroke="#0f766e" stroke-width="2" marker-end="url(#ah-0f766e)"/><path class="edge" data-conn="2" data-label="tcp/443 https" d="M226.51666666666668 220.2L226.51666666666668 256.2L388.81666666666666 256.2L388.81666666666666 440.2" fill="none" stroke="#0f766e" stroke-width="2" marker-end="url(#ah-0f766e)"/><path class="edge" data-conn="3" data-label="tcp/8080 api" d="M151.81666666666666 500.4L151.81666666666666 688.4" fill="none" stroke="#7c3aed" stroke-width="2" marker-end="url(#ah-7c3aed)"/><path class="edge" data-conn="4" data-label="tcp/8080 api" d="M388.81666666666666 500.4L388.81666666666666 559.4L212.18333333333337 559.4L212.18333333333337 688.4" fill="none" stroke="#7c3aed" stroke-width="2" marker-end="url(#ah-7c3aed)"/><path class="edge" data-conn="5" data-label="tcp/6432 pool" d="M182 748.6L182 913.5999999999999" fill="none" stroke="#1d4ed8" stroke-width="2" marker-end="url(#ah-1d4ed8)"/>
+      <g class="nd-node" data-id="web1">
       <rect x="61.31666666666666" y="440.3" width="181" height="60" rx="6" fill="#ffffff" stroke="#24344d" stroke-width="1.5" stroke-dasharray="5 3"/>
       
       <g transform="translate(73.31666666666666,449.3)"><g fill="none" stroke="#24344d" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" color="#24344d"><rect x="3" y="8" width="13" height="13" rx="1.5"/><path d="M8 8V5.5A1.5 1.5 0 0 1 9.5 4h9A1.5 1.5 0 0 1 20 5.5v9a1.5 1.5 0 0 1-1.5 1.5H16"/></g></g>
@@ -118,15 +136,6 @@ views:
       <text x="346.31666666666666" y="462.3" font-family="ui-monospace,Menlo,monospace" font-size="13" font-weight="600" fill="#1a2638">web-02</text>
       <text x="346.31666666666666" y="478.3" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#7a8798">os: </tspan><tspan fill="#3f5e8c">linux</tspan></text><text x="346.31666666666666" y="492.3" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#7a8798">ip: </tspan><tspan fill="#3f5e8c">10.40.10.12</tspan></text>
       
-    </g><g class="nd-node" data-id="esx2">
-      <rect x="38" y="628.4" width="291" height="367.2" rx="6" fill="#ffffff" stroke="#24344d" stroke-width="1.5"/>
-      <rect x="41" y="631.4" width="285" height="361.2" rx="4" fill="none" stroke="#24344d" stroke-width=".8"/>
-      <g transform="translate(79.5,637.4)"><g fill="none" stroke="#24344d" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" color="#24344d"><rect x="6" y="6" width="12" height="12" rx="1"/><rect x="10" y="10" width="4" height="4"/><path d="M9.5 6V3M14.5 6V3M9.5 21v-3M14.5 21v-3M6 9.5H3M6 14.5H3M21 9.5h-3M21 14.5h-3"/></g></g>
-      <text x="91.5" y="674.4" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8.5" font-weight="700" letter-spacing=".5" fill="#7a8798">HYPERVISOR</text>
-      <text x="145" y="650.4" font-family="ui-monospace,Menlo,monospace" font-size="13" font-weight="600" fill="#1a2638">esx-02</text>
-      <text x="145" y="666.4" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#7a8798">os: </tspan><tspan fill="#3f5e8c">esxi</tspan></text><text x="145" y="680.4" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#7a8798">ip: </tspan><tspan fill="#3f5e8c">10.40.0.12</tspan></text>
-      <rect x="277" y="634.4" width="45" height="12" rx="6" fill="#eef1f4" stroke="#9aa7ba" stroke-width=".8"/>
-      <text x="299.5" y="643.4" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8" font-weight="700" letter-spacing=".8" fill="#5b6874">PROD</text>
     </g><g class="nd-node" data-id="app1">
       <rect x="91.5" y="688.5" width="181" height="60" rx="6" fill="#ffffff" stroke="#24344d" stroke-width="1.5" stroke-dasharray="5 3"/>
       
@@ -134,14 +143,6 @@ views:
       <text x="115.5" y="734.5" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8.5" font-weight="700" letter-spacing=".5" fill="#7a8798">VM</text>
       <text x="139.5" y="710.5" font-family="ui-monospace,Menlo,monospace" font-size="13" font-weight="600" fill="#1a2638">app-01</text>
       <text x="139.5" y="726.5" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#7a8798">os: </tspan><tspan fill="#3f5e8c">linux</tspan></text><text x="139.5" y="740.5" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#7a8798">ip: </tspan><tspan fill="#3f5e8c">10.40.20.11</tspan></text>
-      
-    </g><g class="nd-node" data-id="db1">
-      <rect x="52" y="853.5999999999999" width="260" height="128" rx="6" fill="#ffffff" stroke="#24344d" stroke-width="1.5" stroke-dasharray="5 3"/>
-      
-      <g transform="translate(64,862.5999999999999)"><g fill="none" stroke="#24344d" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" color="#24344d"><ellipse cx="12" cy="5.5" rx="8" ry="3"/><path d="M4 5.5v13c0 1.66 3.58 3 8 3s8-1.34 8-3v-13M4 12c0 1.66 3.58 3 8 3s8-1.34 8-3"/></g></g>
-      <text x="76" y="899.5999999999999" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8.5" font-weight="700" letter-spacing=".5" fill="#7a8798">VM</text>
-      <text x="100" y="875.5999999999999" font-family="ui-monospace,Menlo,monospace" font-size="13" font-weight="600" fill="#1a2638">pg-primary</text>
-      <text x="100" y="891.5999999999999" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#7a8798">os: </tspan><tspan fill="#3f5e8c">linux</tspan></text><text x="100" y="905.5999999999999" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#7a8798">ip: </tspan><tspan fill="#3f5e8c">10.40.20.21</tspan></text>
       
     </g><g class="nd-node" data-id="pgb">
       <rect x="66" y="913.5999999999999" width="232" height="54" rx="6" fill="#ffffff" stroke="#24344d" stroke-width="1.5" stroke-dasharray="2 3"/>
