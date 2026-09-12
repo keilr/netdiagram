@@ -388,6 +388,19 @@ test("validation: node in two groups", () =>
 test("validation: rank must be numeric", () =>
   expectError("nodes:\n  - {id: a, rank: upper}", "rank must be a number"));
 
+/* a list endpoint used to stringify into one nonsense id ('unknown endpoint
+ * "a,b"'), which reads like a typo rather than an unsupported shape */
+test("validation: a list endpoint says so instead of inventing an id", () => {
+  expectError("nodes:\n  - {id: a}\n  - {id: b}\nconnections:\n  - {from: a, to: [a, b]}\n",
+    "to is a list");
+  expectError("nodes:\n  - {id: a}\n  - {id: b}\nconnections:\n  - {from: [a, b], to: a}\n",
+    "from is a list");
+  let msg = "";
+  try { parseSpec("nodes:\n  - {id: a}\n  - {id: b}\nconnections:\n  - {from: a, to: [a, b]}\n"); }
+  catch (e) { msg = e.message; }
+  assert.ok(!/unknown endpoint/.test(msg), "no bogus 'unknown endpoint \"a,b\"': " + msg);
+});
+
 // ---------- editor value completion ----------
 test("editor: value completion offers enum values and document ids", () => {
   // bundle src/editor.js like the build does (its deps are ESM-only)

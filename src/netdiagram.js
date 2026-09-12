@@ -320,9 +320,18 @@ function specFromDoc(doc){
   const connections = Array.isArray(doc.connections) ? doc.connections : [];
   connections.forEach((l,i)=>{
     if (!l || l.from == null || l.to == null) { err(['connections', i], `connections[${i}]: needs from + to`); return; }
-    for (const end of ['from', 'to'])
+    for (const end of ['from', 'to']){
+      /* A list here would stringify to "a,b" and be reported as one absurd
+       * unknown id, which reads like a typo rather than an unsupported shape.
+       * Say what is actually wrong. */
+      if (Array.isArray(l[end])){
+        err(['connections', i, end],
+          `connections[${i}]: ${end} is a list — lists of endpoints are not supported, write one connection per pair`);
+        continue;
+      }
       if (!nodeMap.has(String(l[end])) && !groupMap.has(String(l[end])))
         err(['connections', i, end], `connections[${i}]: unknown endpoint "${l[end]}"`);
+    }
   });
 
   const viewIds = new Set();
