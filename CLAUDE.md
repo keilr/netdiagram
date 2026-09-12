@@ -311,7 +311,7 @@ suggestions from the schema, so it follows automatically).
     failures are returned as `isError` content rather than thrown, because the
     spec error text (with its document paths) is the most useful thing the
     agent can act on.
-18. **Never put a RAW control byte in source — always write `'\u0000'`.**
+16. **Never put a RAW control byte in source — always write `'\u0000'`.**
     `diffDocs`, `lintSpec` and app.js's tag-filter cache use NUL (and SOH) as
     key separators, which is fine; writing them as literal bytes is not. With
     raw bytes present, `file` classifies the source as `data`, and **GNU grep
@@ -334,11 +334,19 @@ suggestions from the schema, so it follows automatically).
     changes), `_src` is never overwritten because specFromDoc runs again on
     narrowed docs holding the same object references, and YAML -> diagram is
     one-to-many (`drawnForAuthored`).
-16. **The LLM assistant must never be required.** Anything it produces is YAML
+18. **The LLM assistant must never be required.** Anything it produces is YAML
     that goes through `parseSpec` + `lintSpec` before it can reach the diagram,
     and it is applied only through the compare view (Accept / Discard), never
     written over the buffer. Keep it behind `typeof Assist`, keep the network
     call in one injectable place, and keep the tests offline.
+19. **Paint order: groups, CONTAINER nodes, edges, leaf nodes, labels.** A node
+    holding other nodes is drawn with an opaque `nodeFill` box, so painted
+    after the edges it covers every edge routed inside it — an edge between two
+    of its guests shows only its label, because labels paint last. Containers
+    therefore emit into `gContainers` and paint BEFORE the edges, exactly as
+    groups do; leaf nodes still paint after, so an edge end tucks under the box
+    it terminates at. A test asserts the ordering: the golden SVGs cannot catch
+    this, because they compare bytes and a hidden edge is still in the markup.
 
 ## Conventions
 

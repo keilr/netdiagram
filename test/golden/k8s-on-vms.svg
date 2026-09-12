@@ -112,6 +112,15 @@ views:
       
       <text x="30" y="1173.2" font-family="ui-monospace,Menlo,monospace" font-size="11" font-weight="700" letter-spacing="1.6" fill="#4b5866">VSPHERE</text>
       <rect class="attr-box" x="454" y="1501.2" width="161" height="25" rx="3" fill="#ffffff" fill-opacity=".8" stroke="#9aa6b4" stroke-width=".9"/><text x="464" y="1517.2" font-family="ui-monospace,Menlo,monospace" font-size="10.5" fill="#4b5866"><tspan opacity=".6">cidr: </tspan><tspan opacity=".9">10.50.9.0/24</tspan></text></g>
+      <g class="nd-node" data-id="hv1">
+      <rect x="38" y="1357.2" width="252" height="134" rx="6" fill="#ffffff" stroke="#24344d" stroke-width="1.5"/>
+      <rect x="41" y="1360.2" width="246" height="128" rx="4" fill="none" stroke="#24344d" stroke-width=".8"/>
+      <g transform="translate(79.5,1366.2)"><g fill="none" stroke="#24344d" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" color="#24344d"><rect x="6" y="6" width="12" height="12" rx="1"/><rect x="10" y="10" width="4" height="4"/><path d="M9.5 6V3M14.5 6V3M9.5 21v-3M14.5 21v-3M6 9.5H3M6 14.5H3M21 9.5h-3M21 14.5h-3"/></g></g>
+      <text x="91.5" y="1403.2" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8.5" font-weight="700" letter-spacing=".5" fill="#7a8798">HYPERVISOR</text>
+      <text x="145" y="1379.2" font-family="ui-monospace,Menlo,monospace" font-size="13" font-weight="600" fill="#1a2638">esx-01</text>
+      <text x="145" y="1395.2" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#7a8798">os: </tspan><tspan fill="#3f5e8c">esxi</tspan></text><text x="145" y="1409.2" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#7a8798">ip: </tspan><tspan fill="#3f5e8c">10.50.9.11</tspan></text>
+      
+    </g>
       <path class="edge" data-conn="0" data-label="tcp/443 https" d="M525.5 70L525.5 221" fill="none" stroke="#0f766e" stroke-width="2" marker-end="url(#ah-0f766e)"/><path class="edge" data-conn="1" data-label="tcp/30443 nodeport" d="M525.5 275.2L525.5 371.2" fill="none" stroke="#7c3aed" stroke-width="2" marker-end="url(#ah-7c3aed)"/><path class="edge" data-conn="2" data-label="tcp/6443 kube-api" d="M525.5 680.2L525.5 776.2" fill="none" stroke="#1d4ed8" stroke-width="2" marker-end="url(#ah-1d4ed8)"/><path class="edge" data-conn="3" data-label="runs on" d="M319.5 1055.2L319.5 1151.2" fill="none" stroke="#9d174d" stroke-width="2"/>
       <g class="nd-node" data-id="ing">
       <rect x="413.5" y="221.1" width="224" height="54" rx="6" fill="#ffffff" stroke="#24344d" stroke-width="1.5"/>
@@ -192,14 +201,6 @@ views:
       <text x="365.5" y="962.2" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8.5" font-weight="700" letter-spacing=".5" fill="#7a8798">VM</text>
       <text x="389.5" y="938.2" font-family="ui-monospace,Menlo,monospace" font-size="13" font-weight="600" fill="#1a2638">cp-03</text>
       <text x="389.5" y="954.2" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#7a8798">os: </tspan><tspan fill="#3f5e8c">linux</tspan></text><text x="389.5" y="968.2" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#7a8798">ip: </tspan><tspan fill="#3f5e8c">10.50.0.13</tspan></text><text x="389.5" y="982.2" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#7a8798">etcd: </tspan><tspan fill="#3f5e8c">member</tspan></text>
-      
-    </g><g class="nd-node" data-id="hv1">
-      <rect x="38" y="1357.2" width="252" height="134" rx="6" fill="#ffffff" stroke="#24344d" stroke-width="1.5"/>
-      <rect x="41" y="1360.2" width="246" height="128" rx="4" fill="none" stroke="#24344d" stroke-width=".8"/>
-      <g transform="translate(79.5,1366.2)"><g fill="none" stroke="#24344d" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" color="#24344d"><rect x="6" y="6" width="12" height="12" rx="1"/><rect x="10" y="10" width="4" height="4"/><path d="M9.5 6V3M14.5 6V3M9.5 21v-3M14.5 21v-3M6 9.5H3M6 14.5H3M21 9.5h-3M21 14.5h-3"/></g></g>
-      <text x="91.5" y="1403.2" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8.5" font-weight="700" letter-spacing=".5" fill="#7a8798">HYPERVISOR</text>
-      <text x="145" y="1379.2" font-family="ui-monospace,Menlo,monospace" font-size="13" font-weight="600" fill="#1a2638">esx-01</text>
-      <text x="145" y="1395.2" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#7a8798">os: </tspan><tspan fill="#3f5e8c">esxi</tspan></text><text x="145" y="1409.2" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="#7a8798">ip: </tspan><tspan fill="#3f5e8c">10.50.9.11</tspan></text>
       
     </g><g class="nd-node" data-id="vc">
       <rect x="52" y="1417.2" width="224" height="60" rx="6" fill="#ffffff" stroke="#24344d" stroke-width="1.5" stroke-dasharray="5 3"/>

@@ -1278,7 +1278,7 @@ test("containment: sourceMap locates a nested node; the cursor picks the innermo
 /* A raw control byte in a source file makes `file` report it as `data` and
  * makes GNU grep SILENTLY report no matches — a search then looks like proof
  * that code is absent when it is right there. Separators must be written as
- * escapes (see CLAUDE.md gotcha 18). This guard is why they cannot come back. */
+ * escapes (see CLAUDE.md gotcha 16). This guard is why they cannot come back. */
 test("no source or doc file contains a raw control byte", () => {
   const roots = ["src", "scripts", "test", "examples", "docs"];
   const files = [];
@@ -1303,8 +1303,52 @@ test("no source or doc file contains a raw control byte", () => {
     });
   }
   assert.deepStrictEqual(offenders, [],
-    "write the escape (\\u0000), never the byte — see CLAUDE.md gotcha 18");
+    "write the escape (\\u0000), never the byte — see CLAUDE.md gotcha 16");
   assert.ok(files.length > 25, `scanned a plausible number of files (${files.length})`);
+});
+
+// ---------- paint order ----------
+/* A container node's box is opaque. Painted after the edges it covers every
+ * edge routed inside it — an edge between two of its guests then shows only
+ * its label, which is exactly the bug this guards. The golden SVGs cannot
+ * catch it: they compare bytes, and a hidden edge is still in the markup. */
+test("paint order: a container's box is drawn before the edges it would cover", async () => {
+  const text = `
+nodes:
+  - id: host
+    label: esx-01
+    type: hypervisor
+    nodes:
+      - {id: a, label: app, type: vm}
+      - id: inner
+        label: db
+        type: vm
+        nodes:
+          - {id: b, label: pool, type: container}
+connections:
+  - {from: a, to: b, label: "tcp/6432 pool", protocol: tcp, port: 6432}
+`;
+  const s = parseSpec(text);
+  const svg = renderSVG(s, await layoutOf(s), {});
+
+  const edgeAt = svg.indexOf('<path class="edge"');
+  assert.ok(edgeAt > 0, "the edge is drawn at all");
+  for (const id of ["host", "inner"]) {
+    const at = svg.indexOf(`<g class="nd-node" data-id="${id}"`);
+    assert.ok(at > 0, `${id} is drawn`);
+    assert.ok(at < edgeAt, `container "${id}" must paint BEFORE the edges, or its opaque box hides them`);
+  }
+  // leaf nodes still paint after, so an edge end tucks under the box it meets
+  for (const id of ["a", "b"]) {
+    const at = svg.indexOf(`<g class="nd-node" data-id="${id}"`);
+    assert.ok(at > edgeAt, `leaf "${id}" still paints after the edges`);
+  }
+  // and the edge has real geometry, not just a label floating in space
+  const d = /<path class="edge"[^>]*?\sd="(M[^"]*)"/.exec(svg)[1];
+  const pts = [...d.matchAll(/[ML]([\d.-]+) ([\d.-]+)/g)].map((p) => ({ x: +p[1], y: +p[2] }));
+  let len = 0;
+  for (let i = 1; i < pts.length; i++) len += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
+  assert.ok(len > 10, `the edge has length (${len.toFixed(1)})`);
 });
 
 // ---------- list endpoints (fan-out) ----------

@@ -1496,7 +1496,7 @@ function renderSVG(spec, layout, opts = {}){
     </marker>`;
   }
 
-  let gGroups = '', gNodes = '', gEdges = '', gLabels = '';
+  let gGroups = '', gContainers = '', gNodes = '', gEdges = '', gLabels = '';
 
   // groups (parents before children so nesting paints correctly — walk order already ensures it via Map insertion)
   for (const [id, b] of abs){
@@ -1566,7 +1566,7 @@ function renderSVG(spec, layout, opts = {}){
       `<text x="${tx}" y="${b.y + 38 + i*14}" font-family="ui-monospace,Menlo,monospace" font-size="10.5"><tspan fill="${T.muted}">${esc(k)}: </tspan><tspan fill="${T.value}">${esc(v)}</tspan></text>`
     ).join('');
     const ds = statusOf('nodes', id);
-    gNodes += `<g class="nd-node" data-id="${esc(id)}"${ds === 'removed' ? ' opacity=".5"' : ''}>
+    const markup = `<g class="nd-node" data-id="${esc(id)}"${ds === 'removed' ? ' opacity=".5"' : ''}>
       <rect x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" rx="6" fill="${T.nodeFill}" stroke="${T.ink}" stroke-width="1.5"${borderDash}/>
       ${inner}${diffHalo(ds, b, 10)}
       ${glyph ? `<g transform="translate(${iconX},${b.y+9})"><g fill="none" stroke="${T.ink}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" color="${T.ink}">${glyph}</g></g>` : ''}
@@ -1575,6 +1575,14 @@ function renderSVG(spec, layout, opts = {}){
       ${kvText}
       ${badge}${diffMark(ds, b.x, b.y)}
     </g>`;
+    /* A node holding other nodes is a CONTAINER, and its box is opaque: painted
+     * after the edges it would cover every edge routed inside it (an edge
+     * between two of its guests is then invisible, leaving only its label).
+     * Containers therefore paint with the groups, BEFORE the edges — exactly
+     * as a group does — while leaf nodes still paint after, so edge ends stay
+     * tucked under the box they terminate at. See gotcha 19. */
+    if (childrenOf(n).length) gContainers += markup;
+    else gNodes += markup;
   }
 
   // edges — ELK places hierarchical edges relative to a container node; offset to absolute
@@ -1653,7 +1661,7 @@ function renderSVG(spec, layout, opts = {}){
     <rect width="${totW}" height="${totH}" fill="${T.bg}"/>
     <rect width="${totW}" height="${totH}" fill="url(#gridL)"/>
     <g transform="translate(${PAD},${PAD})">
-      ${gGroups}
+      ${gGroups}${gContainers ? '\n      ' + gContainers : ''}
       ${gEdges}
       ${gNodes}
       ${gLabels}
