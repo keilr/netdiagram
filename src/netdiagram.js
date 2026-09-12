@@ -762,9 +762,9 @@ function diffDocs(base, cur){
   const connKeys = list => {
     const seen = new Map();
     return (list || []).map(l => {
-      const k = l ? String(l.from) + ' ' + String(l.to) : '';
+      const k = l ? String(l.from) + '\u0000' + String(l.to) : '';
       const nth = seen.get(k) || 0; seen.set(k, nth + 1);
-      return k + ' ' + nth;
+      return k + '\u0000' + nth;
     });
   };
   const bKeys = connKeys(base.connections), cKeys = connKeys(cur.connections);
@@ -912,14 +912,14 @@ function lintSpec(spec){
     if (String(l.from) === String(l.to))
       add('self-connection', 'error', ['connections', at(l, i)],
         `connections[${at(l, i)}] joins "${l.from}" to itself`);
-    const key = [String(l.from), String(l.to)].sort().join(' ');
+    const key = [String(l.from), String(l.to)].sort().join('\u0000');
     if (dirOf(l) === 'none'){ if (!blocked.has(key)) blocked.set(key, at(l, i)); }
     else allowed.add(key);
   });
   for (const [key, i] of blocked)
     if (allowed.has(key))
       add('blocked-contradiction', 'error', ['connections', i],
-        `"${key.split(' ').join('" and "')}" are both blocked and allowed`);
+        `"${key.split('\u0000').join('" and "')}" are both blocked and allowed`);
 
   /* --- reachability --- */
   const touched = n => endpoints.has(String(n.id)) || childrenOf(n).some(touched);

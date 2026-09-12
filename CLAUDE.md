@@ -311,6 +311,17 @@ suggestions from the schema, so it follows automatically).
     failures are returned as `isError` content rather than thrown, because the
     spec error text (with its document paths) is the most useful thing the
     agent can act on.
+18. **Never put a RAW control byte in source — always write `'\u0000'`.**
+    `diffDocs`, `lintSpec` and app.js's tag-filter cache use NUL (and SOH) as
+    key separators, which is fine; writing them as literal bytes is not. With
+    raw bytes present, `file` classifies the source as `data`, and **GNU grep
+    silently reports no matches** — not an error, just nothing, so a search
+    looks like proof that code is absent when it is right there. It also
+    breaks `git diff` and GitHub rendering. This cost real time three separate
+    times in one session: greps that "proved" a function did not exist, and
+    two Edits that failed because the file held `join('<NUL>')` where every
+    tool rendered `join(' ')`. The escape is the same string at runtime, so
+    there is no reason to ever write the byte.
 17. **List endpoints are desugared in `specFromDoc`, and nowhere later.** Every
     lens (filterDoc, focusDoc, diffDocs) matches endpoints with `String(l.to)`:
     a list stringifies to `"a,b"`, matches no id, and the edge is SILENTLY
