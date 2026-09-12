@@ -1274,6 +1274,103 @@ test("containment: sourceMap locates a nested node; the cursor picks the innermo
   assert.deepStrictEqual(m.itemAt(text.indexOf("id: v") + 2), { kind: "node", id: "v" });
 });
 
+// ---------- list endpoints (fan-out) ----------
+/* lb is tagged too, so the filter test below has surviving pairs */
+const FANOUT = `
+nodes:
+  - {id: lb, tags: [prod]}
+  - {id: w1, tags: [prod]}
+  - {id: w2, tags: [prod]}
+  - {id: db}
+connections:
+  - {from: lb, to: [w1, w2], label: "tcp/8443 https", protocol: tcp, port: 8443}
+  - {from: [w1, w2], to: db, label: "tcp/5432 pgsql", protocol: tcp, port: 5432}
+`;
+const pairs = (d) => (d.connections || []).map((c) => `${c.from}->${c.to}`);
+
+test("fan-out: a list endpoint expands into one connection per pair", () => {
+  const s = parseSpec(FANOUT);
+  assert.deepStrictEqual(pairs(s.doc), ["lb->w1", "lb->w2", "w1->db", "w2->db"]);
+  assert.strictEqual(s.doc.connections[0].label, "tcp/8443 https", "each pair inherits the attributes");
+  assert.strictEqual(s.doc.connections[3].port, 5432);
+  // both ends may be lists: the cross product, minus any self-pair
+  assert.deepStrictEqual(
+    pairs(parseSpec("nodes:\n  - {id: a}\n  - {id: b}\n  - {id: c}\nconnections:\n  - {from: [a, b], to: [b, c]}\n").doc),
+    ["a->b", "a->c", "b->c"], "a cross product never pairs an id with itself");
+});
+
+test("fan-out: a document without lists keeps its identity", () => {
+  const doc = { nodes: [{ id: "a" }, { id: "b" }], connections: [{ from: "a", to: "b" }] };
+  assert.strictEqual(nd.specFromDoc(doc).doc, doc, "returned unchanged, so reference comparisons still hold");
+});
+
+/* the three ways a naive implementation breaks silently — each was reproduced
+ * against the real code before this feature existed */
+test("fan-out: the tag filter keeps the expanded edges (they used to vanish)", () => {
+  const s = parseSpec(FANOUT);
+  const f = nd.filterDoc(s.doc, ["prod"]);
+  assert.deepStrictEqual(pairs(f), ["lb->w1", "lb->w2"],
+    "unexpanded, String(['w1','w2']) matched no id and the whole connection was dropped");
+});
+
+test("fan-out: growing a list reads as an ADDED rule, not a rewritten one", () => {
+  const nodes = "nodes:\n  - {id: lb}\n  - {id: w1}\n  - {id: w2}\n";
+  // a single-element list must normalise to a scalar, or canon() sees a change
+  const before = parseSpec(nodes + "connections:\n  - {from: lb, to: [w1]}\n").doc;
+  assert.strictEqual(before.connections[0].to, "w1", "['w1'] is rewritten to 'w1'");
+  const after = parseSpec(nodes + "connections:\n  - {from: lb, to: [w1, w2]}\n").doc;
+  const d = nd.diffDocs(before, after);
+  assert.deepStrictEqual(d.counts, { added: 1, removed: 0, changed: 0 });
+  assert.strictEqual(d.status.connections.get(1), "added", "the new pair is the addition");
+  assert.ok(!d.status.connections.has(0), "the existing lb->w1 rule is untouched");
+});
+
+test("fan-out: every expanded edge points back at the line that authored it", () => {
+  const text = "nodes:\n  - {id: lb}\n  - {id: w1}\n  - {id: w2}\nconnections:\n  - {from: lb, to: [w1, w2]}\n";
+  const s = parseSpec(text);
+  assert.deepStrictEqual(s.doc.connections.map((c) => c._src), [0, 0], "both came from connections[0]");
+  // itemRange ends at the last descendant scalar, so the closing "]}" is outside it
+  assert.ok(slice(text, nd.sourceMap(text).itemRange("connection", 0)).includes("to: [w1"));
+  // the back-pointer must be invisible to value comparison, or compare sees phantom changes
+  assert.ok(!Object.keys(s.doc.connections[0]).includes("_src"), "_src is non-enumerable");
+  assert.ok(!JSON.stringify(s.doc.connections[0]).includes("_src"));
+});
+
+test("fan-out: narrowing a document does not rewrite the back-pointer", () => {
+  const s = parseSpec(FANOUT);
+  const narrowed = nd.filterDoc(s.doc, ["prod"]);
+  const again = nd.specFromDoc(narrowed);   // app.js re-validates the narrowed doc
+  assert.deepStrictEqual(again.doc.connections.map((c) => c._src), [0, 0],
+    "still the authored line, not the index within the narrowed list");
+});
+
+test("fan-out: rules and lint report against the authored line", () => {
+  const s = parseSpec(FANOUT);
+  const { rules } = nd.connectionRules(s);
+  assert.strictEqual(rules.length, 4, "one rule per pair");
+  /* the list must come FIRST, or the expanded index coincides with the
+   * authored one and the assertion would pass either way: here `to: [b, c]`
+   * occupies expanded slots 0 and 1, so the blocked line is authored 1 but
+   * expanded 2 */
+  const lint = nd.lintSpec(parseSpec(
+    "nodes:\n  - {id: a}\n  - {id: b}\n  - {id: c}\n"
+    + "connections:\n  - {from: a, to: [b, c]}\n  - {from: a, to: b, direction: none}\n"));
+  const contra = lint.find((f) => f.rule === "blocked-contradiction");
+  assert.ok(contra, "a blocked pair that is also allowed is still caught after expansion");
+  assert.deepStrictEqual(contra.path, ["connections", 1],
+    "path points at the authored line (expanded index would be 2)");
+});
+
+test("validation: ids inside a list are checked individually", () => {
+  expectError("nodes:\n  - {id: a}\nconnections:\n  - {from: a, to: [a, ghost]}\n", 'unknown endpoint "ghost"');
+  expectError("nodes:\n  - {id: a}\nconnections:\n  - {from: a, to: []}\n", "to is an empty list");
+  let err;
+  try { parseSpec("nodes:\n  - {id: a}\n  - {id: b}\nconnections:\n  - {from: a, to: [b, ghost]}\n"); }
+  catch (e) { err = e; }
+  assert.deepStrictEqual(err.errors[0].path, ["connections", 0, "to", 1],
+    "the path points at the offending entry in the list");
+});
+
 // ---------- MCP server (netdiagram as a tool for agents) ----------
 /* Drive the real server over stdio: spawn, write newline-delimited JSON-RPC,
  * collect one response per request.

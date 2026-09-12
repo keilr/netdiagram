@@ -317,20 +317,28 @@ function specFromDoc(doc){
   }
   walkGroups(doc.groups, ['groups']);
 
+  /* from/to accept a list, which fans out into one connection per pair.
+   * Error paths keep the AUTHORED index (and the position within the list), so
+   * the editor underlines the id actually at fault. */
+  const endsOf = v => Array.isArray(v) ? v : [v];
   const connections = Array.isArray(doc.connections) ? doc.connections : [];
   connections.forEach((l,i)=>{
     if (!l || l.from == null || l.to == null) { err(['connections', i], `connections[${i}]: needs from + to`); return; }
     for (const end of ['from', 'to']){
-      /* A list here would stringify to "a,b" and be reported as one absurd
-       * unknown id, which reads like a typo rather than an unsupported shape.
-       * Say what is actually wrong. */
-      if (Array.isArray(l[end])){
-        err(['connections', i, end],
-          `connections[${i}]: ${end} is a list — lists of endpoints are not supported, write one connection per pair`);
+      const isList = Array.isArray(l[end]), ids = endsOf(l[end]);
+      if (isList && !ids.length){
+        err(['connections', i, end], `connections[${i}]: ${end} is an empty list`);
         continue;
       }
-      if (!nodeMap.has(String(l[end])) && !groupMap.has(String(l[end])))
-        err(['connections', i, end], `connections[${i}]: unknown endpoint "${l[end]}"`);
+      ids.forEach((id, k) => {
+        const path = isList ? ['connections', i, end, k] : ['connections', i, end];
+        if (id == null || typeof id === 'object'){
+          err(path, `connections[${i}]: ${end} must be an id, or a list of ids`);
+          return;
+        }
+        if (!nodeMap.has(String(id)) && !groupMap.has(String(id)))
+          err(path, `connections[${i}]: unknown endpoint "${id}"`);
+      });
     }
   });
 
@@ -353,7 +361,42 @@ function specFromDoc(doc){
     e.isSpec = true; e.errors = errors;
     throw e;
   }
-  return { doc, nodeMap, groupMap, claimed, hosted };
+
+  /* ---- desugar list endpoints, HERE and nowhere later ----
+   * Every lens (filterDoc, focusDoc, diffDocs) matches endpoints with
+   * String(l.to). A list would stringify to "a,b", match no id, and silently
+   * drop the edge — and diffDocs would key the whole line, reporting a grown
+   * list as one rewritten rule instead of one added rule. Expanding before any
+   * of them runs means they all keep seeing simple pairs and need no changes.
+   *
+   * Each pair carries a NON-ENUMERABLE back-pointer to the connection that
+   * authored it, so click-to-source can find the YAML line while canon() and
+   * JSON.stringify stay blind to it (an enumerable key would make compare
+   * report phantom changes). Never overwrite one that already exists:
+   * specFromDoc runs again on narrowed documents whose connection objects are
+   * the SAME references, and that would rewrite authored indices into
+   * narrowed ones. */
+  const tag = (conn, i) => {
+    if (conn._src === undefined)
+      Object.defineProperty(conn, '_src', { value: i, enumerable: false, configurable: true });
+    return conn;
+  };
+  const expanded = [];
+  connections.forEach((l, i) => {
+    /* Key off "was a list written?", NOT "did it expand to one pair?" — a
+     * single-element `to: [w1]` must still be rewritten to a scalar, or the
+     * array survives into the document and canon() sees ["w1"] != "w1",
+     * reporting a phantom change in compare. */
+    if (!Array.isArray(l.from) && !Array.isArray(l.to)){ expanded.push(tag(l, i)); return; }
+    for (const f of endsOf(l.from)) for (const t of endsOf(l.to)){
+      if (String(f) === String(t)) continue;      // a cross product can pair an id with itself
+      expanded.push(tag({ ...l, from: f, to: t }, i));
+    }
+  });
+  /* a document without lists keeps its identity, so nothing downstream that
+   * compares docs by reference changes behaviour */
+  const same = expanded.length === connections.length && expanded.every((c, k) => c === connections[k]);
+  return { doc: same ? doc : { ...doc, connections: expanded }, nodeMap, groupMap, claimed, hosted };
 }
 
 /* ---------------- source map (YAML offsets for document paths) ----------------
@@ -861,12 +904,16 @@ function lintSpec(spec){
   /* --- connections --- */
   const endpoints = new Set((doc.connections||[]).flatMap(l => l ? [String(l.from), String(l.to)] : []));
   const allowed = new Set(), blocked = new Map();
+  /* connections are expanded by now, so report against the line the author
+   * actually wrote (_src) rather than the position after fan-out */
+  const at = (l, i) => (l && l._src !== undefined) ? l._src : i;
   (doc.connections||[]).forEach((l, i) => {
     if (!l) return;
     if (String(l.from) === String(l.to))
-      add('self-connection', 'error', ['connections', i], `connections[${i}] joins "${l.from}" to itself`);
+      add('self-connection', 'error', ['connections', at(l, i)],
+        `connections[${at(l, i)}] joins "${l.from}" to itself`);
     const key = [String(l.from), String(l.to)].sort().join(' ');
-    if (dirOf(l) === 'none'){ if (!blocked.has(key)) blocked.set(key, i); }
+    if (dirOf(l) === 'none'){ if (!blocked.has(key)) blocked.set(key, at(l, i)); }
     else allowed.add(key);
   });
   for (const [key, i] of blocked)
