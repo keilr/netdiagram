@@ -126,9 +126,9 @@ connections:
     <path d="M1665 369 h232 M1815 369 V403" stroke="#24344d" stroke-width="1"/>
     <text x="1674" y="363.5" font-family="ui-monospace,Menlo,monospace" font-size="10.5" font-weight="700" letter-spacing="1.2" fill="#24344d">EDGE &amp; APP TIER</text>
     <text x="1674" y="386" font-family="ui-monospace,Menlo,monospace" font-size="9" letter-spacing="1" fill="#7a8798">DRAWN</text>
-    <text x="1674" y="397" font-family="ui-monospace,Menlo,monospace" font-size="10" fill="#24344d">netdiagram v0.5.0</text>
+    <text x="1674" y="397" font-family="ui-monospace,Menlo,monospace" font-size="10" fill="#24344d">netdiagram v0.6.0</text>
     <text x="1824" y="386" font-family="ui-monospace,Menlo,monospace" font-size="9" letter-spacing="1" fill="#7a8798">DATE</text>
-    <text x="1824" y="397" font-family="ui-monospace,Menlo,monospace" font-size="10" fill="#24344d">2026-09-11</text>
+    <text x="1824" y="397" font-family="ui-monospace,Menlo,monospace" font-size="10" fill="#24344d">2026-09-12</text>
     
   </g>
   </svg>
