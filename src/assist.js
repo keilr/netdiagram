@@ -28,19 +28,28 @@
    * Local engines first: they keep the topology on the machine, which is the
    * right default for this audience. `base` is an OpenAI-style root (…/v1) for
    * the openai shape, or the API root for anthropic. */
+  /* `cors` names the switch that lets a browser page talk to that engine. A
+   * local server refusing the preflight is THE most common failure here, and
+   * the diagnostics are usually misleading (LM Studio answers the OPTIONS with
+   * "'messages' field is required"), so the hint is shown up front in the panel
+   * and repeated in the error. */
   const PROVIDERS = [
     { id: "ollama", label: "Ollama (local)", api: "openai", local: true,
       base: "http://localhost:11434/v1", model: "llama3.1", keyRequired: false,
-      note: "Runs on your machine. From a file:// page, start Ollama with OLLAMA_ORIGINS=* or the browser blocks the request." },
+      cors: 'start it with OLLAMA_ORIGINS="*"',
+      note: 'Runs on your machine. From a file:// page it must allow this origin: start Ollama with OLLAMA_ORIGINS="*".' },
     { id: "llamacpp", label: "llama.cpp server (local)", api: "openai", local: true,
       base: "http://localhost:8080/v1", model: "local-model", keyRequired: false,
-      note: "llama-server --host 127.0.0.1 --port 8080." },
+      cors: "the server must send CORS headers for this page's origin",
+      note: "llama-server --host 127.0.0.1 --port 8080, and it must allow this page's origin." },
     { id: "lmstudio", label: "LM Studio (local)", api: "openai", local: true,
       base: "http://localhost:1234/v1", model: "local-model", keyRequired: false,
-      note: "Enable the local server in LM Studio's Developer tab." },
+      cors: "Developer tab -> Settings -> Enable CORS",
+      note: "Developer tab: start the server, then Settings -> Enable CORS. Without it LM Studio rejects the browser's preflight and reports it misleadingly as \"'messages' field is required\"." },
     { id: "vllm", label: "vLLM (self-hosted)", api: "openai", local: true,
       base: "http://localhost:8000/v1", model: "meta-llama/Llama-3.1-8B-Instruct", keyRequired: false,
-      note: "Point base at your inference host." },
+      cors: "the server must allow this page's origin",
+      note: "Point the endpoint at your inference host; it must allow this page's origin." },
     { id: "anthropic", label: "Anthropic — Claude", api: "anthropic", local: false,
       base: "https://api.anthropic.com/v1", model: "claude-sonnet-5", keyRequired: true,
       note: "Sends your diagram to Anthropic. claude-opus-5 is the most capable; claude-haiku-4-5-20251001 the fastest." },
@@ -183,11 +192,14 @@
         body: JSON.stringify(req.body),
       });
     } catch (e) {
-      /* the common ones: endpoint down, or the browser blocked a cross-origin
-       * call to a local server — say so, the raw TypeError helps nobody */
+      /* Two causes, and fetch reports both as an opaque TypeError: the endpoint
+       * is down, or it refused the browser's CORS preflight. Name the switch for
+       * the provider actually selected — pointing an LM Studio user at
+       * OLLAMA_ORIGINS wastes their time. */
+      const p = providerById(cfg.providerId);
       throw new Error(
-        `could not reach ${req.url} (${e.message}). If it is a local server, it must allow ` +
-        "requests from this page's origin — e.g. start Ollama with OLLAMA_ORIGINS=*.",
+        `could not reach ${req.url} (${e.message}). Either it is not running, or it did not allow ` +
+        "this page's origin (CORS)" + (p.cors ? ` — for ${p.label}: ${p.cors}` : "") + ".",
         { cause: e });
     }
     let json = null;

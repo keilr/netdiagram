@@ -407,9 +407,18 @@ entirely — no provider code, no `Assist` global, and the button stays hidden.
 The test suite asserts that.
 
 > **Local engines and the browser:** a page opened from `file://` calling
-> `http://localhost:11434` is a cross-origin request. Start Ollama with
-> `OLLAMA_ORIGINS=*` (or the equivalent for your server), or the browser blocks
-> it before it leaves the machine.
+> `http://localhost:…` is a cross-origin request, so the engine must allow this
+> page's origin or the browser blocks it before it ever leaves the machine:
+>
+> - **Ollama** — start it with `OLLAMA_ORIGINS="*"`
+> - **LM Studio** — Developer tab → start the server → Settings → **Enable CORS**
+>
+> The symptom is confusing, because the failure happens on the preflight: you
+> see one `OPTIONS /v1/chat/completions` in the engine's log and no completion.
+> LM Studio in particular reports it as `'messages' field is required`
+> ([lmstudio-ai/lmstudio-bug-tracker#443](https://github.com/lmstudio-ai/lmstudio-bug-tracker/issues/443)),
+> which looks like a malformed request but is not one. netdiagram's own error
+> names the switch for whichever provider you picked.
 
 ## Development
 

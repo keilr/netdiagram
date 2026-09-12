@@ -1460,6 +1460,18 @@ test("assist: an invalid answer is repaired once using the validation errors", a
   assert.ok(repair.includes("nodes.0"), "including the document path");
 });
 
+test("assist: an unreachable endpoint names the provider's own CORS switch", async () => {
+  const dead = async () => { throw new TypeError("Failed to fetch"); };
+  await assert.rejects(
+    assist.complete({ providerId: "lmstudio", base: "http://localhost:1234/v1", model: "m" },
+      { system: "s", messages: [] }, dead),
+    (e) => /CORS/.test(e.message) && /Enable CORS/i.test(e.message) && !/OLLAMA/.test(e.message));
+  await assert.rejects(
+    assist.complete({ providerId: "ollama", base: "http://localhost:11434/v1", model: "m" },
+      { system: "s", messages: [] }, dead),
+    (e) => /OLLAMA_ORIGINS/.test(e.message));
+});
+
 test("assist: a proposal that stays invalid is refused, never applied", async () => {
   await assert.rejects(
     assist.generate(cfg, { schema: {}, instruction: "x", currentYaml: "", validate: validateFake },
@@ -1485,6 +1497,13 @@ test("assist: local providers are offered first and need no key", () => {
   assert.ok(assist.PROVIDERS[0].local, "a local engine is the default");
   assert.ok(assist.PROVIDERS.filter((p) => p.local).every((p) => !p.keyRequired),
     "local engines need no API key");
+  /* the commonest failure is a local engine refusing the browser's preflight,
+   * and the engines report it misleadingly — every local provider must carry
+   * the hint naming its own switch */
+  assert.ok(assist.PROVIDERS.filter((p) => p.local).every((p) => p.cors && p.note),
+    "every local provider explains how to allow this page's origin");
+  assert.ok(/Enable CORS/i.test(assist.providerById("lmstudio").cors));
+  assert.ok(/OLLAMA_ORIGINS/.test(assist.providerById("ollama").cors));
   assert.strictEqual(assist.providerById("anthropic").api, "anthropic");
   assert.strictEqual(assist.providerById("openrouter").api, "openai");
 });
