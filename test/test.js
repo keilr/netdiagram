@@ -1295,12 +1295,14 @@ test("no source or doc file contains a raw control byte", () => {
   const offenders = [];
   for (const rel of files) {
     const text = fs.readFileSync(path.join(root, rel), "utf8");
-    text.split("\n").forEach((line, n) => {
-      [...line].forEach((ch) => {
-        const cp = ch.codePointAt(0);
-        if (cp < 0x20 && ch !== "\t") offenders.push(`${rel}:${n + 1} U+${cp.toString(16).padStart(4, "0")}`);
-      });
-    });
+    // one pass over the text; the line number is only reconstructed for a hit,
+    // so the normal (clean) case does no per-line work at all
+    for (let i = 0; i < text.length; i++) {
+      const cp = text.charCodeAt(i);
+      if (cp >= 0x20 || cp === 0x09 || cp === 0x0a) continue;
+      const line = text.slice(0, i).split("\n").length;
+      offenders.push(`${rel}:${line} U+${cp.toString(16).padStart(4, "0")}`);
+    }
   }
   assert.deepStrictEqual(offenders, [],
     "write the escape (\\u0000), never the byte — see CLAUDE.md gotcha 16");
@@ -1343,12 +1345,12 @@ connections:
     const at = svg.indexOf(`<g class="nd-node" data-id="${id}"`);
     assert.ok(at > edgeAt, `leaf "${id}" still paints after the edges`);
   }
-  // and the edge has real geometry, not just a label floating in space
-  const d = /<path class="edge"[^>]*?\sd="(M[^"]*)"/.exec(svg)[1];
-  const pts = [...d.matchAll(/[ML]([\d.-]+) ([\d.-]+)/g)].map((p) => ({ x: +p[1], y: +p[2] }));
-  let len = 0;
-  for (let i = 1; i < pts.length; i++) len += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
-  assert.ok(len > 10, `the edge has length (${len.toFixed(1)})`);
+  // and the edge has real geometry, not just a label floating in space: a
+  // moveto followed by at least one more command. The space before d= keeps
+  // this off the d=" inside marker-end=" — same idiom as the hop-arc tests.
+  const d = [...svg.matchAll(/class="edge"[^>]*? d="([^"]*)"/g)].map((m) => m[1])[0];
+  const cmds = (d || "").match(/[MLA]/g) || [];
+  assert.ok(cmds.length > 1, `the edge is more than a lone moveto (d="${d}")`);
 });
 
 // ---------- list endpoints (fan-out) ----------

@@ -234,7 +234,7 @@ function updateTagBar(doc){
   const tags = allTags(doc);
   const present = new Set(tags.map(t => t.toLowerCase()));
   for (const t of [...tagFilter]) if (!present.has(t)) tagFilter.delete(t);
-  const key = tags.join('\u0000') + '\u0001' + [...tagFilter].join('\u0000');
+  const key = tags.join(SEP) + '\u0001' + [...tagFilter].join(SEP);
   if (key === tagKey) return;
   tagKey = key;
   tagBar.hidden = !tags.length;

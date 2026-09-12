@@ -115,11 +115,17 @@ const GLYPH_ALIASES = {
 
 /* ---------------- helpers ---------------- */
 const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+/* Out-of-band separators for composite cache/map keys: joining on a control
+ * character keeps a key from colliding with the content it joins. ALWAYS the
+ * escape, NEVER the raw byte — see CLAUDE.md gotcha 16. app.js shares it
+ * through the concatenated build scope, the same way it shares esc. */
+const SEP = '\u0000';
+
 const measureCtx = (()=>{ try { return document.createElement('canvas').getContext('2d'); } catch(e){ return null; } })();
 const textWCache = new Map();
 function textW(t, font){
   if (!measureCtx) return String(t).length * 7.8;
-  const key = font + '\u0000' + t;
+  const key = font + SEP + t;
   let w = textWCache.get(key);
   if (w === undefined){
     measureCtx.font = font;
@@ -762,9 +768,9 @@ function diffDocs(base, cur){
   const connKeys = list => {
     const seen = new Map();
     return (list || []).map(l => {
-      const k = l ? String(l.from) + '\u0000' + String(l.to) : '';
+      const k = l ? String(l.from) + SEP + String(l.to) : '';
       const nth = seen.get(k) || 0; seen.set(k, nth + 1);
-      return k + '\u0000' + nth;
+      return k + SEP + nth;
     });
   };
   const bKeys = connKeys(base.connections), cKeys = connKeys(cur.connections);
@@ -912,14 +918,14 @@ function lintSpec(spec){
     if (String(l.from) === String(l.to))
       add('self-connection', 'error', ['connections', at(l, i)],
         `connections[${at(l, i)}] joins "${l.from}" to itself`);
-    const key = [String(l.from), String(l.to)].sort().join('\u0000');
+    const key = [String(l.from), String(l.to)].sort().join(SEP);
     if (dirOf(l) === 'none'){ if (!blocked.has(key)) blocked.set(key, at(l, i)); }
     else allowed.add(key);
   });
   for (const [key, i] of blocked)
     if (allowed.has(key))
       add('blocked-contradiction', 'error', ['connections', i],
-        `"${key.split('\u0000').join('" and "')}" are both blocked and allowed`);
+        `"${key.split(SEP).join('" and "')}" are both blocked and allowed`);
 
   /* --- reachability --- */
   const touched = n => endpoints.has(String(n.id)) || childrenOf(n).some(touched);

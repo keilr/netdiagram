@@ -69,6 +69,7 @@ module.exports = [
         viewsOf: "readonly", viewById: "readonly", applyView: "readonly",
         connectionRules: "readonly", rulesToCsv: "readonly", extractSource: "readonly",
         encodeShare: "readonly", decodeShare: "readonly", esc: "readonly",
+        SEP: "readonly",
         // from src/importers.js
         Importers: "readonly",
         // from src/assist.js — absent in a --no-assist build, so app.js guards it
