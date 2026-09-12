@@ -6,6 +6,7 @@
 # OpenAI-compatible inference router, which load-balances across GPU hosts
 # running vLLM. Model weights are pulled from an on-prem model store over NFS.
 # GPU hosts use the dedicated `gpu` glyph; the edge WAF uses the `waf` glyph.
+# The replica fan-outs are written as list endpoints (see connections: below).
 diagram:
   title: On-prem LLM — vLLM + Open-WebUI
   direction: down
@@ -86,10 +87,11 @@ connections:
   - {from: waf,   to: webui,  label: &quot;tcp/8080 http&quot;,       protocol: tcp, port: 8080}
   - {from: webui, to: pg,     label: &quot;tcp/5432 postgres&quot;,   protocol: tcp, port: 5432}
   - {from: webui, to: router, label: &quot;tcp/8000 openai-api&quot;, protocol: tcp, port: 8000}
-  - {from: router, to: vllm1, label: &quot;tcp/8000 vllm&quot;,       protocol: tcp, port: 8000}
-  - {from: router, to: vllm2, label: &quot;tcp/8000 vllm&quot;,       protocol: tcp, port: 8000}
-  - {from: vllm1, to: models, label: &quot;tcp/2049 nfs&quot;,        protocol: tcp, port: 2049}
-  - {from: vllm2, to: models, label: &quot;tcp/2049 nfs&quot;,        protocol: tcp, port: 2049}
+  # either end may be a LIST, which fans out into one connection per pair —
+  # each inherits the label, protocol and port, and stays a separate edge, a
+  # separate firewall rule, and separately marked when comparing
+  - {from: router, to: [vllm1, vllm2], label: &quot;tcp/8000 vllm&quot;, protocol: tcp, port: 8000}
+  - {from: [vllm1, vllm2], to: models, label: &quot;tcp/2049 nfs&quot;,  protocol: tcp, port: 2049}
 
 views:
   - {id: edge, title: &quot;vLLM — edge path&quot;, focus: waf, depth: 1}

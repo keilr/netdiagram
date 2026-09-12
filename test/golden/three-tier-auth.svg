@@ -85,8 +85,9 @@ connections:
   # edge labels follow &quot;&lt;proto&gt;/&lt;port&gt; &lt;context&gt;&quot;
   - {from: users,     to: authproxy, label: &quot;tcp/443 https&quot;,   protocol: tcp, port: 443, comment: &quot;all user traffic via the auth proxy&quot;}
   - {from: authproxy, to: idp,       label: &quot;tcp/443 oidc&quot;,    protocol: tcp, port: 443}
-  - {from: authproxy, to: web1,      label: &quot;tcp/8443 https&quot;,  protocol: tcp, port: 8443}
-  - {from: authproxy, to: web2,      label: &quot;tcp/8443 https&quot;,  protocol: tcp, port: 8443}
+  # a list endpoint: one line, one edge per target (the web tier&#39;s members are
+  # addressed individually here because the auth proxy reaches each of them)
+  - {from: authproxy, to: [web1, web2], label: &quot;tcp/8443 https&quot;, protocol: tcp, port: 8443}
   - {from: web,       to: app,       label: &quot;tcp/8080 api&quot;,    protocol: tcp, port: 8080}
   - {from: app,       to: db1,       label: &quot;tcp/5432 pgsql&quot;,  protocol: tcp, port: 5432}
   - {from: db1,       to: db2,       label: &quot;tcp/5432 repl&quot;,   protocol: tcp, port: 5432, direction: both, comment: &quot;streaming replication&quot;}
