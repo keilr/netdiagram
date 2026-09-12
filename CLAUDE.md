@@ -328,6 +328,14 @@ suggestions from the schema, so it follows automatically).
     and it is applied only through the compare view (Accept / Discard), never
     written over the buffer. Keep it behind `typeof Assist`, keep the network
     call in one injectable place, and keep the tests offline.
+18. **Paint order: groups, CONTAINER nodes, edges, leaf nodes, labels.** A node
+    holding other nodes is drawn with an opaque `nodeFill` box, so painted
+    after the edges it covers every edge routed inside it — an edge between two
+    of its guests shows only its label, because labels paint last. Containers
+    therefore emit into `gContainers` and paint BEFORE the edges, exactly as
+    groups do; leaf nodes still paint after, so an edge end tucks under the box
+    it terminates at. A test asserts the ordering: the golden SVGs cannot catch
+    this, because they compare bytes and a hidden edge is still in the markup.
 
 ## Conventions
 
