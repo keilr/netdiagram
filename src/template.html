@@ -27,11 +27,11 @@
     display:flex;flex-direction:column;height:100vh;overflow:hidden;
   }
   header{
-    display:flex;align-items:center;gap:14px;flex-wrap:wrap;row-gap:9px;
+    display:flex;align-items:center;gap:0;flex-wrap:wrap;row-gap:9px;
     padding:10px 16px;background:var(--slate-2);
     border-bottom:1px solid #2c3542;flex-shrink:0;
   }
-  header h1{font-size:13px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:#8fa3bf;margin-right:12px}
+  header h1{font-size:13px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:#8fa3bf;margin-right:18px}
   header h1 b{color:#e8eef6;font-weight:700}
   button{
     font:inherit;font-size:12px;padding:6px 14px;cursor:pointer;
@@ -52,8 +52,15 @@
   .picker-label{font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:#7d8da3;white-space:nowrap;cursor:pointer}
   #sel-example,#sel-project{max-width:190px}
   #btn-save.dirty{border-color:var(--accent);color:#f0c088}
+  /* Header rhythm: controls acting on the same thing sit together with a tight
+   * gap, and unrelated groups are parted by a rule — the spacing itself says
+   * what belongs with what. Left of the rules = the document you are editing,
+   * right of them = what leaves the app. */
+  .hdr-group{display:flex;align-items:center;gap:7px}
+  .hdr-group[hidden],.hdr-sep[hidden]{display:none}
+  .hdr-sep{width:1px;align-self:stretch;background:#3a4556;margin:0 14px;flex-shrink:0}
   /* diagram outputs: kept together and pushed to the right, even when wrapped */
-  .hdr-actions{display:flex;align-items:center;gap:14px;margin-left:auto}
+  .hdr-actions{margin-left:auto}
   main{flex:1;display:flex;min-height:0}
   #editor-pane{
     width:var(--editor-w,38%);min-width:220px;display:flex;flex-direction:column;
@@ -90,6 +97,9 @@
   #zoom-tools{
     position:absolute;right:18px;bottom:16px;display:flex;gap:5px;z-index:2;
   }
+  /* the display:flex above beats the UA's [hidden] rule, so the Connections tab
+   * has to be told explicitly — app.js sets .hidden when the canvas is not up */
+  #zoom-tools[hidden]{display:none}
   #zoom-tools button{
     padding:4px 9px;font-size:11.5px;background:#fff;color:#4b5866;
     border:1px solid #c4ccc5;border-radius:4px;box-shadow:0 1px 3px rgba(36,52,77,.12);
@@ -118,35 +128,93 @@
   #tag-chips{display:flex;gap:5px;flex-wrap:wrap}
   .tag-chip{padding:2px 9px;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;border-radius:10px}
   .tag-chip[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:#fff}
-  /* ---- optional LLM assistant (absent entirely in a --no-assist build) ---- */
+  /* ---- optional LLM assistant (absent entirely in a --no-assist build) ----
+   * Docked bottom-right like a chat widget: a round button that expands into a
+   * panel. Deliberately NOT modal — editor and diagram stay usable while it is
+   * open — and the provider settings stay folded away until they are asked for,
+   * with the summary line saying what is configured. */
   #assist-review{flex-shrink:0;display:flex;align-items:center;gap:10px;padding:8px 12px;
     border-top:1px solid #2c3542;background:#2a2118;color:#f0c088;font-size:11.5px}
   #assist-review[hidden]{display:none}
   #assist-review-msg{flex:1;min-width:0}
-  #assist-back{position:fixed;inset:0;background:rgba(10,14,20,.68);z-index:20;
-    display:flex;align-items:center;justify-content:center;padding:20px}
-  #assist-back[hidden]{display:none}
-  #assist-panel{width:min(620px,100%);max-height:88vh;overflow:auto;background:var(--slate);
-    border:1px solid #3a4556;border-radius:8px;padding:18px 20px;display:flex;flex-direction:column;gap:12px}
-  #assist-panel h2{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:#8fa3bf;font-weight:600}
-  #assist-panel label{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#7d8da3;
+  /* The bubble rides ON TOP of the diagram's zoom controls, and drops into
+   * their place on a tab that has none (Connections hides #zoom-tools). */
+  #assist-fab{
+    position:fixed;right:18px;bottom:70px;z-index:19;width:46px;height:46px;padding:0;
+    border-radius:50%;background:var(--accent);border-color:var(--accent);color:#fff;
+    font-size:18px;line-height:1;box-shadow:0 3px 12px rgba(10,14,20,.45);
+  }
+  #assist-fab:hover{background:#c2610a;border-color:#c2610a;color:#fff}
+  #assist-fab[hidden]{display:none}
+  body:has(#zoom-tools[hidden]) #assist-fab{bottom:16px}
+  /* anchored just above the bubble, and follows it down with the same guard */
+  #assist-dock{
+    position:fixed;right:18px;bottom:124px;z-index:19;
+    width:min(392px,calc(100vw - 36px));max-height:min(68vh,560px);
+    display:flex;flex-direction:column;overflow:hidden;background:var(--slate);
+    border:1px solid #3a4556;border-radius:10px;box-shadow:0 12px 36px rgba(10,14,20,.55);
+  }
+  #assist-dock[hidden]{display:none}
+  body:has(#zoom-tools[hidden]) #assist-dock{bottom:70px}
+  #assist-head{display:flex;align-items:center;gap:8px;flex-shrink:0;
+    padding:10px 12px 10px 14px;border-bottom:1px solid #2c3542}
+  #assist-head h2{flex:1;font-size:11px;letter-spacing:.12em;text-transform:uppercase;
+    color:#8fa3bf;font-weight:600}
+  #assist-close{padding:2px 9px;font-size:15px;line-height:1.2}
+  #assist-body{flex:1;min-height:0;overflow:auto;padding:13px 14px;
+    display:flex;flex-direction:column;gap:11px}
+  #assist-dock label{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#7d8da3;
     display:block;margin-bottom:4px}
-  #assist-panel input[type=text],#assist-panel input[type=password],#assist-panel textarea,#assist-panel select{
+  #assist-dock input[type=text],#assist-dock input[type=password],#assist-dock textarea,#assist-dock select{
     font:inherit;font-size:12px;width:100%;padding:7px 10px;background:var(--slate-2);color:#d7dee8;
     border:1px solid #3a4556;border-radius:4px}
-  #assist-panel textarea{resize:vertical;min-height:74px;line-height:1.5}
-  #assist-panel .row{display:flex;gap:10px}
-  #assist-panel .row>*{flex:1;min-width:0}
-  .assist-check{display:flex;align-items:center;gap:7px;font-size:11.5px;color:#9aa7ba;text-transform:none;letter-spacing:0}
+  #assist-dock textarea{resize:vertical;min-height:74px;line-height:1.5}
+  #assist-dock .row{display:flex;gap:10px}
+  #assist-dock .row>*{flex:1;min-width:0}
+  /* The two collapsed sections: provider settings and the payload preview.
+   * They borrow the app's own button chrome — border, fill, hover — because a
+   * bare text row with a caret did not read as something you can click. When
+   * open, the summary fuses into the panel it reveals. */
+  #assist-dock summary{
+    font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#aebbcc;
+    cursor:pointer;list-style:none;display:flex;align-items:center;gap:7px;min-width:0;
+    padding:7px 10px;background:var(--slate-2);border:1px solid #3a4556;border-radius:4px;
+  }
+  #assist-dock summary::-webkit-details-marker{display:none}
+  #assist-dock summary:hover{border-color:#5b6b82;color:#e8eef6;background:#1b222c}
+  /* the note now folds away, so the closed summary carries the warning instead */
+  #assist-dock summary.warn{border-color:#7c5a1e;color:#f0c088;background:rgba(245,158,11,.10)}
+  #assist-dock summary.warn:hover{border-color:#a9782c;color:#ffd8a0}
+  #assist-dock summary:focus-visible{outline:2px solid #2563eb;outline-offset:2px}
+  #assist-dock summary::before{content:"\25B8";font-size:9px;color:#7d8da3;flex-shrink:0}
+  #assist-dock details[open]>summary{
+    border-color:#5b6b82;border-bottom-left-radius:0;border-bottom-right-radius:0;color:#e8eef6}
+  #assist-dock details[open]>summary::before{content:"\25BE"}
+  #assist-fields{display:flex;flex-direction:column;gap:10px;
+    padding:11px 10px;background:rgba(22,28,37,.45);
+    border:1px solid #5b6b82;border-top:0;border-radius:0 0 4px 4px}
+  #assist-sum{font-size:11px;letter-spacing:0;text-transform:none;color:#7d8da3;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+  #assist-dock .assist-check{display:flex;align-items:center;gap:7px;font-size:11.5px;
+    color:#9aa7ba;text-transform:none;letter-spacing:0;margin-bottom:0}
   .assist-check input{width:auto}
-  #assist-note{font-size:11px;line-height:1.5;color:#8fa3bf}
-  #assist-note.warn{color:#f0c088}
+  /* callouts: blue states a fact, yellow warns that data leaves the machine */
+  .note-box{font-size:11px;line-height:1.5;padding:8px 10px;border-radius:4px;
+    border:1px solid;display:flex;gap:8px;align-items:flex-start}
+  .note-box::before{flex-shrink:0;font-size:12px;line-height:1.4}
+  .note-info{background:rgba(37,99,235,.12);border-color:#2d4a7a;color:#a9c7ef}
+  .note-info::before{content:"\2139\FE0E"}
+  .note-warn{background:rgba(245,158,11,.12);border-color:#7c5a1e;color:#f0c088}
+  .note-warn::before{content:"\26A0\FE0E"}
   #assist-preview{font-size:11px;color:#7d8da3}
-  #assist-preview pre{margin-top:6px;max-height:190px;overflow:auto;white-space:pre-wrap;word-break:break-word;
-    background:var(--slate-2);border:1px solid #2c3542;border-radius:4px;padding:9px;color:#9aa7ba;line-height:1.45}
-  #assist-status{font-size:11.5px;color:#7d8da3;min-height:17px}
+  #assist-preview pre{margin-top:0;max-height:190px;overflow:auto;white-space:pre-wrap;word-break:break-word;
+    background:var(--slate-2);border:1px solid #5b6b82;border-top:0;border-radius:0 0 4px 4px;
+    padding:9px;color:#9aa7ba;line-height:1.45}
+  #assist-foot{flex-shrink:0;display:flex;align-items:center;gap:10px;
+    padding:10px 14px;border-top:1px solid #2c3542;background:var(--slate-2)}
+  #assist-status{flex:1;min-width:0;font-size:11.5px;color:#7d8da3}
   #assist-status.error{color:#ff9d8f}
-  #assist-actions{display:flex;gap:9px;justify-content:flex-end}
+  #assist-actions{display:flex;gap:9px;justify-content:flex-end;flex-shrink:0}
   body.dropping #right-pane::after{content:"Drop to import";position:absolute;inset:12px;display:flex;
     align-items:center;justify-content:center;border:2px dashed var(--accent);border-radius:8px;
     background:rgba(22,28,37,.72);color:#f0c088;font-size:14px;letter-spacing:.08em;z-index:5;pointer-events:none}
@@ -185,24 +253,27 @@
 <body>
 <header>
   <h1><b>netdiagram</b></h1>
-  <div class="picker" id="project-picker">
+  <!-- what you are editing, and where it is kept -->
+  <div class="hdr-group" id="project-picker">
     <label class="picker-label" for="sel-project">Project</label>
     <select id="sel-project" title="Open or switch between projects saved in this browser"></select>
+    <button id="btn-save" title="Save the current YAML as a named project in this browser (Ctrl/Cmd+S)">Save</button>
+    <button id="btn-del" title="Delete the current project" hidden>Delete</button>
   </div>
-  <button id="btn-save" title="Save the current YAML as a named project in this browser (Ctrl/Cmd+S)">Save</button>
-  <button id="btn-import" title="Load a file into the editor: netdiagram YAML, an SVG exported by netdiagram, an Ansible inventory, Terraform state or a NetBox export (or drop it onto the page)">Import</button>
-  <input id="file-yaml" type="file" accept=".yaml,.yml,.svg,.ini,.json,.tfstate,.txt,text/yaml,text/plain,image/svg+xml,application/json" hidden>
-  <button id="btn-assist" title="Draft or revise the YAML with an LLM endpoint you choose — local or hosted. Nothing is sent until you configure a provider and press Send." hidden>Assist</button>
-  <button id="btn-yaml" title="Download the current YAML to a file">Download YAML</button>
-  <button id="btn-del" title="Delete the current project" hidden>Delete</button>
-  <div class="picker" id="compare-picker">
+  <div class="hdr-sep" id="sep-project"></div>
+  <!-- what comes in, and what it is measured against -->
+  <div class="hdr-group">
+    <button id="btn-import" title="Load a file into the editor: netdiagram YAML, an SVG exported by netdiagram, an Ansible inventory, Terraform state or a NetBox export (or drop it onto the page)">Import</button>
     <label class="picker-label" for="sel-compare">Compare</label>
     <select id="sel-compare" title="Show what changed against a saved project or a file: added, removed and changed items are marked in the diagram and the Connections table"></select>
   </div>
+  <input id="file-yaml" type="file" accept=".yaml,.yml,.svg,.ini,.json,.tfstate,.txt,text/yaml,text/plain,image/svg+xml,application/json" hidden>
   <input id="file-compare" type="file" accept=".yaml,.yml,.svg,text/yaml,text/plain,image/svg+xml" hidden>
-  <div class="hdr-actions">
+  <!-- what leaves the app: link, then the three file outputs -->
+  <div class="hdr-group hdr-actions">
     <button id="btn-share" title="Copy a link that carries this diagram in the URL fragment (never sent to a server)">Share link</button>
     <button id="btn-pdf" title="Open the print dialog to save as PDF">Export PDF</button>
+    <button id="btn-yaml" title="Download the current YAML to a file">Download YAML</button>
     <button id="btn-download" class="primary">Download SVG</button>
   </div>
 </header>
@@ -210,10 +281,12 @@
   <div id="editor-pane">
     <div id="editor" aria-label="YAML source"></div>
     <div id="editor-foot">
-      <label class="picker-label" for="sel-example">Load example</label>
-      <select id="sel-example"
-              aria-label="Load an example into the editor"
-              title="Loads the selected example into the editor (replaces the current contents)"></select>
+      <div class="picker">
+        <label class="picker-label" for="sel-example">Example</label>
+        <select id="sel-example"
+                aria-label="Load an example into the editor"
+                title="Loads the selected example into the editor (replaces the current contents)"></select>
+      </div>
     </div>
     <div id="assist-review" hidden>
       <span id="assist-review-msg"></span>
@@ -247,32 +320,45 @@
   </div>
 </main>
 
-<div id="assist-back" hidden>
-  <div id="assist-panel" role="dialog" aria-modal="true" aria-labelledby="assist-title">
-    <h2 id="assist-title">Assist — draft with an LLM</h2>
-    <div class="row">
-      <div>
-        <label for="assist-provider">Provider</label>
-        <select id="assist-provider"></select>
+<button id="assist-fab" aria-label="Assist" aria-expanded="false" aria-controls="assist-dock"
+        title="Draft or revise the YAML with an LLM endpoint you choose — local or hosted. Nothing is sent until you configure a provider and press Send." hidden>&#10024;</button>
+
+<div id="assist-dock" role="dialog" aria-labelledby="assist-title" hidden>
+  <div id="assist-head">
+    <h2 id="assist-title">Assist</h2>
+    <button id="assist-close" aria-label="Close assistant" title="Close (Esc)">&times;</button>
+  </div>
+  <div id="assist-body">
+    <details id="assist-settings">
+      <summary>Provider <span id="assist-sum"></span></summary>
+      <div id="assist-fields">
+        <div class="row">
+          <div>
+            <label for="assist-provider">Provider</label>
+            <select id="assist-provider"></select>
+          </div>
+          <div>
+            <label for="assist-model">Model</label>
+            <input id="assist-model" type="text" spellcheck="false" autocomplete="off">
+          </div>
+        </div>
+        <div>
+          <label for="assist-base">Endpoint</label>
+          <input id="assist-base" type="text" spellcheck="false" autocomplete="off">
+        </div>
+        <div id="assist-key-row">
+          <label for="assist-key">API key</label>
+          <input id="assist-key" type="password" spellcheck="false" autocomplete="off">
+          <label class="assist-check" style="margin-top:6px">
+            <input id="assist-remember" type="checkbox">
+            Remember the key in this browser (stored in local storage)
+          </label>
+        </div>
+        <!-- what this provider choice means for your data; when it is not a
+             local engine the folded summary above carries the warning too -->
+        <p id="assist-note" class="note-box note-info"></p>
       </div>
-      <div>
-        <label for="assist-model">Model</label>
-        <input id="assist-model" type="text" spellcheck="false" autocomplete="off">
-      </div>
-    </div>
-    <div>
-      <label for="assist-base">Endpoint</label>
-      <input id="assist-base" type="text" spellcheck="false" autocomplete="off">
-    </div>
-    <div id="assist-key-row">
-      <label for="assist-key">API key</label>
-      <input id="assist-key" type="password" spellcheck="false" autocomplete="off">
-      <label class="assist-check" style="margin-top:6px">
-        <input id="assist-remember" type="checkbox">
-        Remember the key in this browser (stored in local storage)
-      </label>
-    </div>
-    <p id="assist-note"></p>
+    </details>
     <div>
       <label for="assist-prompt">What should it do?</label>
       <textarea id="assist-prompt" placeholder="e.g. add a second firewall in HA with the edge router, or: draft a three-tier web app behind a WAF"></textarea>
@@ -285,9 +371,12 @@
       <summary>Show exactly what will be sent</summary>
       <pre id="assist-payload"></pre>
     </details>
+  </div>
+  <!-- pinned outside the scrolling body: the primary action and the errors it
+       reports must stay reachable however far the settings are unfolded -->
+  <div id="assist-foot">
     <div id="assist-status"></div>
     <div id="assist-actions">
-      <button id="assist-close">Cancel</button>
       <button id="assist-send" class="primary">Send</button>
     </div>
   </div>
