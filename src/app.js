@@ -429,11 +429,40 @@ function specDiagnostics(text){
   }
 }
 
+/* example picker (below the editor): choosing an entry loads it into the editor.
+ * It always answers one question — what is in the buffer? — so it names the
+ * example only while the buffer still holds it VERBATIM, and drops back to the
+ * placeholder the moment anything else is loaded or a character is typed.
+ * Declared above makeEditor because its onChange reads exampleShown. */
+const exampleSel = $('#sel-example');
+const DEF_EXAMPLE = String(Math.max(0, EXAMPLES.findIndex(ex => ex.def)));
+exampleSel.innerHTML = '<option value="">Load an example…</option>';
+EXAMPLES.forEach((ex, i)=>{
+  const o = document.createElement('option');
+  o.value = i; o.textContent = ex.name;
+  exampleSel.appendChild(o);
+});
+let exampleShown = '';          // index of the example the buffer matches; '' = none
+function setExampleShown(v){ exampleShown = v; exampleSel.value = v; }
+function syncExamplePicker(text){
+  if (exampleShown !== '' && text !== EXAMPLES[exampleShown].yaml) setExampleShown('');
+}
+function loadExample(i = DEF_EXAMPLE){
+  loadText(EXAMPLES[i].yaml);   // replaces the buffer (clearing the picker) …
+  setExampleShown(String(i));   // … and this names what now sits in it
+}
+exampleSel.addEventListener('change', () => {
+  // the placeholder is a label, not a command: reselect whatever is loaded
+  if (exampleSel.value === '') exampleSel.value = exampleShown;
+  else loadExample(exampleSel.value);
+});
+
 const editor = makeEditor($('#editor'), SCHEMA, text => {
   clearTimeout(timer);
   timer = setTimeout(() => render(text), 350);
   saveDraft(text);     // autosave the live buffer so a reload restores it
   updateDirty();       // reflect unsaved changes vs the active project
+  syncExamplePicker(text);   // the buffer may no longer be the example it came from
 }, {
   lint: specDiagnostics,
   onCursor: pos => {
@@ -453,17 +482,6 @@ function loadText(text, note){
   refreshProjects();
 }
 
-/* example picker (below the editor): choosing an entry loads it into the editor */
-const exampleSel = $('#sel-example');
-EXAMPLES.forEach((ex, i)=>{
-  const o = document.createElement('option');
-  o.value = i; o.textContent = ex.name;
-  exampleSel.appendChild(o);
-});
-// the list is sorted by name; preselect the default (def) example for first load
-exampleSel.value = String(Math.max(0, EXAMPLES.findIndex(ex => ex.def)));
-function loadExample(){ loadText(EXAMPLES[exampleSel.value].yaml); }
-exampleSel.addEventListener('change', loadExample);
 /* dash-concatenated file name from the diagram title (or any base string) */
 const slugName = s => String(s ?? '').toLowerCase().replace(/[^a-z0-9]+/g,'-')
   .replace(/^-+|-+$/g,'') || 'network-diagram';
@@ -716,7 +734,7 @@ window.addEventListener('keydown', e => {
 });
 
 if (!LS){
-  for (const el of [$('#project-picker'), btnSave, btnDel]) if (el) el.hidden = true;
+  for (const el of [$('#project-picker'), $('#sep-project'), btnSave, btnDel]) if (el) el.hidden = true;
 }
 
 /* ---------------- compare view ---------------- */
@@ -777,9 +795,10 @@ compareFile.addEventListener('change', () => {
  * previous text as the compare baseline, so the existing +/- /~ machinery is
  * the review surface, and Discard puts the original back. */
 const ASSIST = (typeof Assist !== 'undefined') ? Assist : null;
-const btnAssist = $('#btn-assist');
 if (ASSIST){
-  const back = $('#assist-back'), provSel = $('#assist-provider');
+  const dock = $('#assist-dock'), fab = $('#assist-fab'), provSel = $('#assist-provider');
+  const settings = $('#assist-settings'), sumEl = $('#assist-sum');
+  const sumRow = settings.querySelector('summary');
   const baseIn = $('#assist-base'), modelIn = $('#assist-model'), keyIn = $('#assist-key');
   const rememberIn = $('#assist-remember'), keyRow = $('#assist-key-row'), noteEl = $('#assist-note');
   const promptIn = $('#assist-prompt'), contextIn = $('#assist-context');
@@ -789,7 +808,7 @@ if (ASSIST){
   let cfg = ASSIST.loadConfig(LS);
   let pending = null;            // { originalText, prevCompare }
 
-  btnAssist.hidden = false;
+  fab.hidden = false;
   ASSIST.PROVIDERS.forEach(p => {
     const o = document.createElement('option');
     o.value = p.id; o.textContent = p.label;
@@ -809,8 +828,17 @@ if (ASSIST){
     if (!keepFields){ baseIn.value = p.base; modelIn.value = p.model; }
     keyRow.hidden = p.id === 'custom' ? false : (!p.keyRequired && p.local);
     noteEl.textContent = (p.local ? 'Stays on your machine. ' : 'Leaves your machine: your topology is sent to a third party. ') + (p.note || '');
-    noteEl.classList.toggle('warn', !p.local);
+    /* blue states a fact, amber warns; the note lives inside the folded
+     * settings now, so the summary row mirrors the warning when closed */
+    noteEl.className = 'note-box ' + (p.local ? 'note-info' : 'note-warn');
+    sumRow.classList.toggle('warn', !p.local);
+    refreshSummary();
     refreshPayload();
+  }
+  /* the settings fold away, so their summary line has to carry what is set */
+  function refreshSummary(){
+    const p = ASSIST.providerById(provSel.value), m = modelIn.value.trim();
+    sumEl.textContent = '· ' + p.label + (m ? ' · ' + m : '');
   }
   function refreshPayload(){
     const c = currentCfg();
@@ -830,6 +858,7 @@ if (ASSIST){
 
   provSel.addEventListener('change', () => applyProvider(provSel.value, false));
   [baseIn, modelIn, promptIn].forEach(el => el.addEventListener('input', refreshPayload));
+  modelIn.addEventListener('input', refreshSummary);
   contextIn.addEventListener('change', refreshPayload);
 
   function openAssist(){
@@ -839,16 +868,24 @@ if (ASSIST){
     if (cfg.model) modelIn.value = cfg.model;
     keyIn.value = cfg.key || '';
     rememberIn.checked = !!cfg.remember;
+    refreshSummary();
     setAssistStatus('');
-    back.hidden = false;
+    dock.hidden = false;
+    fab.setAttribute('aria-expanded', 'true');
     promptIn.focus();
     refreshPayload();
   }
-  const closeAssist = () => { back.hidden = true; };
-  btnAssist.addEventListener('click', openAssist);
+  function closeAssist(){
+    dock.hidden = true;
+    fab.setAttribute('aria-expanded', 'false');
+    settings.open = false;         // the next open starts folded again
+  }
+  /* the bubble toggles the dock. It is deliberately NOT modal — you keep
+   * editing and reading the diagram while it is open — so nothing but the
+   * bubble, the close button or Escape dismisses it. */
+  fab.addEventListener('click', () => { if (dock.hidden) openAssist(); else closeAssist(); });
   btnClose.addEventListener('click', closeAssist);
-  back.addEventListener('click', e => { if (e.target === back) closeAssist(); });
-  window.addEventListener('keydown', e => { if (e.key === 'Escape' && !back.hidden) closeAssist(); });
+  window.addEventListener('keydown', e => { if (e.key === 'Escape' && !dock.hidden) closeAssist(); });
 
   /* the gate: a proposal must parse AND pass the architecture lint */
   function validateProposal(yaml){
@@ -861,8 +898,9 @@ if (ASSIST){
   btnSend.addEventListener('click', async () => {
     const c = currentCfg();
     const p = ASSIST.providerById(c.providerId);
-    if (!c.base){ setAssistStatus('Set an endpoint first.', true); return; }
-    if (p.keyRequired && !c.key){ setAssistStatus(`${p.label} needs an API key.`, true); return; }
+    /* a configuration complaint is only actionable with the settings unfolded */
+    if (!c.base){ settings.open = true; setAssistStatus('Set an endpoint first.', true); return; }
+    if (p.keyRequired && !c.key){ settings.open = true; setAssistStatus(`${p.label} needs an API key.`, true); return; }
     if (!promptIn.value.trim()){ setAssistStatus('Describe what it should do.', true); return; }
     ASSIST.saveConfig(LS, c);
     btnSend.disabled = true;

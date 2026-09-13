@@ -507,6 +507,13 @@ test("projects persist: draft restored on reload, Save writes a named project", 
   assert.strictEqual(projects["my project"].yaml, DRAFT, "saved project holds the current buffer");
   assert.strictEqual(win.localStorage.getItem("netdiagram:v1:active"), "my project", "saved project becomes active");
   assert.ok(!doc.querySelector("#btn-del").hidden, "delete is offered for the active project");
+  // the example picker answers "what is loaded": blank for a draft, named after
+  // an example only while the buffer still holds that example verbatim
+  const exSel = doc.querySelector("#sel-example");
+  assert.strictEqual(exSel.value, "", "no example is claimed while a draft is loaded");
+  exSel.value = "0";
+  exSel.dispatchEvent(new win.Event("change"));
+  assert.strictEqual(exSel.value, "0", "the chosen example stays named in the picker");
 });
 
 test("connections table: bidirectional yields two rows; comment column appears", async () => {
@@ -1716,11 +1723,15 @@ test("build: --no-assist strips the assistant from dist entirely", () => {
 
 test("app: the Assist panel offers providers and sends nothing on open", async () => {
   const { win, doc } = await bootPage();
-  const btn = doc.querySelector("#btn-assist");
-  assert.ok(!btn.hidden, "the Assist button appears in a default build");
-  assert.ok(doc.querySelector("#assist-back").hidden, "the panel starts closed");
+  const btn = doc.querySelector("#assist-fab");
+  assert.ok(!btn.hidden, "the Assist bubble appears in a default build");
+  assert.ok(doc.querySelector("#assist-dock").hidden, "the dock starts closed");
   click(win, btn);
-  assert.ok(!doc.querySelector("#assist-back").hidden, "clicking opens it");
+  assert.ok(!doc.querySelector("#assist-dock").hidden, "clicking opens it");
+  assert.ok(!doc.querySelector("#assist-settings").open,
+    "the provider settings stay folded until they are asked for");
+  assert.ok(doc.querySelector("#assist-sum").textContent.trim().length > 1,
+    "but the folded summary still says which provider is configured");
   const opts = [...doc.querySelectorAll("#assist-provider option")].map((o) => o.value);
   assert.ok(opts.includes("ollama") && opts.includes("anthropic") && opts.includes("openai"),
     "local and hosted providers are listed: " + opts.join(","));
