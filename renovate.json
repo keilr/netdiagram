@@ -1,0 +1,48 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    ":dependencyDashboard",
+    ":semanticCommitTypeAll(chore)"
+  ],
+  "timezone": "Europe/Zurich",
+  "schedule": ["before 6am on monday"],
+  "labels": ["dependencies"],
+  "prConcurrentLimit": 5,
+  "prHourlyLimit": 0,
+  "minimumReleaseAge": "3 days",
+  "rangeStrategy": "bump",
+  "lockFileMaintenance": {
+    "enabled": true,
+    "schedule": ["before 6am on the first day of the month"]
+  },
+  "packageRules": [
+    {
+      "description": "Routine dev-tooling bumps arrive as one PR a week; majors keep their own PR so a breaking esbuild/eslint/jsdom lands reviewable on its own.",
+      "matchDepTypes": ["devDependencies"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "groupName": "dev dependencies"
+    },
+    {
+      "description": "The CodeMirror editor bundle moves as a unit (src/editor.js is bundled from these) — bumping them apart produces peer-version skew inside one esbuild bundle. Listed after the devDependencies rule so this groupName wins.",
+      "matchPackageNames": [
+        "@codemirror/**",
+        "@lezer/**",
+        "codemirror-json-schema"
+      ],
+      "groupName": "codemirror"
+    },
+    {
+      "description": "elkjs and js-yaml are vendored into dist/netdiagram.html. An elkjs bump can move layout coordinates and fail the byte-exact golden SVGs — expect to review the diff and re-run npm run test:golden. Extra soak time before the PR opens.",
+      "matchPackageNames": ["elkjs", "js-yaml"],
+      "minimumReleaseAge": "7 days",
+      "labels": ["dependencies", "vendored"]
+    },
+    {
+      "description": "Workflow action bumps (actions/checkout, upload-artifact, deploy-pages, renovatebot/github-action itself) in a single PR.",
+      "matchManagers": ["github-actions"],
+      "groupName": "github actions",
+      "labels": ["dependencies", "github-actions"]
+    }
+  ]
+}

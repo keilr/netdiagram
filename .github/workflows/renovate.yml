@@ -1,0 +1,65 @@
+name: renovate
+
+# Self-hosted Renovate: this job IS the bot — there is no GitHub App to install.
+# It reads renovate.json from the default branch and opens dependency PRs, which
+# build.yml then lints/tests like any other PR.
+
+on:
+  schedule:
+    # Daily; the update windows themselves live in renovate.json ("schedule",
+    # "lockFileMaintenance"), so a run outside a window is a cheap no-op.
+    - cron: "7 4 * * *"
+  workflow_dispatch:
+    inputs:
+      logLevel:
+        description: Renovate log level
+        type: choice
+        options: [info, debug]
+        default: info
+      dryRun:
+        description: Dry run — resolve updates but create no branches or PRs
+        type: boolean
+        default: false
+  # Pick up config changes immediately instead of waiting for the next cron.
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/renovate.yml
+      - renovate.json
+
+# Only consumed by the GITHUB_TOKEN fallback below; a RENOVATE_TOKEN secret
+# carries its own scopes.
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: renovate
+  cancel-in-progress: false
+
+jobs:
+  renovate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: renovatebot/github-action@v46.3.0
+        with:
+          # Prefer a PAT (repo scope) or GitHub App token stored as
+          # RENOVATE_TOKEN: pull requests opened with the built-in GITHUB_TOKEN
+          # do NOT trigger build.yml, so dependency PRs would arrive untested.
+          # The fallback also needs Settings -> Actions -> "Allow GitHub Actions
+          # to create and approve pull requests".
+          token: ${{ secrets.RENOVATE_TOKEN || github.token }}
+        env:
+          RENOVATE_PLATFORM: github
+          RENOVATE_REPOSITORIES: ${{ github.repository }}
+          # No onboarding PR: renovate.json is committed, and requiring it means
+          # a run against a branch without config exits instead of guessing.
+          RENOVATE_ONBOARDING: "false"
+          RENOVATE_REQUIRE_CONFIG: required
+          # With a GitHub App token, also set RENOVATE_GIT_AUTHOR to the app's
+          # noreply address — Renovate cannot derive one from an app token.
+          LOG_LEVEL: ${{ inputs.logLevel || 'info' }}
+          # Empty string = unset: Renovate skips falsy env vars when parsing config.
+          RENOVATE_DRY_RUN: ${{ inputs.dryRun && 'full' || '' }}
