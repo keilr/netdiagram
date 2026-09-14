@@ -8,7 +8,13 @@ on:
   schedule:
     # Daily; the update windows themselves live in renovate.json ("schedule",
     # "lockFileMaintenance"), so a run outside a window is a cheap no-op.
-    - cron: "7 4 * * *"
+    #
+    # Cron is UTC, renovate.json schedules are Europe/Zurich, so this time has
+    # to clear the "before 6am" window in BOTH offsets: 02:07 UTC is 04:07 CEST
+    # (summer) and 03:07 CET (winter). 04:07 UTC looked fine in winter (05:07)
+    # but landed at 06:07 CEST in summer — seven minutes late, which means no
+    # PRs at all for half the year.
+    - cron: "7 2 * * *"
   workflow_dispatch:
     inputs:
       logLevel:
@@ -18,6 +24,10 @@ on:
         default: info
       dryRun:
         description: Dry run — resolve updates but create no branches or PRs
+        type: boolean
+        default: false
+      ignoreSchedule:
+        description: Ignore the schedule and act on everything due right now
         type: boolean
         default: false
   # Pick up config changes immediately instead of waiting for the next cron.
@@ -63,3 +73,7 @@ jobs:
           LOG_LEVEL: ${{ inputs.logLevel || 'info' }}
           # Empty string = unset: Renovate skips falsy env vars when parsing config.
           RENOVATE_DRY_RUN: ${{ inputs.dryRun && 'full' || '' }}
+          # force overrides config after it is resolved, so nulling the schedule
+          # here lets a manual dispatch open PRs outside the weekly window
+          # without editing renovate.json.
+          RENOVATE_FORCE: ${{ inputs.ignoreSchedule && '{"schedule":null}' || '' }}
