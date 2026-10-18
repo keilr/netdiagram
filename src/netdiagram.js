@@ -263,21 +263,44 @@ function groupHeader(g){
 
 /* ---------------- parse + validate ---------------- */
 function parseSpec(text){
+  /* js-yaml 5 rejects a blank or comment-only input as a syntax error; to the
+   * author it is just an empty document, so say that instead */
+  if (!/^[ \t]*[^#\s]/m.test(String(text ?? ''))) return specFromDoc(null);
   return specFromDoc(jsyaml.load(text));
 }
 /* Validation errors carry the offending document path (e.g. ['connections', 3,
  * 'to']) so the editor can underline the exact spot (see sourceMap). The thrown
  * Error joins every message; e.errors keeps the structured list. */
 function specFromDoc(doc){
-  if (!doc || typeof doc !== 'object') throw new Error('Empty document — define nodes and connections.');
+  if (!doc || typeof doc !== 'object' || Array.isArray(doc)){
+    const e = new Error(doc == null || doc === ''
+      ? 'Empty document — define nodes and connections.'
+      : 'The document must be a mapping with nodes:, groups: and connections: keys.');
+    e.isSpec = true; e.errors = [{ path: [], message: e.message }];
+    throw e;
+  }
   const errors = [];
   const err = (path, message) => errors.push({ path, message });
+  /* Every collection the walkers below iterate must be a list. A mapping or a
+   * scalar in its place (`nodes: web1` instead of `nodes: [web1]`) used to
+   * reach .forEach and die with a TypeError that named no position; report it
+   * where it was written and carry on with an empty list instead. */
+  const listAt = (v, path, what) => {
+    if (v == null) return [];
+    if (Array.isArray(v)) return v;
+    err(path, `${what} must be a list`);
+    return [];
+  };
   const badTags = t => t != null && (
     (typeof t === 'object' && !Array.isArray(t)) ||
     (Array.isArray(t) && t.some(x => x != null && typeof x === 'object')));
   if (doc.links != null) err(['links'], '"links:" has been renamed — use "connections:" instead');
-  const nodes = Array.isArray(doc.nodes) ? doc.nodes : [];
-  if (!nodes.length) err(['nodes'], 'No nodes defined.');
+  /* attrLines walks diagram: with Object.entries, which turns a string into
+   * one title-block row per CHARACTER */
+  if (doc.diagram != null && (typeof doc.diagram !== 'object' || Array.isArray(doc.diagram)))
+    err(['diagram'], 'diagram must be a mapping of options and attributes');
+  const nodes = listAt(doc.nodes, ['nodes'], 'nodes');
+  if (!nodes.length && (doc.nodes == null || Array.isArray(doc.nodes))) err(['nodes'], 'No nodes defined.');
   const nodeMap = new Map();
   const hosted = new Map();   // nodeId -> id of the node it sits inside
   /* nodes nest: walk every depth, registering ids in one flat namespace.
@@ -294,14 +317,14 @@ function specFromDoc(doc){
         err([...np, 'rank'], `${at} "${n.id}": rank must be a number`);
       nodeMap.set(id, n);
       if (host) hosted.set(id, String(host.id));
-      walkNodeList(n.nodes, [...np, 'nodes'], `${at}.nodes`, n);
+      walkNodeList(listAt(n.nodes, [...np, 'nodes'], `${at} "${id}": nodes`), [...np, 'nodes'], `${at}.nodes`, n);
     });
   })(nodes, ['nodes'], 'nodes', null);
 
   const groupMap = new Map();
   const claimed = new Map(); // nodeId -> groupId
   function walkGroups(list, path){
-    (list||[]).forEach((g,i)=>{
+    list.forEach((g,i)=>{
       const gp = [...path, i];
       if (!g || !g.id) { err(gp, `${path.join('.')}[${i}]: group missing id`); return; }
       const gid = String(g.id);
@@ -311,23 +334,23 @@ function specFromDoc(doc){
       if (g.rank != null && !Number.isFinite(Number(g.rank)))
         err([...gp, 'rank'], `group "${gid}": rank must be a number`);
       groupMap.set(gid, g);
-      (g.nodes||[]).forEach((nid, k)=>{
+      listAt(g.nodes, [...gp, 'nodes'], `group "${gid}": nodes`).forEach((nid, k)=>{
         nid = String(nid);
         if (!nodeMap.has(nid)) err([...gp, 'nodes', k], `group "${gid}": unknown node "${nid}"`);
         else if (hosted.has(nid)) err([...gp, 'nodes', k], `node "${nid}" is inside "${hosted.get(nid)}" and cannot also be a member of "${gid}"`);
         else if (claimed.has(nid)) err([...gp, 'nodes', k], `node "${nid}" is in both "${claimed.get(nid)}" and "${gid}"`);
         else claimed.set(nid, gid);
       });
-      walkGroups(g.groups, [...gp, 'groups']);
+      walkGroups(listAt(g.groups, [...gp, 'groups'], `group "${gid}": groups`), [...gp, 'groups']);
     });
   }
-  walkGroups(doc.groups, ['groups']);
+  walkGroups(listAt(doc.groups, ['groups'], 'groups'), ['groups']);
 
   /* from/to accept a list, which fans out into one connection per pair.
    * Error paths keep the AUTHORED index (and the position within the list), so
    * the editor underlines the id actually at fault. */
   const endsOf = v => Array.isArray(v) ? v : [v];
-  const connections = Array.isArray(doc.connections) ? doc.connections : [];
+  const connections = listAt(doc.connections, ['connections'], 'connections');
   connections.forEach((l,i)=>{
     if (!l || l.from == null || l.to == null) { err(['connections', i], `connections[${i}]: needs from + to`); return; }
     for (const end of ['from', 'to']){
@@ -336,12 +359,17 @@ function specFromDoc(doc){
         err(['connections', i, end], `connections[${i}]: ${end} is an empty list`);
         continue;
       }
+      const seen = new Set();
       ids.forEach((id, k) => {
         const path = isList ? ['connections', i, end, k] : ['connections', i, end];
         if (id == null || typeof id === 'object'){
           err(path, `connections[${i}]: ${end} must be an id, or a list of ids`);
           return;
         }
+        /* a repeated id would fan out into two identical edges drawn on top
+         * of each other and two identical firewall rules */
+        if (seen.has(String(id))){ err(path, `connections[${i}]: ${end} lists "${id}" twice`); return; }
+        seen.add(String(id));
         if (!nodeMap.has(String(id)) && !groupMap.has(String(id)))
           err(path, `connections[${i}]: unknown endpoint "${id}"`);
       });
@@ -349,7 +377,7 @@ function specFromDoc(doc){
   });
 
   const viewIds = new Set();
-  (Array.isArray(doc.views) ? doc.views : []).forEach((v, i) => {
+  listAt(doc.views, ['views'], 'views').forEach((v, i) => {
     if (!v || v.id == null) { err(['views', i], `views[${i}]: missing id`); return; }
     const vid = String(v.id);
     if (viewIds.has(vid)) err(['views', i, 'id'], `duplicate view id "${vid}"`);

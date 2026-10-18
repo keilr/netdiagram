@@ -254,8 +254,7 @@ tagChips.addEventListener('click', e => {
 async function render(text){
   const seq = ++renderSeq;
   try{
-    const parsed = jsyaml.load(text);
-    const sourceSpec = specFromDoc(parsed);   // validate what the author wrote, before any view narrows it
+    const sourceSpec = parseSpec(text);   // validate what the author wrote, before any view narrows it
     /* specFromDoc desugars list endpoints; every lens below matches ids with
      * String(l.to), so they must all see the EXPANDED connections */
     const source = sourceSpec.doc;
