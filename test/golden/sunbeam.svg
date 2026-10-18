@@ -261,15 +261,15 @@ views:
       <text class="edge-lbl" data-conn="0" data-label="tcp/443 dashboard" x="762" y="195.6" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="11" fill="#0f766e" stroke="#fafbf7" stroke-width="4" paint-order="stroke" stroke-linejoin="round">tcp/443 dashboard</text><text class="edge-lbl" data-conn="1" data-label="tcp/5000 keystone" x="1002.5124999999999" y="123.1" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="11" fill="#7c3aed" stroke="#fafbf7" stroke-width="4" paint-order="stroke" stroke-linejoin="round">tcp/5000 keystone</text><text class="edge-lbl" data-conn="2" data-label="tcp/17070 juju" x="1247" y="1071.8874999999998" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="11" fill="#1d4ed8" stroke="#fafbf7" stroke-width="4" paint-order="stroke" stroke-linejoin="round">tcp/17070 juju</text><text class="edge-lbl" data-conn="3" data-label="tcp/5672 amqp" x="466" y="850.0999999999999" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="11" fill="#9d174d" stroke="#fafbf7" stroke-width="4" paint-order="stroke" stroke-linejoin="round">tcp/5672 amqp</text><text class="edge-lbl" data-conn="4" data-label="tcp/6642 ovsdb" x="390" y="769.9749999999999" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="11" fill="#4d7c0f" stroke="#fafbf7" stroke-width="4" paint-order="stroke" stroke-linejoin="round">tcp/6642 ovsdb</text><text class="edge-lbl" data-conn="5" data-label="tcp/17070 juju" x="202" y="1331.075" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="11" fill="#1d4ed8" stroke="#fafbf7" stroke-width="4" paint-order="stroke" stroke-linejoin="round">tcp/17070 juju</text><text class="edge-lbl" data-conn="6" data-label="tcp/17070 juju" x="466" y="1597.1" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="11" fill="#1d4ed8" stroke="#fafbf7" stroke-width="4" paint-order="stroke" stroke-linejoin="round">tcp/17070 juju</text><text class="edge-lbl" data-conn="7" data-label="runs on" x="202" y="506.6" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="11" fill="#0e7490" stroke="#fafbf7" stroke-width="4" paint-order="stroke" stroke-linejoin="round">runs on</text><text class="edge-lbl" data-conn="8" data-label="runs on" x="575.625" y="1260.1" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="11" fill="#0e7490" stroke="#fafbf7" stroke-width="4" paint-order="stroke" stroke-linejoin="round">runs on</text>
     </g>
     <g>
-    <rect x="1066" y="1779" width="232" height="70" fill="#ffffff" stroke="#24344d" stroke-width="1.4"/>
-    <path d="M1066 1799 h232 M1216 1799 V1833" stroke="#24344d" stroke-width="1"/>
-    <text x="1075" y="1793.5" font-family="ui-monospace,Menlo,monospace" font-size="10.5" font-weight="700" letter-spacing="1.2" fill="#24344d">CANONICAL SUNBEAM</text>
-    <text x="1075" y="1816" font-family="ui-monospace,Menlo,monospace" font-size="9" letter-spacing="1" fill="#7a8798">DRAWN</text>
-    <text x="1075" y="1827" font-family="ui-monospace,Menlo,monospace" font-size="10" fill="#24344d">netdiagram vX</text>
-    <text x="1225" y="1816" font-family="ui-monospace,Menlo,monospace" font-size="9" letter-spacing="1" fill="#7a8798">DATE</text>
-    <text x="1225" y="1827" font-family="ui-monospace,Menlo,monospace" font-size="10" fill="#24344d">2000-01-01</text>
-    <path d="M1066 1833 h232" stroke="#24344d" stroke-width=".7"/>
-    <text x="1075" y="1845" font-family="ui-monospace,Menlo,monospace" font-size="9" letter-spacing="1" fill="#7a8798">OWNER</text>
+    <rect x="1052" y="1779" width="246" height="70" fill="#ffffff" stroke="#24344d" stroke-width="1.4"/>
+    <path d="M1052 1799 h246 M1202 1799 V1833" stroke="#24344d" stroke-width="1"/>
+    <text x="1061" y="1793.5" font-family="ui-monospace,Menlo,monospace" font-size="10.5" font-weight="700" letter-spacing="1.2" fill="#24344d">CANONICAL SUNBEAM</text>
+    <text x="1061" y="1816" font-family="ui-monospace,Menlo,monospace" font-size="9" letter-spacing="1" fill="#7a8798">DRAWN</text>
+    <text x="1061" y="1827" font-family="ui-monospace,Menlo,monospace" font-size="10" fill="#24344d">netdiagram vX</text>
+    <text x="1211" y="1816" font-family="ui-monospace,Menlo,monospace" font-size="9" letter-spacing="1" fill="#7a8798">DATE</text>
+    <text x="1211" y="1827" font-family="ui-monospace,Menlo,monospace" font-size="10" fill="#24344d">2000-01-01</text>
+    <path d="M1052 1833 h246" stroke="#24344d" stroke-width=".7"/>
+    <text x="1061" y="1845" font-family="ui-monospace,Menlo,monospace" font-size="9" letter-spacing="1" fill="#7a8798">OWNER</text>
     <text x="1289" y="1845" text-anchor="end" font-family="ui-monospace,Menlo,monospace" font-size="10" fill="#24344d">cloud-team</text>
   </g>
   </svg>

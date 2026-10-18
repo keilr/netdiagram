@@ -216,17 +216,17 @@ views:
       <text class="edge-lbl" data-conn="0" data-label="internet" x="218" y="168" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="11" fill="#0f766e" stroke="#fafbf7" stroke-width="4" paint-order="stroke" stroke-linejoin="round">internet</text><text class="edge-lbl" data-conn="1" data-label="tcp/443 web-https" x="218" y="399.2" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="11" fill="#7c3aed" stroke="#fafbf7" stroke-width="4" paint-order="stroke" stroke-linejoin="round">tcp/443 web-https</text><text class="edge-lbl" data-conn="2" data-label="tcp/8080 app-api" x="218" y="808.2" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="11" fill="#1d4ed8" stroke="#fafbf7" stroke-width="4" paint-order="stroke" stroke-linejoin="round">tcp/8080 app-api</text><text class="edge-lbl" data-conn="3" data-label="tcp/5432 db-sql" x="218" y="1191.2" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="11" fill="#9d174d" stroke="#fafbf7" stroke-width="4" paint-order="stroke" stroke-linejoin="round">tcp/5432 db-sql</text>
     </g>
     <g>
-    <rect x="238" y="1528" width="232" height="86" fill="#ffffff" stroke="#24344d" stroke-width="1.4"/>
-    <path d="M238 1548 h232 M388 1548 V1582" stroke="#24344d" stroke-width="1"/>
-    <text x="247" y="1542.5" font-family="ui-monospace,Menlo,monospace" font-size="10.5" font-weight="700" letter-spacing="1.2" fill="#24344d">ACI TENANT — EPGS &amp; CONTRACTS</text>
-    <text x="247" y="1565" font-family="ui-monospace,Menlo,monospace" font-size="9" letter-spacing="1" fill="#7a8798">DRAWN</text>
-    <text x="247" y="1576" font-family="ui-monospace,Menlo,monospace" font-size="10" fill="#24344d">netdiagram vX</text>
-    <text x="397" y="1565" font-family="ui-monospace,Menlo,monospace" font-size="9" letter-spacing="1" fill="#7a8798">DATE</text>
-    <text x="397" y="1576" font-family="ui-monospace,Menlo,monospace" font-size="10" fill="#24344d">2000-01-01</text>
-    <path d="M238 1582 h232" stroke="#24344d" stroke-width=".7"/>
-    <text x="247" y="1594" font-family="ui-monospace,Menlo,monospace" font-size="9" letter-spacing="1" fill="#7a8798">TENANT</text>
-    <text x="461" y="1594" text-anchor="end" font-family="ui-monospace,Menlo,monospace" font-size="10" fill="#24344d">prod</text><path d="M238 1598 h232" stroke="#24344d" stroke-width=".7"/>
-    <text x="247" y="1610" font-family="ui-monospace,Menlo,monospace" font-size="9" letter-spacing="1" fill="#7a8798">FABRIC</text>
+    <rect x="191" y="1528" width="279" height="86" fill="#ffffff" stroke="#24344d" stroke-width="1.4"/>
+    <path d="M191 1548 h279 M341 1548 V1582" stroke="#24344d" stroke-width="1"/>
+    <text x="200" y="1542.5" font-family="ui-monospace,Menlo,monospace" font-size="10.5" font-weight="700" letter-spacing="1.2" fill="#24344d">ACI TENANT — EPGS &amp; CONTRACTS</text>
+    <text x="200" y="1565" font-family="ui-monospace,Menlo,monospace" font-size="9" letter-spacing="1" fill="#7a8798">DRAWN</text>
+    <text x="200" y="1576" font-family="ui-monospace,Menlo,monospace" font-size="10" fill="#24344d">netdiagram vX</text>
+    <text x="350" y="1565" font-family="ui-monospace,Menlo,monospace" font-size="9" letter-spacing="1" fill="#7a8798">DATE</text>
+    <text x="350" y="1576" font-family="ui-monospace,Menlo,monospace" font-size="10" fill="#24344d">2000-01-01</text>
+    <path d="M191 1582 h279" stroke="#24344d" stroke-width=".7"/>
+    <text x="200" y="1594" font-family="ui-monospace,Menlo,monospace" font-size="9" letter-spacing="1" fill="#7a8798">TENANT</text>
+    <text x="461" y="1594" text-anchor="end" font-family="ui-monospace,Menlo,monospace" font-size="10" fill="#24344d">prod</text><path d="M191 1598 h279" stroke="#24344d" stroke-width=".7"/>
+    <text x="200" y="1610" font-family="ui-monospace,Menlo,monospace" font-size="9" letter-spacing="1" fill="#7a8798">FABRIC</text>
     <text x="461" y="1610" text-anchor="end" font-family="ui-monospace,Menlo,monospace" font-size="10" fill="#24344d">aci-fab-1</text>
   </g>
   </svg>

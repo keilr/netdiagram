@@ -1432,6 +1432,11 @@ function hopPath(pts, lowerPolys){
   return d;
 }
 
+/* title block: the title row's font (must match its text attributes in
+ * renderSVG) and where the DATE cell's text starts */
+const STAMP_TITLE_FONT = '700 10.5px ui-monospace, Menlo, Consolas, monospace';
+const STAMP_DATE_X = 159;
+
 /* opts: { theme, date, source (YAML to embed), diff ({status, counts, base}
  * from diffDocs), rows ([[key, value]] extra title-block rows) } */
 function renderSVG(spec, layout, opts = {}){
@@ -1481,10 +1486,19 @@ function renderSVG(spec, layout, opts = {}){
   }
   const attrKeyW = dAttrs.length ? Math.max(...dAttrs.map(([k]) => textW(k.toUpperCase(), '700 9px ui-monospace'))) : 0;
   const attrValW = dAttrs.length ? Math.max(...dAttrs.map(([,v]) => textW(v, '10px ui-monospace'))) : 0;
-  const stampW = Math.max(232, Math.ceil(9 + attrKeyW + 24 + attrValW + 9));
+  const date = String(opts.date ?? doc.diagram?.date ?? new Date().toISOString().slice(0,10));
+  /* The block grows to fit everything written into it: the title row spans
+   * the full width (letter-spacing adds 1.2px per character), and the DATE
+   * cell starts at STAMP_DATE_X, so a long title or a free-form date such as
+   * "18 October 2026" would otherwise run past the right border. */
+  const titleW = textW(title.toUpperCase(), STAMP_TITLE_FONT) + title.length * 1.2;
+  const stampW = Math.max(232, Math.ceil(9 + attrKeyW + 24 + attrValW + 9),
+    Math.ceil(9 + titleW + 9), Math.ceil(STAMP_DATE_X + textW(date, '10px ui-monospace') + 9));
   const stampH = 54 + dAttrs.length*16;
   const PAD = 26;
-  const totW = W + PAD*2, totH = H + PAD*2 + stampH + 14;
+  /* a drawing narrower than its title block (a two-node starter, a tightly
+   * focused view) widens the sheet, so the block never starts left of it */
+  const totW = Math.max(W + PAD*2, stampW + 36), totH = H + PAD*2 + stampH + 14;
 
   let defs = `
     <pattern id="gridS" width="12" height="12" patternUnits="userSpaceOnUse">
@@ -1637,7 +1651,6 @@ function renderSVG(spec, layout, opts = {}){
 
   // drafting title block
   const sx = totW - stampW - 18, sy = totH - stampH - 14;
-  const date = String(opts.date ?? doc.diagram?.date ?? new Date().toISOString().slice(0,10));
   const attrRows = dAttrs.map(([k,v],i)=>{
     const ry = sy + 54 + i*16;
     return `<path d="M${sx} ${ry} h${stampW}" stroke="${T.ink}" stroke-width=".7"/>
@@ -1650,8 +1663,8 @@ function renderSVG(spec, layout, opts = {}){
     <text x="${sx+9}" y="${sy+14.5}" font-family="ui-monospace,Menlo,monospace" font-size="10.5" font-weight="700" letter-spacing="1.2" fill="${T.ink}">${esc(title.toUpperCase())}</text>
     <text x="${sx+9}" y="${sy+37}" font-family="ui-monospace,Menlo,monospace" font-size="9" letter-spacing="1" fill="${T.muted}">DRAWN</text>
     <text x="${sx+9}" y="${sy+48}" font-family="ui-monospace,Menlo,monospace" font-size="10" fill="${T.ink}">netdiagram${VERSION ? ' v' + esc(VERSION) : ''}</text>
-    <text x="${sx+159}" y="${sy+37}" font-family="ui-monospace,Menlo,monospace" font-size="9" letter-spacing="1" fill="${T.muted}">DATE</text>
-    <text x="${sx+159}" y="${sy+48}" font-family="ui-monospace,Menlo,monospace" font-size="10" fill="${T.ink}">${esc(date)}</text>
+    <text x="${sx+STAMP_DATE_X}" y="${sy+37}" font-family="ui-monospace,Menlo,monospace" font-size="9" letter-spacing="1" fill="${T.muted}">DATE</text>
+    <text x="${sx+STAMP_DATE_X}" y="${sy+48}" font-family="ui-monospace,Menlo,monospace" font-size="10" fill="${T.ink}">${esc(date)}</text>
     ${attrRows}
   </g>`;
 

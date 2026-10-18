@@ -321,15 +321,15 @@ views:
       <text class="edge-lbl" data-conn="0" data-label="tcp/443 remote-write" x="1216.7" y="446" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="11" fill="#0f766e" stroke="#fafbf7" stroke-width="4" paint-order="stroke" stroke-linejoin="round">tcp/443 remote-write</text><text class="edge-lbl" data-conn="1" data-label="tcp/443 remote-write" x="576.4428571428572" y="446" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="11" fill="#0f766e" stroke="#fafbf7" stroke-width="4" paint-order="stroke" stroke-linejoin="round">tcp/443 remote-write</text><text class="edge-lbl" data-conn="2" data-label="tcp/443 remote-write" x="1008.3785714285714" y="424" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="11" fill="#0f766e" stroke="#fafbf7" stroke-width="4" paint-order="stroke" stroke-linejoin="round">tcp/443 remote-write</text><text class="edge-lbl" data-conn="3" data-label="tcp/443 remote-write" x="900" y="538.55" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="11" fill="#0f766e" stroke="#fafbf7" stroke-width="4" paint-order="stroke" stroke-linejoin="round">tcp/443 remote-write</text><text class="edge-lbl" data-conn="4" data-label="tcp/443 remote-write" x="799.8714285714286" y="424" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="11" fill="#0f766e" stroke="#fafbf7" stroke-width="4" paint-order="stroke" stroke-linejoin="round">tcp/443 remote-write</text><text class="edge-lbl" data-conn="5" data-label="tcp/8080 promql" x="1040.5714285714284" y="629.7988095238095" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="11" fill="#7c3aed" stroke="#fafbf7" stroke-width="4" paint-order="stroke" stroke-linejoin="round">tcp/8080 promql</text><text class="edge-lbl" data-conn="6" data-label="tcp/443 grafana" x="1135.5404761904763" y="887.0999999999999" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="11" fill="#1d4ed8" stroke="#fafbf7" stroke-width="4" paint-order="stroke" stroke-linejoin="round">tcp/443 grafana</text>
     </g>
     <g>
-    <rect x="1653" y="1309" width="232" height="70" fill="#ffffff" stroke="#24344d" stroke-width="1.4"/>
-    <path d="M1653 1329 h232 M1803 1329 V1363" stroke="#24344d" stroke-width="1"/>
-    <text x="1662" y="1323.5" font-family="ui-monospace,Menlo,monospace" font-size="10.5" font-weight="700" letter-spacing="1.2" fill="#24344d">METRICS — PUSH ARCHITECTURE</text>
-    <text x="1662" y="1346" font-family="ui-monospace,Menlo,monospace" font-size="9" letter-spacing="1" fill="#7a8798">DRAWN</text>
-    <text x="1662" y="1357" font-family="ui-monospace,Menlo,monospace" font-size="10" fill="#24344d">netdiagram vX</text>
-    <text x="1812" y="1346" font-family="ui-monospace,Menlo,monospace" font-size="9" letter-spacing="1" fill="#7a8798">DATE</text>
-    <text x="1812" y="1357" font-family="ui-monospace,Menlo,monospace" font-size="10" fill="#24344d">2000-01-01</text>
-    <path d="M1653 1363 h232" stroke="#24344d" stroke-width=".7"/>
-    <text x="1662" y="1375" font-family="ui-monospace,Menlo,monospace" font-size="9" letter-spacing="1" fill="#7a8798">OWNER</text>
+    <rect x="1624" y="1309" width="261" height="70" fill="#ffffff" stroke="#24344d" stroke-width="1.4"/>
+    <path d="M1624 1329 h261 M1774 1329 V1363" stroke="#24344d" stroke-width="1"/>
+    <text x="1633" y="1323.5" font-family="ui-monospace,Menlo,monospace" font-size="10.5" font-weight="700" letter-spacing="1.2" fill="#24344d">METRICS — PUSH ARCHITECTURE</text>
+    <text x="1633" y="1346" font-family="ui-monospace,Menlo,monospace" font-size="9" letter-spacing="1" fill="#7a8798">DRAWN</text>
+    <text x="1633" y="1357" font-family="ui-monospace,Menlo,monospace" font-size="10" fill="#24344d">netdiagram vX</text>
+    <text x="1783" y="1346" font-family="ui-monospace,Menlo,monospace" font-size="9" letter-spacing="1" fill="#7a8798">DATE</text>
+    <text x="1783" y="1357" font-family="ui-monospace,Menlo,monospace" font-size="10" fill="#24344d">2000-01-01</text>
+    <path d="M1624 1363 h261" stroke="#24344d" stroke-width=".7"/>
+    <text x="1633" y="1375" font-family="ui-monospace,Menlo,monospace" font-size="9" letter-spacing="1" fill="#7a8798">OWNER</text>
     <text x="1876" y="1375" text-anchor="end" font-family="ui-monospace,Menlo,monospace" font-size="10" fill="#24344d">sre-team</text>
   </g>
   </svg>

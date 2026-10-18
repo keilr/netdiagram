@@ -194,15 +194,15 @@ views:
       <text class="edge-lbl" data-conn="0" data-label="tcp/8443 lxd-api" x="69.31666666666666" y="357.9333333333334" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="11" fill="#0f766e" stroke="#fafbf7" stroke-width="4" paint-order="stroke" stroke-linejoin="round">tcp/8443 lxd-api</text><text class="edge-lbl" data-conn="1" data-label="tcp/22 ssh" x="219.33333333333331" y="101.1" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="11" fill="#7c3aed" stroke="#fafbf7" stroke-width="4" paint-order="stroke" stroke-linejoin="round">tcp/22 ssh</text><text class="edge-lbl" data-conn="2" data-label="ovn uplink" x="379.65" y="140.55" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="11" fill="#1d4ed8" stroke="#fafbf7" stroke-width="4" paint-order="stroke" stroke-linejoin="round">ovn uplink</text><text class="edge-lbl" data-conn="3" data-label="runs on" x="308.31666666666666" y="493.1" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="11" fill="#9d174d" stroke="#fafbf7" stroke-width="4" paint-order="stroke" stroke-linejoin="round">runs on</text>
     </g>
     <g>
-    <rect x="363" y="1060" width="232" height="70" fill="#ffffff" stroke="#24344d" stroke-width="1.4"/>
-    <path d="M363 1080 h232 M513 1080 V1114" stroke="#24344d" stroke-width="1"/>
-    <text x="372" y="1074.5" font-family="ui-monospace,Menlo,monospace" font-size="10.5" font-weight="700" letter-spacing="1.2" fill="#24344d">CANONICAL MICROCLOUD</text>
-    <text x="372" y="1097" font-family="ui-monospace,Menlo,monospace" font-size="9" letter-spacing="1" fill="#7a8798">DRAWN</text>
-    <text x="372" y="1108" font-family="ui-monospace,Menlo,monospace" font-size="10" fill="#24344d">netdiagram vX</text>
-    <text x="522" y="1097" font-family="ui-monospace,Menlo,monospace" font-size="9" letter-spacing="1" fill="#7a8798">DATE</text>
-    <text x="522" y="1108" font-family="ui-monospace,Menlo,monospace" font-size="10" fill="#24344d">2000-01-01</text>
-    <path d="M363 1114 h232" stroke="#24344d" stroke-width=".7"/>
-    <text x="372" y="1126" font-family="ui-monospace,Menlo,monospace" font-size="9" letter-spacing="1" fill="#7a8798">OWNER</text>
+    <rect x="349" y="1060" width="246" height="70" fill="#ffffff" stroke="#24344d" stroke-width="1.4"/>
+    <path d="M349 1080 h246 M499 1080 V1114" stroke="#24344d" stroke-width="1"/>
+    <text x="358" y="1074.5" font-family="ui-monospace,Menlo,monospace" font-size="10.5" font-weight="700" letter-spacing="1.2" fill="#24344d">CANONICAL MICROCLOUD</text>
+    <text x="358" y="1097" font-family="ui-monospace,Menlo,monospace" font-size="9" letter-spacing="1" fill="#7a8798">DRAWN</text>
+    <text x="358" y="1108" font-family="ui-monospace,Menlo,monospace" font-size="10" fill="#24344d">netdiagram vX</text>
+    <text x="508" y="1097" font-family="ui-monospace,Menlo,monospace" font-size="9" letter-spacing="1" fill="#7a8798">DATE</text>
+    <text x="508" y="1108" font-family="ui-monospace,Menlo,monospace" font-size="10" fill="#24344d">2000-01-01</text>
+    <path d="M349 1114 h246" stroke="#24344d" stroke-width=".7"/>
+    <text x="358" y="1126" font-family="ui-monospace,Menlo,monospace" font-size="9" letter-spacing="1" fill="#7a8798">OWNER</text>
     <text x="586" y="1126" text-anchor="end" font-family="ui-monospace,Menlo,monospace" font-size="10" fill="#24344d">cloud-team</text>
   </g>
   </svg>

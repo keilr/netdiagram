@@ -95,13 +95,13 @@ connections:                 # from/to are node or group ids — or a LIST of
       <text class="edge-lbl" data-conn="0" data-label="tcp/443 https" x="134" y="140.5" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="11" fill="#0f766e" stroke="#fafbf7" stroke-width="4" paint-order="stroke" stroke-linejoin="round">tcp/443 https</text><text class="edge-lbl" data-conn="1" data-label="tcp/5432 sql" x="134" y="318.2" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="11" fill="#7c3aed" stroke="#fafbf7" stroke-width="4" paint-order="stroke" stroke-linejoin="round">tcp/5432 sql</text>
     </g>
     <g>
-    <rect x="70" y="537" width="232" height="54" fill="#ffffff" stroke="#24344d" stroke-width="1.4"/>
-    <path d="M70 557 h232 M220 557 V591" stroke="#24344d" stroke-width="1"/>
-    <text x="79" y="551.5" font-family="ui-monospace,Menlo,monospace" font-size="10.5" font-weight="700" letter-spacing="1.2" fill="#24344d">MINIMAL STARTER</text>
-    <text x="79" y="574" font-family="ui-monospace,Menlo,monospace" font-size="9" letter-spacing="1" fill="#7a8798">DRAWN</text>
-    <text x="79" y="585" font-family="ui-monospace,Menlo,monospace" font-size="10" fill="#24344d">netdiagram vX</text>
-    <text x="229" y="574" font-family="ui-monospace,Menlo,monospace" font-size="9" letter-spacing="1" fill="#7a8798">DATE</text>
-    <text x="229" y="585" font-family="ui-monospace,Menlo,monospace" font-size="10" fill="#24344d">2000-01-01</text>
+    <rect x="56" y="537" width="246" height="54" fill="#ffffff" stroke="#24344d" stroke-width="1.4"/>
+    <path d="M56 557 h246 M206 557 V591" stroke="#24344d" stroke-width="1"/>
+    <text x="65" y="551.5" font-family="ui-monospace,Menlo,monospace" font-size="10.5" font-weight="700" letter-spacing="1.2" fill="#24344d">MINIMAL STARTER</text>
+    <text x="65" y="574" font-family="ui-monospace,Menlo,monospace" font-size="9" letter-spacing="1" fill="#7a8798">DRAWN</text>
+    <text x="65" y="585" font-family="ui-monospace,Menlo,monospace" font-size="10" fill="#24344d">netdiagram vX</text>
+    <text x="215" y="574" font-family="ui-monospace,Menlo,monospace" font-size="9" letter-spacing="1" fill="#7a8798">DATE</text>
+    <text x="215" y="585" font-family="ui-monospace,Menlo,monospace" font-size="10" fill="#24344d">2000-01-01</text>
     
   </g>
   </svg>
