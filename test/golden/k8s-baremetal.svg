@@ -285,15 +285,15 @@ views:
       <text class="edge-lbl" data-conn="0" data-label="tcp/443 https" x="961.8" y="140.6" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="11" fill="#0f766e" stroke="#fafbf7" stroke-width="4" paint-order="stroke" stroke-linejoin="round">tcp/443 https</text><text class="edge-lbl" data-conn="1" data-label="tcp/8443 https" x="961.8" y="318.29999999999995" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="11" fill="#7c3aed" stroke="#fafbf7" stroke-width="4" paint-order="stroke" stroke-linejoin="round">tcp/8443 https</text><text class="edge-lbl" data-conn="2" data-label="tcp/9090 api" x="1002.15" y="514.3" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="11" fill="#1d4ed8" stroke="#fafbf7" stroke-width="4" paint-order="stroke" stroke-linejoin="round">tcp/9090 api</text><text class="edge-lbl" data-conn="3" data-label="tcp/8000 inference" x="828.65" y="705.5" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="11" fill="#9d174d" stroke="#fafbf7" stroke-width="4" paint-order="stroke" stroke-linejoin="round">tcp/8000 inference</text><text class="edge-lbl" data-conn="4" data-label="tcp/1433 mssql" x="1032.5" y="707.5" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="11" fill="#4d7c0f" stroke="#fafbf7" stroke-width="4" paint-order="stroke" stroke-linejoin="round">tcp/1433 mssql</text><text class="edge-lbl" data-conn="5" data-label="tcp/443 egress" x="792.1" y="101.1" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="11" fill="#0e7490" stroke="#fafbf7" stroke-width="4" paint-order="stroke" stroke-linejoin="round">tcp/443 egress</text><text class="edge-lbl" data-conn="6" data-label="scheduled on" x="604.4" y="683.5" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="11" fill="#a21caf" stroke="#fafbf7" stroke-width="4" paint-order="stroke" stroke-linejoin="round">scheduled on</text><text class="edge-lbl" data-conn="7" data-label="scheduled on" x="680.5" y="1077.5" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="11" fill="#a21caf" stroke="#fafbf7" stroke-width="4" paint-order="stroke" stroke-linejoin="round">scheduled on</text><text class="edge-lbl" data-conn="8" data-label="tcp/6443 kube-api" x="262" y="1100.5" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="11" fill="#b45309" stroke="#fafbf7" stroke-width="4" paint-order="stroke" stroke-linejoin="round">tcp/6443 kube-api</text>
     </g>
     <g>
-    <rect x="1031" y="1501" width="232" height="70" fill="#ffffff" stroke="#24344d" stroke-width="1.4"/>
-    <path d="M1031 1521 h232 M1181 1521 V1555" stroke="#24344d" stroke-width="1"/>
-    <text x="1040" y="1515.5" font-family="ui-monospace,Menlo,monospace" font-size="10.5" font-weight="700" letter-spacing="1.2" fill="#24344d">K8S BARE METAL + GPU</text>
-    <text x="1040" y="1538" font-family="ui-monospace,Menlo,monospace" font-size="9" letter-spacing="1" fill="#7a8798">DRAWN</text>
-    <text x="1040" y="1549" font-family="ui-monospace,Menlo,monospace" font-size="10" fill="#24344d">netdiagram vX</text>
-    <text x="1190" y="1538" font-family="ui-monospace,Menlo,monospace" font-size="9" letter-spacing="1" fill="#7a8798">DATE</text>
-    <text x="1190" y="1549" font-family="ui-monospace,Menlo,monospace" font-size="10" fill="#24344d">2000-01-01</text>
-    <path d="M1031 1555 h232" stroke="#24344d" stroke-width=".7"/>
-    <text x="1040" y="1567" font-family="ui-monospace,Menlo,monospace" font-size="9" letter-spacing="1" fill="#7a8798">OWNER</text>
+    <rect x="1017" y="1501" width="246" height="70" fill="#ffffff" stroke="#24344d" stroke-width="1.4"/>
+    <path d="M1017 1521 h246 M1167 1521 V1555" stroke="#24344d" stroke-width="1"/>
+    <text x="1026" y="1515.5" font-family="ui-monospace,Menlo,monospace" font-size="10.5" font-weight="700" letter-spacing="1.2" fill="#24344d">K8S BARE METAL + GPU</text>
+    <text x="1026" y="1538" font-family="ui-monospace,Menlo,monospace" font-size="9" letter-spacing="1" fill="#7a8798">DRAWN</text>
+    <text x="1026" y="1549" font-family="ui-monospace,Menlo,monospace" font-size="10" fill="#24344d">netdiagram vX</text>
+    <text x="1176" y="1538" font-family="ui-monospace,Menlo,monospace" font-size="9" letter-spacing="1" fill="#7a8798">DATE</text>
+    <text x="1176" y="1549" font-family="ui-monospace,Menlo,monospace" font-size="10" fill="#24344d">2000-01-01</text>
+    <path d="M1017 1555 h246" stroke="#24344d" stroke-width=".7"/>
+    <text x="1026" y="1567" font-family="ui-monospace,Menlo,monospace" font-size="9" letter-spacing="1" fill="#7a8798">OWNER</text>
     <text x="1254" y="1567" text-anchor="end" font-family="ui-monospace,Menlo,monospace" font-size="10" fill="#24344d">ml-platform</text>
   </g>
   </svg>

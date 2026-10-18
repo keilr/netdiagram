@@ -616,6 +616,22 @@ test("title-block date: opts.date, then diagram.date, then today", async () => {
   assert.ok(renderSVG(plain, layout).includes(`>${new Date().toISOString().slice(0, 10)}</text>`), "today by default");
 });
 
+/* the block used to be a fixed 232px unless attribute rows widened it, so a
+ * long title (onprem-vllm's) or a free-form date ran past its right border,
+ * and on a narrow drawing the block started left of the sheet */
+test("title block grows to fit a long title and date, and stays on the sheet", async () => {
+  const title = "On-prem LLM — vLLM + Open-WebUI behind the edge proxy";
+  const s = parseSpec(`diagram: {title: "${title}", date: "18 October 2026"}\nnodes:\n  - {id: a}`);
+  const out = renderSVG(s, await elk.layout(buildElk(s)));
+  const sheetW = +/<svg[^>]*\bwidth="(\d+)"/.exec(out)[1];
+  const [, x, w] = /<g>\s*<rect x="(-?[\d.]+)" y="[\d.]+" width="([\d.]+)"/.exec(out).map(Number);
+  // node measures with the 7.8px-per-character fallback; letter-spacing adds 1.2
+  assert.ok(w >= 18 + title.length * (7.8 + 1.2), `block ${w}px is wide enough for the title`);
+  assert.ok(x >= 18 && x + w <= sheetW - 18, `block [${x}, ${x + w}] sits on the ${sheetW}px sheet`);
+  const dateX = +new RegExp(`<text x="([\\d.]+)"[^>]*>18 October 2026<`).exec(out)[1];
+  assert.ok(dateX + "18 October 2026".length * 7.8 <= x + w, "the date fits inside the block");
+});
+
 test("blueprint theme repaints the drawing; paper stays the default", async () => {
   const s = parseSpec("diagram: {theme: blueprint}\nnodes:\n  - {id: a, type: fw, tags: [x]}\n  - {id: b}\ngroups:\n  - {id: g, class: trust, nodes: [b]}\nconnections:\n  - {from: a, to: b, label: https}");
   const out = renderSVG(s, await elk.layout(buildElk(s)));

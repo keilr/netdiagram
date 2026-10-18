@@ -256,15 +256,15 @@ views:
       <text class="edge-lbl" data-conn="0" data-label="tcp/443 https" x="525.5" y="140.5" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="11" fill="#0f766e" stroke="#fafbf7" stroke-width="4" paint-order="stroke" stroke-linejoin="round">tcp/443 https</text><text class="edge-lbl" data-conn="1" data-label="tcp/30443 nodeport" x="525.5" y="318.2" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="11" fill="#7c3aed" stroke="#fafbf7" stroke-width="4" paint-order="stroke" stroke-linejoin="round">tcp/30443 nodeport</text><text class="edge-lbl" data-conn="2" data-label="tcp/6443 kube-api" x="525.5" y="723.2" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="11" fill="#1d4ed8" stroke="#fafbf7" stroke-width="4" paint-order="stroke" stroke-linejoin="round">tcp/6443 kube-api</text><text class="edge-lbl" data-conn="3" data-label="runs on" x="319.5" y="1098.2" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="11" fill="#9d174d" stroke="#fafbf7" stroke-width="4" paint-order="stroke" stroke-linejoin="round">runs on</text>
     </g>
     <g>
-    <rect x="572" y="1603" width="232" height="70" fill="#ffffff" stroke="#24344d" stroke-width="1.4"/>
-    <path d="M572 1623 h232 M722 1623 V1657" stroke="#24344d" stroke-width="1"/>
-    <text x="581" y="1617.5" font-family="ui-monospace,Menlo,monospace" font-size="10.5" font-weight="700" letter-spacing="1.2" fill="#24344d">K8S CLUSTER ON VMS</text>
-    <text x="581" y="1640" font-family="ui-monospace,Menlo,monospace" font-size="9" letter-spacing="1" fill="#7a8798">DRAWN</text>
-    <text x="581" y="1651" font-family="ui-monospace,Menlo,monospace" font-size="10" fill="#24344d">netdiagram vX</text>
-    <text x="731" y="1640" font-family="ui-monospace,Menlo,monospace" font-size="9" letter-spacing="1" fill="#7a8798">DATE</text>
-    <text x="731" y="1651" font-family="ui-monospace,Menlo,monospace" font-size="10" fill="#24344d">2000-01-01</text>
-    <path d="M572 1657 h232" stroke="#24344d" stroke-width=".7"/>
-    <text x="581" y="1669" font-family="ui-monospace,Menlo,monospace" font-size="9" letter-spacing="1" fill="#7a8798">OWNER</text>
+    <rect x="558" y="1603" width="246" height="70" fill="#ffffff" stroke="#24344d" stroke-width="1.4"/>
+    <path d="M558 1623 h246 M708 1623 V1657" stroke="#24344d" stroke-width="1"/>
+    <text x="567" y="1617.5" font-family="ui-monospace,Menlo,monospace" font-size="10.5" font-weight="700" letter-spacing="1.2" fill="#24344d">K8S CLUSTER ON VMS</text>
+    <text x="567" y="1640" font-family="ui-monospace,Menlo,monospace" font-size="9" letter-spacing="1" fill="#7a8798">DRAWN</text>
+    <text x="567" y="1651" font-family="ui-monospace,Menlo,monospace" font-size="10" fill="#24344d">netdiagram vX</text>
+    <text x="717" y="1640" font-family="ui-monospace,Menlo,monospace" font-size="9" letter-spacing="1" fill="#7a8798">DATE</text>
+    <text x="717" y="1651" font-family="ui-monospace,Menlo,monospace" font-size="10" fill="#24344d">2000-01-01</text>
+    <path d="M558 1657 h246" stroke="#24344d" stroke-width=".7"/>
+    <text x="567" y="1669" font-family="ui-monospace,Menlo,monospace" font-size="9" letter-spacing="1" fill="#7a8798">OWNER</text>
     <text x="795" y="1669" text-anchor="end" font-family="ui-monospace,Menlo,monospace" font-size="10" fill="#24344d">platform-team</text>
   </g>
   </svg>

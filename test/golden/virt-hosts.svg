@@ -172,15 +172,15 @@ views:
       <text class="edge-lbl" data-conn="0" data-label="tcp/443 https" x="189.16666666666669" y="113" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="11" fill="#0f766e" stroke="#fafbf7" stroke-width="4" paint-order="stroke" stroke-linejoin="round">tcp/443 https</text><text class="edge-lbl" data-conn="1" data-label="tcp/443 https" x="151.81666666666666" y="325.2" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="11" fill="#0f766e" stroke="#fafbf7" stroke-width="4" paint-order="stroke" stroke-linejoin="round">tcp/443 https</text><text class="edge-lbl" data-conn="2" data-label="tcp/443 https" x="381.66666666666663" y="251.2" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="11" fill="#0f766e" stroke="#fafbf7" stroke-width="4" paint-order="stroke" stroke-linejoin="round">tcp/443 https</text><text class="edge-lbl" data-conn="3" data-label="tcp/8080 api" x="151.81666666666666" y="589.4" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="11" fill="#7c3aed" stroke="#fafbf7" stroke-width="4" paint-order="stroke" stroke-linejoin="round">tcp/8080 api</text><text class="edge-lbl" data-conn="4" data-label="tcp/8080 api" x="265.5" y="554.4" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="11" fill="#7c3aed" stroke="#fafbf7" stroke-width="4" paint-order="stroke" stroke-linejoin="round">tcp/8080 api</text><text class="edge-lbl" data-conn="5" data-label="tcp/6432 pool" x="182" y="826.0999999999999" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="11" fill="#1d4ed8" stroke="#fafbf7" stroke-width="4" paint-order="stroke" stroke-linejoin="round">tcp/6432 pool</text>
     </g>
     <g>
-    <rect x="334" y="1107" width="232" height="70" fill="#ffffff" stroke="#24344d" stroke-width="1.4"/>
-    <path d="M334 1127 h232 M484 1127 V1161" stroke="#24344d" stroke-width="1"/>
-    <text x="343" y="1121.5" font-family="ui-monospace,Menlo,monospace" font-size="10.5" font-weight="700" letter-spacing="1.2" fill="#24344d">VIRTUALIZATION HOSTS</text>
-    <text x="343" y="1144" font-family="ui-monospace,Menlo,monospace" font-size="9" letter-spacing="1" fill="#7a8798">DRAWN</text>
-    <text x="343" y="1155" font-family="ui-monospace,Menlo,monospace" font-size="10" fill="#24344d">netdiagram vX</text>
-    <text x="493" y="1144" font-family="ui-monospace,Menlo,monospace" font-size="9" letter-spacing="1" fill="#7a8798">DATE</text>
-    <text x="493" y="1155" font-family="ui-monospace,Menlo,monospace" font-size="10" fill="#24344d">2000-01-01</text>
-    <path d="M334 1161 h232" stroke="#24344d" stroke-width=".7"/>
-    <text x="343" y="1173" font-family="ui-monospace,Menlo,monospace" font-size="9" letter-spacing="1" fill="#7a8798">OWNER</text>
+    <rect x="320" y="1107" width="246" height="70" fill="#ffffff" stroke="#24344d" stroke-width="1.4"/>
+    <path d="M320 1127 h246 M470 1127 V1161" stroke="#24344d" stroke-width="1"/>
+    <text x="329" y="1121.5" font-family="ui-monospace,Menlo,monospace" font-size="10.5" font-weight="700" letter-spacing="1.2" fill="#24344d">VIRTUALIZATION HOSTS</text>
+    <text x="329" y="1144" font-family="ui-monospace,Menlo,monospace" font-size="9" letter-spacing="1" fill="#7a8798">DRAWN</text>
+    <text x="329" y="1155" font-family="ui-monospace,Menlo,monospace" font-size="10" fill="#24344d">netdiagram vX</text>
+    <text x="479" y="1144" font-family="ui-monospace,Menlo,monospace" font-size="9" letter-spacing="1" fill="#7a8798">DATE</text>
+    <text x="479" y="1155" font-family="ui-monospace,Menlo,monospace" font-size="10" fill="#24344d">2000-01-01</text>
+    <path d="M320 1161 h246" stroke="#24344d" stroke-width=".7"/>
+    <text x="329" y="1173" font-family="ui-monospace,Menlo,monospace" font-size="9" letter-spacing="1" fill="#7a8798">OWNER</text>
     <text x="557" y="1173" text-anchor="end" font-family="ui-monospace,Menlo,monospace" font-size="10" fill="#24344d">platform-team</text>
   </g>
   </svg>
