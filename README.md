@@ -347,6 +347,7 @@ network it describes is *coherent*:
 | `self-connection` | error | a connection from a node to itself |
 | `unknown-type` / `unknown-icon` | warning | a token that draws no glyph — a typo the renderer would swallow |
 | `unknown-class` | warning | a group class that silently falls back to default styling |
+| `unknown-direction` / `unknown-theme` | warning | a connection `direction`, layout `direction` or `theme` (on `diagram:` or a view) outside the documented values — it would silently render as forward / down / paper |
 | `isolated` | warning | a node no connection reaches, directly or through its group |
 
 All bundled examples are clean, and the test suite asserts they stay that way.

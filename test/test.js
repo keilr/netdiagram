@@ -1074,6 +1074,34 @@ connections:
   assert.ok(f.every((x) => x.severity === "warning"));
 });
 
+/* the schema enumerates these, but only the editor reads it: the CI gate and
+ * the MCP check passed `direction: reverse` and drew a forward arrow */
+test("lint: unknown direction and theme values are warned about with what they render as", () => {
+  const f = lintOf(`
+diagram: {direction: left, theme: dark}
+nodes:
+  - {id: a}
+  - {id: b}
+  - {id: c}
+connections:
+  - {from: a, to: [b, c], direction: reverse}
+  - {from: b, to: c, direction: Both}
+views:
+  - {id: v, theme: blueprint, direction: sideways}
+`);
+  const got = f.map((x) => [x.rule, x.path.join(".")]);
+  assert.deepStrictEqual(got.sort(), [
+    ["unknown-direction", "connections.0.direction"],   // once, though the line fans out to two pairs
+    ["unknown-direction", "diagram.direction"],
+    ["unknown-direction", "views.0.direction"],
+    ["unknown-theme", "diagram.theme"],
+  ].sort());
+  assert.ok(f.every((x) => x.severity === "warning"));
+  assert.ok(f.find((x) => x.path[0] === "connections").message.includes("draws as forward"));
+  assert.ok(f.find((x) => x.path.join(".") === "diagram.direction").message.includes("renders as down"));
+  assert.ok(f.find((x) => x.rule === "unknown-theme").message.includes("renders as paper"));
+});
+
 test("lint: an unconnected node is warned about; a guest and a grouped node are not", () => {
   const f = lintOf(`
 nodes:

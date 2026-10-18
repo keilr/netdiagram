@@ -60,7 +60,7 @@ const GROUP_COLORS = Object.fromEntries(Object.entries({
 const GROUP_BORDERS = { solid:null, dashed:'8 5', dotted:'2 4' };
 
 /* connection direction vocabulary — shared by the SVG arrows and the Connections table */
-const DIR_ALIASES = { both:'both', bidirectional:'both', none:'none' };
+const DIR_ALIASES = { forward:'forward', both:'both', bidirectional:'both', none:'none' };
 const dirOf = l => DIR_ALIASES[String(l.direction || '').toLowerCase()] || 'forward';
 
 /* ---------------- device glyphs (drawn, 24x24 viewbox) ---------------- */
@@ -900,6 +900,25 @@ function lintSpec(spec){
         add(`unknown-${key}`, 'warning', nodePath.get(id),
           `"${id}" has ${key}: ${v}, which draws no glyph`);
     }
+  /* render options that fall back without a word: `direction: reverse` on a
+   * connection draws a forward arrow, `direction: left` lays out down, and an
+   * unknown theme paints paper. The schema enumerates these, but only the
+   * editor reads the schema — the CLI gate and the MCP check never did. */
+  const optionCheck = (val, known, path, what, fallback) => {
+    if (val == null) return;
+    const v = String(val).toLowerCase().trim();
+    if (!known.includes(v))
+      add(`unknown-${what}`, 'warning', path,
+        `${what}: ${val} is not one of ${known.join(' | ')} — it renders as ${fallback(v)}`);
+  };
+  const layoutDir = v => (/right|lr/.test(v) ? 'right' : 'down');     // buildElk's reading
+  optionCheck(doc.diagram?.direction, ['down', 'right'], ['diagram', 'direction'], 'direction', layoutDir);
+  optionCheck(doc.diagram?.theme, Object.keys(THEMES), ['diagram', 'theme'], 'theme', () => 'paper');
+  viewsOf(doc).forEach(v => {
+    const i = doc.views.indexOf(v);
+    optionCheck(v.direction, ['down', 'right'], ['views', i, 'direction'], 'direction', layoutDir);
+    optionCheck(v.theme, Object.keys(THEMES), ['views', i, 'theme'], 'theme', () => 'paper');
+  });
   for (const [id, g] of groupMap){
     if (g.class == null) continue;
     if (!Object.hasOwn(GROUP_STYLES, String(g.class).toLowerCase().trim()))
@@ -913,8 +932,15 @@ function lintSpec(spec){
   /* connections are expanded by now, so report against the line the author
    * actually wrote (_src) rather than the position after fan-out */
   const at = (l, i) => (l && l._src !== undefined) ? l._src : i;
+  const dirWarned = new Set();      // a fanned-out line is reported once
   (doc.connections||[]).forEach((l, i) => {
     if (!l) return;
+    if (l.direction != null && !dirWarned.has(at(l, i))
+        && !Object.hasOwn(DIR_ALIASES, String(l.direction).toLowerCase())){
+      dirWarned.add(at(l, i));
+      add('unknown-direction', 'warning', ['connections', at(l, i), 'direction'],
+        `connections[${at(l, i)}] has direction: ${l.direction}, which is not forward | both | none — it draws as forward`);
+    }
     if (String(l.from) === String(l.to))
       add('self-connection', 'error', ['connections', at(l, i)],
         `connections[${at(l, i)}] joins "${l.from}" to itself`);
