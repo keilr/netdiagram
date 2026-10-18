@@ -371,9 +371,15 @@ test("group-to-group and group-to-node connections route", async () => {
 });
 
 // ---------- validation ----------
+/* The failure for "no error was thrown" must be raised OUTSIDE the try: inside
+ * it, the catch below receives assert.fail's own AssertionError, whose message
+ * ("expected error: <needle>") always contains the needle — every check passed. */
 function expectError(yaml, needle) {
-  try { parseSpec(yaml); assert.fail("expected error: " + needle); }
-  catch (e) { assert.ok(e.message.includes(needle), `"${e.message}" should include "${needle}"`); }
+  let err = null;
+  try { parseSpec(yaml); } catch (e) { err = e; }
+  if (!err) assert.fail(`expected an error containing "${needle}", but the spec parsed`);
+  assert.ok(err.isSpec, `expected a validation error, got ${err.name}: ${err.message}`);
+  assert.ok(err.message.includes(needle), `"${err.message}" should include "${needle}"`);
 }
 test("validation: unknown connection endpoint", () =>
   expectError("nodes:\n  - {id: a}\nconnections:\n  - {from: a, to: ghost}", 'unknown endpoint "ghost"'));
@@ -388,17 +394,45 @@ test("validation: node in two groups", () =>
 test("validation: rank must be numeric", () =>
   expectError("nodes:\n  - {id: a, rank: upper}", "rank must be a number"));
 
-/* a list endpoint used to stringify into one nonsense id ('unknown endpoint
- * "a,b"'), which reads like a typo rather than an unsupported shape */
-test("validation: a list endpoint says so instead of inventing an id", () => {
-  expectError("nodes:\n  - {id: a}\n  - {id: b}\nconnections:\n  - {from: a, to: [a, b]}\n",
-    "to is a list");
-  expectError("nodes:\n  - {id: a}\n  - {id: b}\nconnections:\n  - {from: [a, b], to: a}\n",
-    "from is a list");
-  let msg = "";
-  try { parseSpec("nodes:\n  - {id: a}\n  - {id: b}\nconnections:\n  - {from: a, to: [a, b]}\n"); }
-  catch (e) { msg = e.message; }
-  assert.ok(!/unknown endpoint/.test(msg), "no bogus 'unknown endpoint \"a,b\"': " + msg);
+/* list endpoints are valid (they fan out); an unknown id INSIDE one must be
+ * reported by itself, never as the stringified list 'unknown endpoint "a,b"' */
+test("validation: a bad id inside a list endpoint is named on its own", () => {
+  expectError("nodes:\n  - {id: a}\n  - {id: b}\nconnections:\n  - {from: a, to: [b, ghost]}\n",
+    'unknown endpoint "ghost"');
+  let err = null;
+  try { parseSpec("nodes:\n  - {id: a}\n  - {id: b}\nconnections:\n  - {from: a, to: [b, ghost]}\n"); }
+  catch (e) { err = e; }
+  assert.ok(!/"b,ghost"/.test(err.message), "no stringified list in: " + err.message);
+  assert.deepStrictEqual(err.errors[0].path, ["connections", 0, "to", 1], "points at the bad list item");
+});
+test("validation: a list endpoint naming an id twice is an error, not two stacked edges", () =>
+  expectError("nodes:\n  - {id: a}\n  - {id: b}\nconnections:\n  - {from: a, to: [b, b]}\n",
+    'to lists "b" twice'));
+
+/* each of these used to escape validation as a TypeError ("….forEach is not a
+ * function") that named no position; now each is a located validation error */
+test("validation: a mapping or scalar where a list belongs is reported where it is written", () => {
+  const cases = [
+    ["nodes: {id: a}", "nodes must be a list", ["nodes"]],
+    ["nodes: [{id: a}]\ngroups: {id: g}", "groups must be a list", ["groups"]],
+    ["nodes: [{id: a}]\ngroups: [{id: g, nodes: a}]", 'group "g": nodes must be a list', ["groups", 0, "nodes"]],
+    ["nodes: [{id: a}]\ngroups: [{id: g, groups: x}]", 'group "g": groups must be a list', ["groups", 0, "groups"]],
+    ["nodes: [{id: a, nodes: {id: b}}]", 'nodes[0] "a": nodes must be a list', ["nodes", 0, "nodes"]],
+    ["nodes: [{id: a}]\nconnections: {from: a, to: a}", "connections must be a list", ["connections"]],
+    ["nodes: [{id: a}]\nviews: {id: v}", "views must be a list", ["views"]],
+    ["diagram: hello\nnodes: [{id: a}]", "diagram must be a mapping", ["diagram"]],
+  ];
+  for (const [yaml, needle, at] of cases) {
+    expectError(yaml, needle);
+    let err; try { parseSpec(yaml); } catch (e) { err = e; }
+    assert.deepStrictEqual(err.errors.find((x) => x.message.includes(needle)).path, at, yaml);
+  }
+});
+test("validation: blank, comment-only and non-mapping documents are validation errors", () => {
+  expectError("", "Empty document");
+  expectError("  \n# just a comment\n", "Empty document");
+  expectError("- a\n- b\n", "must be a mapping");
+  expectError("just text", "must be a mapping");
 });
 
 // ---------- editor value completion ----------
