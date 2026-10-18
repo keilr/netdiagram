@@ -77,10 +77,12 @@ function renderConnections(spec, change){
 connEl.addEventListener('click', e => {
   if (!e.target.matches('#btn-copy-csv')) return;
   const btn = e.target;
-  navigator.clipboard.writeText(lastCsv).then(() => {
+  /* the clipboard can be refused (no permission, an insecure origin, or no
+   * clipboard API at all): say so instead of leaving an unhandled rejection */
+  Promise.resolve().then(() => navigator.clipboard.writeText(lastCsv)).then(() => {
     btn.textContent = 'Copied!';
     setTimeout(() => { btn.textContent = 'Copy CSV'; }, 1500);
-  });
+  }, () => setStatus('Could not copy to the clipboard — this browser refused access.', true));
 });
 
 /* ---------------- pane splitter ---------------- */
@@ -294,8 +296,8 @@ async function render(text){
     renderConnections(spec, diff && diff.status.connections);
     applyCursorHighlight();
     const n = sourceSpec.nodeMap.size, g = sourceSpec.groupMap.size, c = (source.connections||[]).length;
-    const parts = [`OK — ${n} nodes · ${g} groups · ${c} connections`];
-    if (view) parts.push(`view "${view.id}": ${spec.nodeMap.size} nodes`);
+    const parts = [`OK — ${count(n, 'node')} · ${count(g, 'group')} · ${count(c, 'connection')}`];
+    if (view) parts.push(`view "${view.id}": ${count(spec.nodeMap.size, 'node')}`);
     if (tagFilter.size) parts.push(`showing ${spec.nodeMap.size} tagged ${[...tagFilter].join(' / ')}`);
     if (diff) parts.push(`vs ${compare.name}: +${diff.counts.added} −${diff.counts.removed} ~${diff.counts.changed}`);
     if (statusNote) parts.push(statusNote);
@@ -303,10 +305,15 @@ async function render(text){
     setStatus(parts.join(' · '));
   }catch(err){
     if (seq !== renderSeq) return;
-    setStatus((err.isSpec ? '' : 'YAML: ') + err.message, true);
+    /* only a js-yaml exception is a syntax problem in the buffer; anything
+     * else (a layout or render failure) must not send the author hunting for
+     * a YAML typo that is not there */
+    const prefix = err.isSpec ? '' : err.name === 'YAMLException' ? 'YAML: ' : 'Render failed: ';
+    setStatus(prefix + err.message, true);
   }
 }
 
+const count = (k, noun) => `${k} ${noun}${k === 1 ? '' : 's'}`;
 let timer = null;
 let activeLabel = null;
 const renderNow = () => { clearTimeout(timer); render(editor.value); };
@@ -936,8 +943,9 @@ if (ASSIST){
     review.hidden = false;
     clearTimeout(timer); fitNextRender = true; render(yaml);
   }
-  function endReview(restore){
+  function endReview(restore, note){
     if (!pending) return;
+    statusNote = note;             // render() writes the status; carry the note into it
     const { originalText, prevCompare } = pending;
     pending = null;
     review.hidden = true;
@@ -946,8 +954,8 @@ if (ASSIST){
     if (restore) editor.setValue(originalText);
     clearTimeout(timer); render(editor.value);
   }
-  $('#assist-accept').addEventListener('click', () => { endReview(false); setStatus('Proposal accepted.'); });
-  $('#assist-discard').addEventListener('click', () => { endReview(true); setStatus('Proposal discarded.'); });
+  $('#assist-accept').addEventListener('click', () => endReview(false, 'proposal accepted'));
+  $('#assist-discard').addEventListener('click', () => endReview(true, 'proposal discarded'));
 }
 
 /* initial load: a shared link wins (asking before it replaces unsaved work),

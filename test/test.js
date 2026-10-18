@@ -450,12 +450,47 @@ test("editor: value completion offers enum values and document ids", () => {
 });
 
 // ---------- dist boot (jsdom) ----------
+/* jsdom implements no layout. CodeMirror measures text through
+ * Range.getClientRects on every animation frame and threw a TypeError each
+ * time (a page of stack traces per app test), and the core's text measuring
+ * asks canvas for a 2d context (a "Not implemented" line per boot). Stub both
+ * so the boot tests run quietly; null makes textW use its documented
+ * fallback, the same one plain node uses. Chains a caller's beforeParse.
+ *
+ * An exception thrown in a page callback (animation frame, timer) never
+ * reaches window "error" listeners — jsdom reports it to its virtual console,
+ * and CodeMirror logs its own with console.error; either way they slipped
+ * past the boot test's "no page errors" check. Pass `pageErrors` (an array)
+ * to collect both; otherwise they print. */
+function layoutless(opts, pageErrors) {
+  const { VirtualConsole } = require("jsdom");
+  const user = opts.beforeParse;
+  /* CodeMirror catches its own measuring exceptions and console.error()s them,
+   * so the page's console.error counts as a page error too */
+  const report = (text) => (pageErrors ? pageErrors.push(text) : console.error(text));
+  const virtualConsole = new VirtualConsole();
+  for (const m of ["log", "info", "warn", "debug"]) virtualConsole.on(m, (...a) => console[m](...a));
+  virtualConsole.on("error", (...a) => report(a.map((x) => (x && x.stack) || String(x)).join(" ")));
+  virtualConsole.on("jsdomError", (e) => report(e.type === "unhandled-exception" ? e.cause.stack : e.message));
+  return {
+    ...opts,
+    virtualConsole,
+    beforeParse(w) {
+      const empty = { x: 0, y: 0, width: 0, height: 0, top: 0, left: 0, right: 0, bottom: 0 };
+      w.Range.prototype.getClientRects = () => [];
+      w.Range.prototype.getBoundingClientRect = () => ({ ...empty });
+      w.HTMLCanvasElement.prototype.getContext = () => null;
+      if (user) user(w);
+    },
+  };
+}
+
 test("dist/netdiagram.html boots and renders in jsdom", async () => {
   const { JSDOM } = require("jsdom");
   const html = fs.readFileSync(path.join(root, "dist/netdiagram.html"), "utf8");
   assert.ok(!/cdnjs|jsdelivr|unpkg/.test(html), "dist must be self-contained (no CDN refs)");
-  const dom = new JSDOM(html, { runScripts: "dangerously", pretendToBeVisual: true });
   const errs = [];
+  const dom = new JSDOM(html, layoutless({ runScripts: "dangerously", pretendToBeVisual: true }, errs));
   dom.window.addEventListener("error", (e) => errs.push(e.message));
   // poll until the page settles (OK status, error status, or page error), 5 s ceiling
   const statusEl = dom.window.document.querySelector("#status");
@@ -475,6 +510,9 @@ test("dist/netdiagram.html boots and renders in jsdom", async () => {
   assert.strictEqual(+rendered.getAttribute("width"), Math.round(w0 * 1.25), "zoom in scales the svg");
   dom.window.document.querySelector("#zoom-pct").click();
   assert.strictEqual(+rendered.getAttribute("width"), w0, "reset returns to natural size");
+  // let a few animation frames run: CodeMirror measures on them
+  await new Promise((r) => setTimeout(r, 200));
+  assert.deepStrictEqual(errs, [], "no errors in page callbacks either");
 });
 
 test("projects persist: draft restored on reload, Save writes a named project", async () => {
@@ -482,10 +520,10 @@ test("projects persist: draft restored on reload, Save writes a named project", 
   const html = fs.readFileSync(path.join(root, "dist/netdiagram.html"), "utf8");
   const DRAFT = "diagram:\n  title: Restored Draft\n  direction: down\nnodes:\n  - {id: solo, label: Solo, type: server}\n";
   // a real origin enables localStorage; preseed a draft to simulate a prior session
-  const dom = new JSDOM(html, {
+  const dom = new JSDOM(html, layoutless({
     runScripts: "dangerously", pretendToBeVisual: true, url: "https://netdiagram.test/",
     beforeParse(window) { try { window.localStorage.setItem("netdiagram:v1:draft", DRAFT); } catch (e) {} },
-  });
+  }));
   const win = dom.window, doc = win.document;
   win.prompt = () => "my project";            // name supplied to Save
   const errs = [];
@@ -497,7 +535,7 @@ test("projects persist: draft restored on reload, Save writes a named project", 
     await new Promise((r) => setTimeout(r, 100));
   assert.deepStrictEqual(errs, [], "no page errors");
   // the autosaved draft is restored on load (1-node spec), not the default example
-  assert.ok(/^OK — 1 nodes/.test(statusEl.textContent), "restored draft rendered, got: " + statusEl.textContent);
+  assert.ok(/^OK — 1 node ·/.test(statusEl.textContent), "restored draft rendered, got: " + statusEl.textContent);
   assert.ok(doc.querySelector("#canvas-pane svg").outerHTML.includes("Solo"), "draft node drawn");
   assert.ok(!doc.querySelector("#project-picker").hidden, "project UI is live when storage works");
   // Save persists the current buffer as a named project
@@ -530,10 +568,10 @@ test("connections table: bidirectional yields two rows; comment column appears",
     "  - {from: b, to: c, protocol: tcp, port: 5432, label: pgsql}",
     "  - {from: a, to: c, direction: none, label: DENYME}",
   ].join("\n");
-  const dom = new JSDOM(html, {
+  const dom = new JSDOM(html, layoutless({
     runScripts: "dangerously", pretendToBeVisual: true, url: "https://netdiagram.test/",
     beforeParse(w) { try { w.localStorage.setItem("netdiagram:v1:draft", DRAFT); } catch (e) {} },
-  });
+  }));
   const win = dom.window, doc = win.document;
   const errs = []; win.addEventListener("error", (e) => errs.push(e.message));
   const statusEl = doc.querySelector("#status");
@@ -1777,7 +1815,8 @@ for (const [file, extra] of goldens) {
 async function bootPage({ draft, projects, url = "https://netdiagram.test/" } = {}) {
   const { JSDOM } = require("jsdom");
   const html = fs.readFileSync(path.join(root, "dist/netdiagram.html"), "utf8");
-  const dom = new JSDOM(html, {
+  const errs = [];
+  const dom = new JSDOM(html, layoutless({
     runScripts: "dangerously", pretendToBeVisual: true, url,
     beforeParse(w) {
       try {
@@ -1785,9 +1824,8 @@ async function bootPage({ draft, projects, url = "https://netdiagram.test/" } = 
         if (projects) w.localStorage.setItem("netdiagram:v1:projects", JSON.stringify(projects));
       } catch (e) {}
     },
-  });
+  }, errs));
   const win = dom.window, doc = win.document, statusEl = doc.querySelector("#status");
-  const errs = [];
   win.addEventListener("error", (e) => errs.push(e.message));
   await waitFor(() => errs.length || /^OK/.test(statusEl.textContent) || statusEl.classList.contains("error"));
   assert.deepStrictEqual(errs, [], "no page errors");
@@ -1802,6 +1840,29 @@ async function waitFor(pred, ms = 5000) {
   return false;
 }
 const click = (win, el) => el.dispatchEvent(new win.MouseEvent("click", { bubbles: true }));
+
+test("app: the status names YAML only for a syntax error, and counts read naturally", async () => {
+  let page = await bootPage({ draft: "nodes: [a\n" });
+  assert.ok(/^YAML: /.test(page.statusEl.textContent), "a syntax error is a YAML error: " + page.statusEl.textContent);
+  page = await bootPage({ draft: "nodes:\n  - {id: a}\nconnections:\n  - {from: a, to: ghost}\n" });
+  assert.ok(page.statusEl.classList.contains("error"));
+  assert.ok(/^connections\[0\]: unknown endpoint "ghost"/.test(page.statusEl.textContent),
+    "a validation error carries no YAML: prefix: " + page.statusEl.textContent);
+  page = await bootPage({ draft: "nodes:\n  - {id: a}\n" });
+  assert.ok(/^OK — 1 node · 0 groups · 0 connections/.test(page.statusEl.textContent), page.statusEl.textContent);
+});
+
+test("app: Copy CSV reports a refused clipboard instead of an unhandled rejection", async () => {
+  const { win, doc, statusEl } = await bootPage();
+  const unhandled = [];
+  win.addEventListener("unhandledrejection", (e) => unhandled.push(e.reason));
+  const btn = doc.querySelector("#btn-copy-csv");
+  assert.ok(btn, "the default example has rules to copy");
+  click(win, btn);   // jsdom has no clipboard API, like an insecure origin
+  assert.ok(await waitFor(() => statusEl.classList.contains("error")), "status reports the failure");
+  assert.ok(/clipboard/.test(statusEl.textContent), statusEl.textContent);
+  assert.deepStrictEqual(unhandled, []);
+});
 
 test("app: clicking the diagram reveals YAML; the selection glows and clears on empty paper", async () => {
   const { win, doc } = await bootPage();
@@ -1866,7 +1927,7 @@ test("app: the View picker appears only with views, and narrows the diagram", as
 test("app: a #src= share link opens on load and clears the fragment", async () => {
   const shared = "diagram: {title: Shared}\nnodes:\n  - {id: s1, label: from-link}\n";
   const { win, doc, statusEl } = await bootPage({ url: "https://netdiagram.test/#src=" + await nd.encodeShare(shared, { compress: false }) });
-  assert.ok(/^OK — 1 nodes/.test(statusEl.textContent), "shared doc rendered: " + statusEl.textContent);
+  assert.ok(/^OK — 1 node ·/.test(statusEl.textContent), "shared doc rendered: " + statusEl.textContent);
   assert.ok(doc.querySelector("#canvas-pane svg").outerHTML.includes("from-link"));
   assert.strictEqual(win.location.hash, "", "fragment cleared so a reload keeps later edits");
 });
@@ -1894,7 +1955,7 @@ test("app: importing an exported SVG reopens its source; inventories convert", a
   assert.ok(await waitFor(() => doc.querySelector("#canvas-pane svg")?.outerHTML.includes("round-trip")), "svg source reopened");
   win.importText("[web]\nweb1 ansible_host=10.0.0.1\nweb2 ansible_host=10.0.0.2\n", "hosts.ini");
   assert.ok(await waitFor(() => statusEl.textContent.includes("imported Ansible inventory")), "status: " + statusEl.textContent);
-  assert.ok(/^OK — 2 nodes · 1 groups/.test(statusEl.textContent));
+  assert.ok(/^OK — 2 nodes · 1 group ·/.test(statusEl.textContent));
 });
 
 // ---------- runner ----------
